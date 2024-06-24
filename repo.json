@@ -1,0 +1,8 @@
+{
+    "name": "Sofie repository",
+    "description": "HexatedRepo",
+    "manifestVersion": 1,
+    "pluginLists": [
+      "https://raw.githubusercontent.com/Sofie99/cloudstream-extensions-sofie/builds/plugins.json"
+    ]
+}

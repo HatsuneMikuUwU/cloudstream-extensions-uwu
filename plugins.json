@@ -1,0 +1,122 @@
+[
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=animasu.cc&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 22931,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Hexated"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "version": 10,
+        "internalName": "Animasu",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/Animasu.cs3",
+        "name": "Animasu"
+    },
+    {
+        "iconUrl": "https://aghanim.xyz/wp-content/themes/animesail/assets/images/ico.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 16474,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Hexated"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 11,
+        "internalName": "AnimeSailProvider",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnimeSailProvider.cs3",
+        "name": "AnimeSailProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=kuramanime.com&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 29437,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Hexated"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 40,
+        "internalName": "KuramanimeProvider",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/KuramanimeProvider.cs3",
+        "name": "KuramanimeProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=nimegami.id&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 22329,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Hexated"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 12,
+        "internalName": "Nimegami",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/Nimegami.cs3",
+        "name": "Nimegami"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=oploverz.care&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 25222,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Hexated"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 32,
+        "internalName": "OploverzProvider",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/OploverzProvider.cs3",
+        "name": "OploverzProvider"
+    },
+    {
+        "iconUrl": "https://zoronime.com/wp-content/themes/zoronime/favicon.png?v=0.06",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 16976,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Hexated"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "version": 2,
+        "internalName": "Zoronime",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/Zoronime.cs3",
+        "name": "Zoronime"
+    }
+]
