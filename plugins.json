@@ -1,0 +1,193 @@
+[
+    {
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.watch&size=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 17153,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 1,
+        "internalName": "AnichinProvider",
+        "description": "Anichin \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnichinProvider.cs3",
+        "name": "AnichinProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=animasu.cc&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 24636,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "version": 1,
+        "internalName": "AnimasuProvider",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnimasuProvider.cs3",
+        "name": "AnimasuProvider"
+    },
+    {
+        "iconUrl": "https://aghanim.xyz/wp-content/themes/animesail/assets/images/ico.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 17358,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 1,
+        "internalName": "AnimeSailProvider",
+        "description": "AnimeSail \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnimeSailProvider.cs3",
+        "name": "AnimeSailProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=kuramanime.com&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 31552,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 1,
+        "internalName": "KuramanimeProvider",
+        "description": "Kuramanime \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/KuramanimeProvider.cs3",
+        "name": "KuramanimeProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=45.12.2.2&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 26290,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 1,
+        "internalName": "KuronimeProvider",
+        "description": "Kuronime \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/KuronimeProvider.cs3",
+        "name": "KuronimeProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=nimegami.id&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 23645,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 1,
+        "internalName": "NimegamiProvider",
+        "description": "Nimegami \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/NimegamiProvider.cs3",
+        "name": "NimegamiProvider"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?domain=otakudesu.watch&sz=%size%",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 23912,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 1,
+        "internalName": "OtakudesuProvider",
+        "description": "Otakudesu \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/OtakudesuProvider.cs3",
+        "name": "OtakudesuProvider"
+    },
+    {
+        "jarFileSize": 71682,
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 17957,
+        "status": 1,
+        "language": "id",
+        "authors": [
+            "Miku"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "version": 1,
+        "internalName": "SamehadakuProvider",
+        "jarUrl": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/SamehadakuProvider.jar",
+        "description": "Samehadaku \u2014 Anime Sub Indo",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/SamehadakuProvider.cs3",
+        "name": "SamehadakuProvider"
+    },
+    {
+        "iconUrl": "https://cdn.discordapp.com/attachments/1109266606292488297/1193122096159674448/2-modified.png?ex=65ec2a0a&is=65d9b50a&hm=f1e0b0165e71101e5440b47592d9e15727a6c00cdeb3512108067bfbdbef1af7&",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "fileSize": 153383,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "Hexated",
+            "Sora"
+        ],
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Anime",
+            "Movie"
+        ],
+        "version": 250,
+        "internalName": "SoraStreamProvider",
+        "description": "#1 best extention based on MultiAPI",
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/SoraStreamProvider.cs3",
+        "name": "SoraStreamProvider"
+    }
+]
