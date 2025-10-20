@@ -168,73 +168,51 @@ class OtakudesuProvider : MainAPI() {
     ): Boolean = coroutineScope {
 
         val document = app.get(data).document
+        val jobs = mutableListOf<kotlinx.coroutines.Deferred<Unit>>()
 
-        // Gunakan coroutineScope + async untuk menggantikan argamap
-        val jobs = listOf(
-            async {
-                val scriptData =
-                    document.select("script:containsData(action:)").lastOrNull()?.data()
-                val token =
-                    scriptData?.substringAfter("{action:\"")?.substringBefore("\"}").toString()
+        // Mirrorstream
+        val scriptData = document.select("script:containsData(action:)").lastOrNull()?.data()
+        val token = scriptData?.substringAfter("{action:\"")?.substringBefore("\"}").toString()
+        val nonce = app.post("$mainUrl/wp-admin/admin-ajax.php", data = mapOf("action" to token))
+            .parsed<ResponseData>().data
+        val action = scriptData?.substringAfter(",action:\"")?.substringBefore("\"}").toString()
 
-                val nonce =
-                    app.post("$mainUrl/wp-admin/admin-ajax.php", data = mapOf("action" to token))
-                        .parsed<ResponseData>().data
-                val action =
-                    scriptData?.substringAfter(",action:\"")?.substringBefore("\"}").toString()
+        val mirrorData = document.select("div.mirrorstream > ul > li").mapNotNull {
+            base64Decode(it.select("a").attr("data-content"))
+        }.toString()
 
-                val mirrorData = document.select("div.mirrorstream > ul > li").mapNotNull {
-                    base64Decode(it.select("a").attr("data-content"))
-                }.toString()
-
-                tryParseJson<List<ResponseSources>>(mirrorData)?.map { res ->
-                    async {
-                        val id = res.id
-                        val i = res.i
-                        val q = res.q
-
-                        val sources = Jsoup.parse(
-                            base64Decode(
-                                app.post(
-                                    "${mainUrl}/wp-admin/admin-ajax.php", data = mapOf(
-                                        "id" to id,
-                                        "i" to i,
-                                        "q" to q,
-                                        "nonce" to nonce,
-                                        "action" to action
-                                    )
-                                ).parsed<ResponseData>().data
+        tryParseJson<List<ResponseSources>>(mirrorData)?.forEach { res ->
+            jobs.add(async {
+                val sources = Jsoup.parse(
+                    base64Decode(
+                        app.post(
+                            "${mainUrl}/wp-admin/admin-ajax.php", data = mapOf(
+                                "id" to res.id,
+                                "i" to res.i,
+                                "q" to res.q,
+                                "nonce" to nonce,
+                                "action" to action
                             )
-                        ).select("iframe").attr("src")
+                        ).parsed<ResponseData>().data
+                    )
+                ).select("iframe").attr("src")
 
-                        loadCustomExtractor(sources, data, subtitleCallback, callback, getQuality(q))
-                    }
-                }?.awaitAll()
-            },
-            async {
-                document.select("div.download li").map { ele ->
-                    async {
-                        val quality = getQuality(ele.select("strong").text())
-                        ele.select("a").map {
-                            it.attr("href") to it.text()
-                        }.filter {
-                            !inBlacklist(it.first) && quality != Qualities.P360.value
-                        }.map { pair ->
-                            async {
-                                val link = app.get(pair.first, referer = "$mainUrl/").url
-                                loadCustomExtractor(
-                                    fixedIframe(link),
-                                    data,
-                                    subtitleCallback,
-                                    callback,
-                                    quality
-                                )
-                            }
-                        }.awaitAll()
-                    }
-                }.awaitAll()
-            }
-        )
+                loadCustomExtractor(sources, data, subtitleCallback, callback, getQuality(res.q))
+            })
+        }
+
+        // Download links
+        document.select("div.download li").forEach { ele ->
+            val quality = getQuality(ele.select("strong").text())
+            ele.select("a").map { it.attr("href") to it.text() }
+                .filter { !inBlacklist(it.first) && quality != Qualities.P360.value }
+                .forEach { pair ->
+                    jobs.add(async {
+                        val link = app.get(pair.first, referer = "$mainUrl/").url
+                        loadCustomExtractor(fixedIframe(link), data, subtitleCallback, callback, quality)
+                    })
+                }
+        }
 
         jobs.awaitAll()
         true
@@ -248,7 +226,6 @@ class OtakudesuProvider : MainAPI() {
         quality: Int = Qualities.Unknown.value,
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            // langsung panggil callback, tidak perlu runBlocking
             callback.invoke(
                 newExtractorLink(
                     link.name,
@@ -271,7 +248,6 @@ class OtakudesuProvider : MainAPI() {
                 val id = Regex("""(?:/f/|/file/)(\w+)""").find(url)?.groupValues?.getOrNull(1)
                 "${acefile}/player/$id"
             }
-
             else -> fixUrl(url)
         }
     }
