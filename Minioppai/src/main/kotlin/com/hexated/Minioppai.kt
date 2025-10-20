@@ -3,6 +3,9 @@ package com.hexated
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.net.URLDecoder
@@ -68,7 +71,6 @@ class Minioppai : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
@@ -106,7 +108,7 @@ class Minioppai : MainAPI() {
         val episodes = document.select("div.epsdlist ul li").mapNotNull {
             val name = it.selectFirst("div.epl-num")?.text()
             val link = fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
-            newEpisode(link) {this.name = name}
+            newEpisode(link) { this.name = name }
         }
 
         return newAnimeLoadResponse(title, url, TvType.NSFW) {
@@ -125,20 +127,24 @@ class Minioppai : MainAPI() {
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    ): Boolean = coroutineScope {
         val document = app.get(data).document
-        document.select("div.server ul.mirror li a").mapNotNull {
+        val links = document.select("div.server ul.mirror li a").mapNotNull {
             Jsoup.parse(base64Decode(it.attr("data-em"))).select("iframe").attr("src")
-        }.apmap { link ->
-            loadExtractor(
-                fixUrl(decode(link.substringAfter("data="))),
-                mainUrl,
-                subtitleCallback,
-                callback
-            )
         }
 
-        return true
+        links.map { link ->
+            async {
+                loadExtractor(
+                    fixUrl(decode(link.substringAfter("data="))),
+                    mainUrl,
+                    subtitleCallback,
+                    callback
+                )
+            }
+        }.awaitAll()
+
+        true
     }
 
     private fun decode(input: String): String = URLDecoder.decode(input, "utf-8")
@@ -157,5 +163,4 @@ class Minioppai : MainAPI() {
     data class Post(
         @JsonProperty("all") var all: ArrayList<All> = arrayListOf(),
     )
-
 }
