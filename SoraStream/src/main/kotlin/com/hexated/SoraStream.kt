@@ -148,7 +148,22 @@ open class SoraStream : TmdbProvider() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val data = parseJson<Data>(url)
+    val data: Data? = try {
+        parseJson<Data>(url)
+    } catch (e: Exception) {
+        // fallback kalau ternyata string url (misalnya tmdb.org/...)
+        if (url.startsWith("http")) {
+            val id = url.substringAfterLast("/").toIntOrNull()
+            val type = if (url.contains("/movie/")) "movie" else "tv"
+            Data(id, type)
+        } else {
+            null
+        }
+    }
+
+    if (data == null || data.id == null) {
+        throw ErrorLoadingException("Invalid Data Format: $url")
+    }
         val type = getType(data.type)
         val append = "alternative_titles,credits,external_ids,keywords,videos,recommendations"
         val resUrl = if (type == TvType.Movie) {
