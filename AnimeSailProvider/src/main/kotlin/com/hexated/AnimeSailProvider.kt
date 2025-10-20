@@ -191,7 +191,7 @@ class AnimeSailProvider : MainAPI() {
                                             when {
                                                 iframe.contains("/arch/") -> "Arch"
                                                 iframe.contains("/race/") -> "Race"
-                                                else -> this@AnimeSail.name
+                                                else -> this@AnimeSailProvider.name
                                             }
                                         callback.invoke(
                                             ExtractorLink(
