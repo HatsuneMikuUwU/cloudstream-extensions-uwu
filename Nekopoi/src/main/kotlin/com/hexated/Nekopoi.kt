@@ -5,9 +5,7 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.Session
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import org.jsoup.nodes.Element
 import java.net.URI
 
@@ -22,13 +20,8 @@ class Nekopoi : MainAPI() {
     companion object {
         val session = Session(Requests().baseClient)
         val mirrorBlackList = arrayOf(
-            "MegaupNet",
-            "DropApk",
-            "Racaty",
-            "ZippyShare",
-            "VideobinCo",
-            "SendCm",
-            "GoogleDrive",
+            "MegaupNet", "DropApk", "Racaty", "ZippyShare",
+            "VideobinCo", "SendCm", "GoogleDrive",
         )
         const val mirroredHost = "https://www.mirrored.to"
 
@@ -81,8 +74,8 @@ class Nekopoi : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val doc = fetch.get("$mainUrl/search/$query").document
-        return doc.select("div.result ul li").mapNotNull { it.toSearchResult() }
+        return fetch.get("$mainUrl/search/$query").document
+            .select("div.result ul li").mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
@@ -91,17 +84,12 @@ class Nekopoi : MainAPI() {
         val poster = fixUrlNull(document.selectFirst("div.imgdesc img, div.thm img")?.attr("src"))
         val table = document.select("div.listinfo ul, div.konten")
 
-        val tags = table.select("li:contains(Genres) a").map { it.text() }.takeIf { it.isNotEmpty() }
-            ?: table.select("p:contains(Genre)").text().substringAfter(":").split(",").map { it.trim() }
-
-        val year = document.selectFirst("li:contains(Tayang)")?.text()?.substringAfterLast(",")
-            ?.filter { it.isDigit() }?.toIntOrNull()
-
+        val tags = table.select("li:contains(Genres) a").map { it.text() }.ifEmpty {
+            table.select("p:contains(Genre)").text().substringAfter(":").split(",").map { it.trim() }
+        }
+        val year = document.selectFirst("li:contains(Tayang)")?.text()?.filter { it.isDigit() }?.toIntOrNull()
         val status = getStatus(document.selectFirst("li:contains(Status)")?.text()?.substringAfter(":")?.trim())
-
-        val duration = document.selectFirst("li:contains(Durasi)")?.text()?.substringAfterLast(":")
-            ?.filter { it.isDigit() }?.toIntOrNull()
-
+        val duration = document.selectFirst("li:contains(Durasi)")?.text()?.filter { it.isDigit() }?.toIntOrNull()
         val description = document.selectFirst("span.desc p")?.text()
 
         val episodes = document.select("div.episodelist ul li").mapNotNull {
@@ -127,59 +115,51 @@ class Nekopoi : MainAPI() {
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    ): Boolean = coroutineScope {
+
         val res = fetch.get(data).document
 
-        // Replaced argamap/apmap with structured coroutine parallelism
-        listOf(
+        // --- Handle iframe stream sources ---
+        val iframeJobs = res.select("div#show-stream iframe").map { iframe ->
             async {
-                res.select("div#show-stream iframe").map { iframe ->
-                    async {
-                        loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
-                    }
-                }.awaitAll()
-            },
-            async {
-                val items = res.select("div.boxdownload div.liner").map { ele ->
-                    getIndexQuality(ele.select("div.name").text()) to
-                            ele.selectFirst("a:contains(ouo)")?.attr("href")
-                }.filter { it.first != Qualities.P360.value }
-
-                items.map { (quality, ouoLink) ->
-                    async {
-                        val bypassedAds = bypassMirrored(bypassOuo(ouoLink))
-                        bypassedAds.mapNotNull { adsLink ->
-                            async {
-                                loadExtractor(
-                                    fixEmbed(adsLink) ?: return@async,
-                                    "$mainUrl/",
-                                    subtitleCallback
-                                ) { link ->
-                                    callback.invoke(
-                                        newExtractorLink(
-                                            link.name,
-                                            link.name,
-                                            link.url,
-                                            link.type
-                                        ) {
-                                            this.referer = link.referer
-                                            this.quality =
-                                                if (link.type == ExtractorLinkType.M3U8)
-                                                    link.quality
-                                                else quality
-                                            this.headers = link.headers
-                                            this.extractorData = link.extractorData
-                                        }
-                                    )
-                                }
-                            }
-                        }.awaitAll()
-                    }
-                }.awaitAll()
+                loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
             }
-        ).awaitAll()
+        }
 
-        return true
+        // --- Handle mirrored download links ---
+        val mirrorJobs = res.select("div.boxdownload div.liner").map { ele ->
+            async {
+                val quality = getIndexQuality(ele.select("div.name").text())
+                val ouoUrl = ele.selectFirst("a:contains(ouo)")?.attr("href")
+                if (ouoUrl != null && quality != Qualities.P360.value) {
+                    val bypassed = bypassMirrored(bypassOuo(ouoUrl))
+                    bypassed.forEach { adsLink ->
+                        if (adsLink != null) {
+                            loadExtractor(
+                                fixEmbed(adsLink) ?: return@forEach,
+                                "$mainUrl/",
+                                subtitleCallback
+                            ) { link ->
+                                callback(
+                                    newExtractorLink(
+                                        link.name, link.name, link.url, link.type
+                                    ) {
+                                        this.referer = link.referer
+                                        this.quality =
+                                            if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                                        this.headers = link.headers
+                                        this.extractorData = link.extractorData
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        (iframeJobs + mirrorJobs).awaitAll()
+        true
     }
 
     private fun fixEmbed(url: String?): String? {
@@ -201,12 +181,16 @@ class Nekopoi : MainAPI() {
             if (res.headers["location"] != null) return@repeat
             val document = res.document
             val nextUrl = document.select("form").attr("action")
-            val data = document.select("form input").associate { it.attr("name") to it.attr("value") }.toMutableMap()
+            val data = document.select("form input").associate {
+                it.attr("name") to it.attr("value")
+            }.toMutableMap()
+
             val captchaKey =
-                document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]").attr("src")
-                    .substringAfter("render=")
+                document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
+                    .attr("src").substringAfter("render=")
             val token = APIHolder.getCaptchaToken(url, captchaKey)
             data["x-token"] = token ?: ""
+
             res = session.post(
                 nextUrl,
                 data = data,
@@ -218,27 +202,29 @@ class Nekopoi : MainAPI() {
     }
 
     private fun NiceResponse.selectMirror(): String? {
-        return document.selectFirst("script:containsData(#passcheck)")?.data()
+        return this.document.selectFirst("script:containsData(#passcheck)")?.data()
             ?.substringAfter("\"GET\", \"")?.substringBefore("\"")
     }
 
-    private suspend fun bypassMirrored(url: String?): List<String?> {
-        val request = session.get(url ?: return emptyList())
+    private suspend fun bypassMirrored(url: String?): List<String?> = coroutineScope {
+        val request = session.get(url ?: return@coroutineScope emptyList())
         delay(2000)
         val mirrorUrl = request.selectMirror() ?: run {
             val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
             app.get(nextUrl).selectMirror()
         }
-        return session.get(fixUrl(mirrorUrl ?: return emptyList(), mirroredHost))
+
+        val mirrors = session.get(fixUrl(mirrorUrl ?: return@coroutineScope emptyList(), mirroredHost))
             .document.select("table.hoverable tbody tr")
             .filterNot { mirrorIsBlackList(it.selectFirst("img")?.attr("alt")) }
-            .map { mirror ->
-                async {
-                    val fileLink = mirror.selectFirst("a")?.attr("href")
-                    session.get(fixUrl(fileLink ?: return@async null, mirroredHost))
-                        .document.selectFirst("div.code_wrap code")?.text()
-                }
-            }.awaitAll()
+
+        mirrors.map { mirror ->
+            async {
+                val fileLink = mirror.selectFirst("a")?.attr("href")
+                session.get(fixUrl(fileLink ?: return@async null, mirroredHost))
+                    .document.selectFirst("div.code_wrap code")?.text()
+            }
+        }.awaitAll()
     }
 
     private fun mirrorIsBlackList(host: String?): Boolean {
@@ -246,12 +232,12 @@ class Nekopoi : MainAPI() {
     }
 
     private fun fixUrl(url: String, domain: String): String {
+        if (url.startsWith("http")) return url
+        if (url.isEmpty()) return ""
         return when {
-            url.startsWith("http") -> url
             url.startsWith("//") -> "https:$url"
-            url.startsWith("/") -> domain + url
-            url.isNotEmpty() -> "$domain/$url"
-            else -> ""
+            url.startsWith('/') -> domain + url
+            else -> "$domain/$url"
         }
     }
 
