@@ -111,56 +111,83 @@ class Nekopoi : MainAPI() {
     }
 
     override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ): Boolean = coroutineScope {
+    data: String,
+    isCasting: Boolean,
+    subtitleCallback: (SubtitleFile) -> Unit,
+    callback: (ExtractorLink) -> Unit
+): Boolean = kotlinx.coroutines.coroutineScope {
 
-        val res = fetch.get(data).document
+    val res = fetch.get(data).document
 
-        // --- Handle iframe stream sources ---
-        val iframeJobs = res.select("div#show-stream iframe").map { iframe ->
-            async {
-                loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
-            }
+    // ambil iframe (stream) sources
+    val iframeSrcs = if (data.contains("movie") || data.contains("live-action")) {
+        res.select("#player2-1 > div[id*=div]").mapNotNull {
+            fixUrl(it.select("iframe").attr("data-src"))
         }
+    } else {
+        res.select(".player2 > .embed2 > div[id*=player]").mapNotNull {
+            fixUrl(it.select("iframe").attr("data-src"))
+        }
+    }
 
-        // --- Handle mirrored download links ---
-        val mirrorJobs = res.select("div.boxdownload div.liner").map { ele ->
-            async {
-                val quality = getIndexQuality(ele.select("div.name").text())
-                val ouoUrl = ele.selectFirst("a:contains(ouo)")?.attr("href")
-                if (ouoUrl != null && quality != Qualities.P360.value) {
-                    val bypassed = bypassMirrored(bypassOuo(ouoUrl))
-                    bypassed.forEach { adsLink ->
-                        if (adsLink != null) {
-                            loadExtractor(
-                                fixEmbed(adsLink) ?: return@forEach,
-                                "$mainUrl/",
-                                subtitleCallback
-                            ) { link ->
-                                callback(
-                                    newExtractorLink(
-                                        link.name, link.name, link.url, link.type
-                                    ) {
-                                        this.referer = link.referer
-                                        this.quality =
-                                            if (link.type == ExtractorLinkType.M3U8) link.quality else quality
-                                        this.headers = link.headers
-                                        this.extractorData = link.extractorData
-                                    }
-                                )
-                            }
+    // buat pekerjaan untuk setiap iframe (boleh paralel)
+    val iframeJobs = iframeSrcs.map { src ->
+        kotlinx.coroutines.async {
+            loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
+        }
+    }
+
+    // proses bagian "boxdownload" (mirrors/ouo -> bypass -> mirrored)
+    val boxItems = res.select("div.boxdownload div.liner").map { ele ->
+        val quality = getIndexQuality(ele.select("div.name").text())
+        val ouo = ele.selectFirst("a:contains(ouo)")?.attr("href")
+        quality to ouo
+    }.filter { it.second != null && it.first != Qualities.P360.value }
+
+    val boxJobs = boxItems.map { (quality, ouoUrl) ->
+        kotlinx.coroutines.async {
+            // bypass Ouo (suspend) -- dipanggil di dalam async (yang berjalan di coroutineScope)
+            val bypassed = try {
+                bypassOuo(ouoUrl)
+            } catch (e: Exception) {
+                null
+            } ?: return@async
+
+            // bypassMirrored juga suspend
+            val adsList = try {
+                bypassMirrored(bypassed)
+            } catch (e: Exception) {
+                emptyList<String?>()
+            }
+
+            // untuk setiap ads link yang valid, panggil loadExtractor (sink callback)
+            adsList.filterNotNull().forEach { adsLink ->
+                val embed = fixEmbed(adsLink) ?: return@forEach
+                loadExtractor(embed, "$mainUrl/", subtitleCallback) { link ->
+                    // langsung invoke callback (tidak runBlocking)
+                    callback.invoke(
+                        newExtractorLink(
+                            link.name,
+                            link.name,
+                            link.url,
+                            link.type
+                        ) {
+                            this.referer = link.referer
+                            this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                            this.headers = link.headers
+                            this.extractorData = link.extractorData
                         }
-                    }
+                    )
                 }
             }
         }
-
-        (iframeJobs + mirrorJobs).awaitAll()
-        true
     }
+
+    // tunggu semua pekerjaan selesai
+    (iframeJobs + boxJobs).awaitAll()
+
+    true
+}
 
     private fun fixEmbed(url: String?): String? {
         if (url == null) return null
