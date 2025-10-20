@@ -11,7 +11,9 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -77,7 +79,6 @@ class OtakudesuProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -91,7 +92,6 @@ class OtakudesuProvider : MainAPI() {
                 }
             }
     }
-
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
@@ -150,7 +150,6 @@ class OtakudesuProvider : MainAPI() {
         }
     }
 
-
     data class ResponseSources(
         @JsonProperty("id") val id: String,
         @JsonProperty("i") val i: String,
@@ -166,12 +165,13 @@ class OtakudesuProvider : MainAPI() {
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    ): Boolean = coroutineScope {
 
         val document = app.get(data).document
 
-        argamap(
-            {
+        // Gunakan coroutineScope + async untuk menggantikan argamap
+        val jobs = listOf(
+            async {
                 val scriptData =
                     document.select("script:containsData(action:)").lastOrNull()?.data()
                 val token =
@@ -187,51 +187,57 @@ class OtakudesuProvider : MainAPI() {
                     base64Decode(it.select("a").attr("data-content"))
                 }.toString()
 
-                tryParseJson<List<ResponseSources>>(mirrorData)?.apmap { res ->
-                    val id = res.id
-                    val i = res.i
-                    val q = res.q
+                tryParseJson<List<ResponseSources>>(mirrorData)?.map { res ->
+                    async {
+                        val id = res.id
+                        val i = res.i
+                        val q = res.q
 
-                    val sources = Jsoup.parse(
-                        base64Decode(
-                            app.post(
-                                "${mainUrl}/wp-admin/admin-ajax.php", data = mapOf(
-                                    "id" to id,
-                                    "i" to i,
-                                    "q" to q,
-                                    "nonce" to nonce,
-                                    "action" to action
-                                )
-                            ).parsed<ResponseData>().data
-                        )
-                    ).select("iframe").attr("src")
+                        val sources = Jsoup.parse(
+                            base64Decode(
+                                app.post(
+                                    "${mainUrl}/wp-admin/admin-ajax.php", data = mapOf(
+                                        "id" to id,
+                                        "i" to i,
+                                        "q" to q,
+                                        "nonce" to nonce,
+                                        "action" to action
+                                    )
+                                ).parsed<ResponseData>().data
+                            )
+                        ).select("iframe").attr("src")
 
-                    loadCustomExtractor(sources, data, subtitleCallback, callback, getQuality(q))
-
-                }
-            },
-            {
-                document.select("div.download li").map { ele ->
-                    val quality = getQuality(ele.select("strong").text())
-                    ele.select("a").map {
-                        it.attr("href") to it.text()
-                    }.filter {
-                        !inBlacklist(it.first) && quality != Qualities.P360.value
-                    }.apmap {
-                        val link = app.get(it.first, referer = "$mainUrl/").url
-                        loadCustomExtractor(
-                            fixedIframe(link),
-                            data,
-                            subtitleCallback,
-                            callback,
-                            quality
-                        )
+                        loadCustomExtractor(sources, data, subtitleCallback, callback, getQuality(q))
                     }
-                }
+                }?.awaitAll()
+            },
+            async {
+                document.select("div.download li").map { ele ->
+                    async {
+                        val quality = getQuality(ele.select("strong").text())
+                        ele.select("a").map {
+                            it.attr("href") to it.text()
+                        }.filter {
+                            !inBlacklist(it.first) && quality != Qualities.P360.value
+                        }.map { pair ->
+                            async {
+                                val link = app.get(pair.first, referer = "$mainUrl/").url
+                                loadCustomExtractor(
+                                    fixedIframe(link),
+                                    data,
+                                    subtitleCallback,
+                                    callback,
+                                    quality
+                                )
+                            }
+                        }.awaitAll()
+                    }
+                }.awaitAll()
             }
         )
 
-        return true
+        jobs.awaitAll()
+        true
     }
 
     private suspend fun loadCustomExtractor(
@@ -242,21 +248,20 @@ class OtakudesuProvider : MainAPI() {
         quality: Int = Qualities.Unknown.value,
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            runBlocking {
-                callback.invoke(
-                    newExtractorLink(
-                        link.name,
-                        link.name,
-                        link.url,
-                        link.type
-                    ) {
-                        this.referer = link.referer
-                        this.quality = quality
-                        this.headers = link.headers
-                        this.extractorData = link.extractorData
-                    }
-                )
-            }
+            // langsung panggil callback, tidak perlu runBlocking
+            callback.invoke(
+                newExtractorLink(
+                    link.name,
+                    link.name,
+                    link.url,
+                    link.type
+                ) {
+                    this.referer = link.referer
+                    this.quality = quality
+                    this.headers = link.headers
+                    this.extractorData = link.extractorData
+                }
+            )
         }
     }
 
