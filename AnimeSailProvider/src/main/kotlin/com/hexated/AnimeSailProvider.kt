@@ -3,13 +3,11 @@ package com.hexated
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
-import com.lagradost.cloudstream3.mvvm.safeApiCall
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -28,9 +26,11 @@ class AnimeSailProvider : MainAPI() {
 
     companion object {
         fun getType(t: String): TvType {
-            return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
-            else if (t.contains("Movie", true)) TvType.AnimeMovie
-            else TvType.Anime
+            return when {
+                t.contains("OVA", true) || t.contains("Special") -> TvType.OVA
+                t.contains("Movie", true) -> TvType.AnimeMovie
+                else -> TvType.Anime
+            }
         }
 
         fun getStatus(t: String): ShowStatus {
@@ -45,7 +45,9 @@ class AnimeSailProvider : MainAPI() {
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            headers = mapOf("Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"),
+            headers = mapOf(
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+            ),
             cookies = mapOf("_as_ipin_ct" to "ID"),
             referer = ref
         )
@@ -64,27 +66,25 @@ class AnimeSailProvider : MainAPI() {
     }
 
     private fun getProperAnimeLink(uri: String): String {
-        return if (uri.contains("/anime/")) {
-            uri
-        } else {
+        return if (uri.contains("/anime/")) uri else {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
-                (title.contains("-movie")) -> title.substringBefore("-movie")
+                title.contains("-episode") && !title.contains("-movie") -> title.substringBefore("-episode")
+                title.contains("-movie") -> title.substringBefore("-movie")
                 else -> title
             }
-
             "$mainUrl/anime/$title"
         }
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
-        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
-        val title = this.select(".tt > h2").text().trim()
-        val posterUrl = fixUrlNull(this.selectFirst("div.limit img")?.attr("src"))
-        val epNum = this.selectFirst(".tt > h2")?.text()?.let {
+        val href = getProperAnimeLink(fixUrlNull(selectFirst("a")?.attr("href")).toString())
+        val title = select(".tt > h2").text().trim()
+        val posterUrl = fixUrlNull(selectFirst("div.limit img")?.attr("src"))
+        val epNum = selectFirst(".tt > h2")?.text()?.let {
             Regex("Episode\\s?(\\d+)").find(it)?.groupValues?.getOrNull(1)?.toIntOrNull()
         }
+
         return newAnimeSearchResponse(title, href, TvType.Anime) {
             this.posterUrl = posterUrl
             addSub(epNum)
@@ -100,8 +100,8 @@ class AnimeSailProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = request(url).document
 
-        val title = document.selectFirst("h1.entry-title")?.text().toString()
-            .replace("Subtitle Indonesia", "").trim()
+        val title = document.selectFirst("h1.entry-title")?.text()
+            ?.replace("Subtitle Indonesia", "")?.trim().orEmpty()
         val poster = document.selectFirst("div.entry-content > img")?.attr("src")
         val type = getType(document.select("tbody th:contains(Tipe)").next().text().lowercase())
         val year = document.select("tbody th:contains(Dirilis)").next().text().trim().toIntOrNull()
@@ -134,41 +134,31 @@ class AnimeSailProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean = coroutineScope {
-
         val document = request(data).document
         val options = document.select(".mobius > .mirror > option")
 
         options.map { option ->
             async {
-                safeApiCall {
+                try {
                     val iframe = fixUrl(
-                        Jsoup.parse(base64Decode(option.attr("data-em"))).select("iframe")
-                            .attr("src") ?: throw ErrorLoadingException("No iframe found")
+                        Jsoup.parse(base64Decode(option.attr("data-em"))).select("iframe").attr("src")
+                            ?: throw ErrorLoadingException("No iframe found")
                     )
                     val quality = getIndexQuality(option.text())
 
                     when {
-                        iframe.startsWith("$mainUrl/utils/player/kodir2") -> runBlocking {
-                            request(iframe, ref = data).text.substringAfter("= `").substringBefore("`;").let {
-                                val link = Jsoup.parse(it).select("source").last()?.attr("src")
-                                callback.invoke(
-                                    newExtractorLink(
-                                        source = name,
-                                        name = name,
-                                        url = link ?: return@let,
-                                        INFER_TYPE
-                                    ) {
-                                        this.referer = mainUrl
-                                        this.quality = quality
-                                    }
-                                )
-                            }
+                        iframe.startsWith("$mainUrl/utils/player/kodir2") -> {
+                            val text = request(iframe, ref = data).text
+                            val html = text.substringAfter("= `").substringBefore("`;")
+                            val link = Jsoup.parse(html).select("source").last()?.attr("src")
+                            if (link != null) callback(newExtractorLink(name, name, link, INFER_TYPE) {
+                                referer = mainUrl
+                                this.quality = quality
+                            })
                         }
 
-                        iframe.startsWith("$mainUrl/utils/player/arch/") ||
-                                iframe.startsWith("$mainUrl/utils/player/race/") ||
-                                iframe.startsWith("$mainUrl/utils/player/hexupload/") ||
-                                iframe.startsWith("$mainUrl/utils/player/pomf/") -> runBlocking {
+                        iframe.contains("/arch/") || iframe.contains("/race/") ||
+                            iframe.contains("/hexupload/") || iframe.contains("/pomf/") -> {
                             val link = request(iframe, ref = data).document.select("source").attr("src")
                             val source = when {
                                 iframe.contains("/arch/") -> "Arch"
@@ -177,38 +167,30 @@ class AnimeSailProvider : MainAPI() {
                                 iframe.contains("/pomf/") -> "Pomf"
                                 else -> name
                             }
-                            callback.invoke(
-                                newExtractorLink(
-                                    source = source,
-                                    name = source,
-                                    url = link,
-                                    INFER_TYPE
-                                ) {
-                                    this.referer = mainUrl
-                                    this.quality = quality
-                                }
-                            )
+                            callback(newExtractorLink(source, source, link, INFER_TYPE) {
+                                referer = mainUrl
+                                this.quality = quality
+                            })
                         }
 
                         iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
-                            val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
+                            val link = "https://rasa-cintaku-semakin-berantai.xyz/v/" +
                                 iframe.substringAfter("id=").substringBefore("&token")
-                            }"
-                            runBlocking {
-                                loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
-                            }
+                            loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
                         }
 
                         iframe.startsWith("$mainUrl/utils/player/framezilla/") ||
-                                iframe.startsWith("https://uservideo.xyz") -> runBlocking {
+                            iframe.startsWith("https://uservideo.xyz") -> {
                             val link = request(iframe, ref = data).document.select("iframe").attr("src")
                             loadFixedExtractor(fixUrl(link), quality, mainUrl, subtitleCallback, callback)
                         }
 
-                        else -> runBlocking {
+                        else -> {
                             loadFixedExtractor(iframe, quality, mainUrl, subtitleCallback, callback)
                         }
                     }
+                } catch (e: Exception) {
+                    logError(e)
                 }
             }
         }.awaitAll()
@@ -224,7 +206,7 @@ class AnimeSailProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            callback.invoke(
+            callback(
                 newExtractorLink(
                     source = link.name,
                     name = link.name,
