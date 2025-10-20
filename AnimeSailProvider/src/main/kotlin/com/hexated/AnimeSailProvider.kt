@@ -194,7 +194,7 @@ class AnimeSailProvider : MainAPI() {
                                                 else -> this@AnimeSailProvider.name
                                             }
                                         callback.invoke(
-                                            ExtractorLink(
+                                            newExtractorLink(
                                                 source = source,
                                                 name = source,
                                                 url = link,
@@ -254,7 +254,7 @@ class AnimeSailProvider : MainAPI() {
         loadExtractor(url, referer, subtitleCallback) { link ->
             CoroutineScope(Dispatchers.IO).launch {
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         source = name,
                         name = name,
                         url = link.url,
