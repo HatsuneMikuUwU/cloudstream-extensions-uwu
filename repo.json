@@ -1,0 +1,8 @@
+{
+    "name": "Hatsune repository",
+    "description": "HexatedRepo",
+    "manifestVersion": 1,
+    "pluginLists": [
+      "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/plugins.json"
+    ]
+}
