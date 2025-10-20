@@ -133,8 +133,7 @@ class NeonimeProvider : MainAPI() {
                 backgroundPosterUrl = tracker?.cover
                 this.year = year
                 plot = document.select("div[itemprop = description]").text().trim()
-                // fix deprecated rating
-                score = document.select("span[itemprop = ratingValue]").text().toDoubleOrNull()
+                score = document.select("span[itemprop = ratingValue]").text().toDoubleOrNull()?.let { Score(it) }
                 tags = document.select("p.meta_dd > a").map { it.text() }
                 addTrailer(mTrailer)
                 addMalId(tracker?.malId)
@@ -169,6 +168,7 @@ class NeonimeProvider : MainAPI() {
                 addTrailer(trailer)
                 addMalId(tracker?.malId)
                 addAniListId(tracker?.aniId?.toIntOrNull())
+                score = document.select("span[itemprop = ratingValue]").text().toDoubleOrNull()?.let { Score(it) }
             }
         }
     }
