@@ -9,6 +9,7 @@ import com.lagradost.nicehttp.NiceResponse
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -58,9 +59,7 @@ class AnimeSailProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = request(request.data + page).document
-        val home = document.select("article").map {
-            it.toSearchResult()
-        }
+        val home = document.select("article").map { it.toSearchResult() }
         return newHomePageResponse(request.name, home)
     }
 
@@ -70,10 +69,7 @@ class AnimeSailProvider : MainAPI() {
         } else {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
-                    "-episode"
-                )
-
+                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
@@ -98,10 +94,7 @@ class AnimeSailProvider : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val link = "$mainUrl/?s=$query"
         val document = request(link).document
-
-        return document.select("div.listupd article").map {
-            it.toSearchResult()
-        }
+        return document.select("div.listupd article").map { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
@@ -116,8 +109,7 @@ class AnimeSailProvider : MainAPI() {
         val episodes = document.select("ul.daftar > li").map {
             val link = fixUrl(it.select("a").attr("href"))
             val name = it.select("a").text()
-            val episode =
-                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
+            val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
@@ -128,11 +120,9 @@ class AnimeSailProvider : MainAPI() {
             backgroundPosterUrl = tracker?.cover
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
-            showStatus =
-                getStatus(document.select("tbody th:contains(Status)").next().text().trim())
+            showStatus = getStatus(document.select("tbody th:contains(Status)").next().text().trim())
             plot = document.selectFirst("div.entry-content > p")?.text()
-            this.tags =
-                document.select("tbody th:contains(Genre)").next().select("a").map { it.text() }
+            this.tags = document.select("tbody th:contains(Genre)").next().select("a").map { it.text() }
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
@@ -148,7 +138,6 @@ class AnimeSailProvider : MainAPI() {
         val document = request(data).document
         val options = document.select(".mobius > .mirror > option")
 
-        // FIXED: replace apmap with coroutineScope async + awaitAll
         options.map { option ->
             async {
                 safeApiCall {
@@ -159,29 +148,28 @@ class AnimeSailProvider : MainAPI() {
                     val quality = getIndexQuality(option.text())
 
                     when {
-                        iframe.startsWith("$mainUrl/utils/player/kodir2") -> request(
-                            iframe, ref = data
-                        ).text.substringAfter("= `").substringBefore("`;").let {
-                            val link = Jsoup.parse(it).select("source").last()?.attr("src")
-                            callback.invoke(
-                                newExtractorLink(
-                                    source = name,
-                                    name = name,
-                                    url = link ?: return@let,
-                                    INFER_TYPE
-                                ) {
-                                    this.referer = mainUrl
-                                    this.quality = quality
-                                }
-                            )
+                        iframe.startsWith("$mainUrl/utils/player/kodir2") -> runBlocking {
+                            request(iframe, ref = data).text.substringAfter("= `").substringBefore("`;").let {
+                                val link = Jsoup.parse(it).select("source").last()?.attr("src")
+                                callback.invoke(
+                                    newExtractorLink(
+                                        source = name,
+                                        name = name,
+                                        url = link ?: return@let,
+                                        INFER_TYPE
+                                    ) {
+                                        this.referer = mainUrl
+                                        this.quality = quality
+                                    }
+                                )
+                            }
                         }
 
                         iframe.startsWith("$mainUrl/utils/player/arch/") ||
                                 iframe.startsWith("$mainUrl/utils/player/race/") ||
                                 iframe.startsWith("$mainUrl/utils/player/hexupload/") ||
-                                iframe.startsWith("$mainUrl/utils/player/pomf/") -> request(
-                            iframe, ref = data
-                        ).document.select("source").attr("src").let { link ->
+                                iframe.startsWith("$mainUrl/utils/player/pomf/") -> runBlocking {
+                            val link = request(iframe, ref = data).document.select("source").attr("src")
                             val source = when {
                                 iframe.contains("/arch/") -> "Arch"
                                 iframe.contains("/race/") -> "Race"
@@ -206,23 +194,18 @@ class AnimeSailProvider : MainAPI() {
                             val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
                                 iframe.substringAfter("id=").substringBefore("&token")
                             }"
-                            loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
-                        }
-
-                        iframe.startsWith("$mainUrl/utils/player/framezilla/") ||
-                                iframe.startsWith("https://uservideo.xyz") -> {
-                            request(iframe, ref = data).document.select("iframe").attr("src").let { link ->
-                                loadFixedExtractor(
-                                    fixUrl(link),
-                                    quality,
-                                    mainUrl,
-                                    subtitleCallback,
-                                    callback
-                                )
+                            runBlocking {
+                                loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
                             }
                         }
 
-                        else -> {
+                        iframe.startsWith("$mainUrl/utils/player/framezilla/") ||
+                                iframe.startsWith("https://uservideo.xyz") -> runBlocking {
+                            val link = request(iframe, ref = data).document.select("iframe").attr("src")
+                            loadFixedExtractor(fixUrl(link), quality, mainUrl, subtitleCallback, callback)
+                        }
+
+                        else -> runBlocking {
                             loadFixedExtractor(iframe, quality, mainUrl, subtitleCallback, callback)
                         }
                     }
