@@ -256,8 +256,7 @@ class AnimeSailProvider : MainAPI() {
                         source = name,
                         name = name,
                         url = link.url,      
-                        type = link.type,
-                        headers = link.headers
+                        type = link.type
                     )
                 )
             }
