@@ -198,8 +198,6 @@ class AnimeSailProvider : MainAPI() {
                                                 source = source,
                                                 name = source,
                                                 url = link,
-                                                this.referer = mainUrl,
-                                                this.quality = getIndexQuality(element.text()),
                                                 type = ExtractorLinkType.VIDEO
                                             )
                                         )
@@ -257,10 +255,9 @@ class AnimeSailProvider : MainAPI() {
                     newExtractorLink(
                         source = name,
                         name = name,
-                        url = link.url,
-                        this.referer = link.referer,
-                        this.quality = link.quality,
+                        url = link.url,      
                         type = link.type,
+                        headers = link.headers
                     )
                 )
             }
