@@ -4,7 +4,6 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.amap
-import com.lagradost.cloudstream3.mvvm.safeApiCall
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -150,10 +149,12 @@ class AnimeSailProvider : MainAPI() {
 
         val document = request(data).document
 
+        // Menggunakan amap untuk proses async per item
         document.select(".mobius > .mirror > option").amap {
-            safeApiCall {
+            // Gunakan try-catch biasa, bukan safeApiCall, agar support suspend function
+            try {
                 val dataEm = it.attr("data-em")
-                if (dataEm.isBlank()) return@safeApiCall
+                if (dataEm.isBlank()) return@amap
 
                 // Decode base64 link
                 val iframe = fixUrl(
@@ -237,13 +238,15 @@ class AnimeSailProvider : MainAPI() {
                     }
 
                     // SKIP BAD SOURCES
-                    iframe.contains("/fichan/") || iframe.contains("/blogger/") -> return@safeApiCall
+                    iframe.contains("/fichan/") || iframe.contains("/blogger/") -> return@amap
 
                     // 4. FALLBACK (Sisanya biarkan Extractor bawaan CS menangani)
                     else -> {
                         loadFixedExtractor(iframe, quality, mainUrl, subtitleCallback, callback)
                     }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
         return true
@@ -256,7 +259,7 @@ class AnimeSailProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        // RunBlocking dihapus agar tidak nge-freeze UI saat load banyak link
+        // RunBlocking dihapus, langsung panggil fungsi suspend loadExtractor
         loadExtractor(url, referer, subtitleCallback) { link ->
             callback.invoke(
                 newExtractorLink(
