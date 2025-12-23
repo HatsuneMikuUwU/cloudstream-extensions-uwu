@@ -14,7 +14,8 @@ import org.jsoup.nodes.Element
 import java.net.URI
 
 class KuramanimeProvider : MainAPI() {
-    override var mainUrl = "https://v8.kuramanime.tel"
+    // Pastikan domain ini masih aktif, jika redirect, ganti ke domain baru
+    override var mainUrl = "https://v8.kuramanime.tel" 
     override var name = "Kuramanime"
     override val hasQuickSearch = false
     override val hasMainPage = true
@@ -174,29 +175,34 @@ class KuramanimeProvider : MainAPI() {
             headers = headers,
             cookies = cookies
         ).document
-        document.select("video#player > source").map {
-            val link = fixUrl(it.attr("src"))
-            val quality = it.attr("size").toIntOrNull()
-            callback.invoke(
-                newExtractorLink(
-                    fixTitle(server),
-                    fixTitle(server),
-                    link,
-                    INFER_TYPE
-                ) {
-                    this.headers = mapOf(
-                        "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
-                        "Range" to "bytes=0-",
-                        "Sec-Fetch-Dest" to "video",
-                        "Sec-Fetch-Mode" to "no-cors",
-                    )
-                    this.quality = quality ?: Qualities.Unknown.value
-                }
-            )
-        }
-        if (server == "kuramadrive") {
+        
+        // Memperbaiki selector video agar lebih general
+        val sources = document.select("video source")
+        if (sources.isNotEmpty()) {
+            sources.map {
+                val link = fixUrl(it.attr("src"))
+                val quality = it.attr("size").toIntOrNull()
+                callback.invoke(
+                    newExtractorLink(
+                        fixTitle(server),
+                        fixTitle(server),
+                        link,
+                        INFER_TYPE
+                    ) {
+                        this.headers = mapOf(
+                            "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
+                            "Range" to "bytes=0-",
+                            "Sec-Fetch-Dest" to "video",
+                            "Sec-Fetch-Mode" to "no-cors",
+                        )
+                        this.quality = quality ?: Qualities.Unknown.value
+                    }
+                )
+            }
+        } else {
+            // Fallback jika video tag tidak langsung ditemukan (mungkin didalam script)
             document.select("div#animeDownloadLink a").amap {
-                loadExtractor(it.attr("href"), "$mainUrl/", subtitleCallback, callback)
+                 loadExtractor(it.attr("href"), "$mainUrl/", subtitleCallback, callback)
             }
         }
     }
@@ -213,9 +219,14 @@ class KuramanimeProvider : MainAPI() {
         cookies = req.cookies
 
         val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
-        val dataKps = res.selectFirst("div.col-lg-12.mt-3")?.attr("data-kk") ?: return false
+        val dataKps = res.selectFirst("div[data-kk]")?.attr("data-kk") ?: return false
 
-        val assets = getAssets(dataKps)
+        // Menggunakan try-catch saat mengambil assets agar tidak crash jika pattern berubah
+        val assets = try {
+            getAssets(dataKps)
+        } catch (e: Exception) {
+            return false
+        }
 
         var headers = mapOf(
             "X-CSRF-TOKEN" to token,
@@ -225,11 +236,13 @@ class KuramanimeProvider : MainAPI() {
             "X-Requested-With" to "XMLHttpRequest",
         )
 
-        val tokenKey = app.get(
+        val tokenKeyResponse = app.get(
             "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}",
             headers = headers,
             cookies = cookies
-        ).text
+        )
+        
+        val tokenKey = tokenKeyResponse.text
 
         headers = mapOf(
             "Alt-Used" to URI(mainUrl).host,
@@ -239,38 +252,51 @@ class KuramanimeProvider : MainAPI() {
         )
 
         res.select("select#changeServer option").amap { source ->
-            val server = source.attr("value")
-            val link =
-                "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
-            if (server.contains(Regex("(?i)kuramadrive|archive"))) {
-                invokeLocalSource(link, server, headers, subtitleCallback, callback)
-            } else {
-                app.get(
-                    link,
-                    referer = data,
-                    headers = headers,
-                    cookies = cookies
-                ).document.select("div.iframe-container iframe").attr("src").let { videoUrl ->
-                    loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
+            try {
+                val server = source.attr("value")
+                val link = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
+                
+                if (server.contains(Regex("(?i)kuramadrive|archive"))) {
+                    invokeLocalSource(link, server, headers, subtitleCallback, callback)
+                } else {
+                    val iframeDoc = app.get(
+                        link,
+                        referer = data,
+                        headers = headers,
+                        cookies = cookies
+                    ).document
+                    
+                    // Selector iframe yang lebih kuat
+                    val videoUrl = iframeDoc.select("iframe").attr("src")
+                    
+                    if (videoUrl.isNotBlank()) {
+                        loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
+                    }
                 }
+            } catch (e: Exception) {
+                // Ignore error pada satu server, lanjut ke server lain
             }
         }
-
 
         return true
     }
 
+    // Fungsi getAssets yang diperbarui menggunakan Regex
+    // Ini menangani kutip satu ('), kutip dua ("), dan variasi spasi
     private suspend fun getAssets(bpjs: String?): Assets {
         val env = app.get("$mainUrl/assets/js/$bpjs.js").text
-        val MIX_PREFIX_AUTH_ROUTE_PARAM =
-            env.substringAfter("MIX_PREFIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
-        val MIX_AUTH_ROUTE_PARAM =
-            env.substringAfter("MIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
-        val MIX_AUTH_KEY = env.substringAfter("MIX_AUTH_KEY: '").substringBefore("',")
-        val MIX_AUTH_TOKEN = env.substringAfter("MIX_AUTH_TOKEN: '").substringBefore("',")
-        val MIX_PAGE_TOKEN_KEY = env.substringAfter("MIX_PAGE_TOKEN_KEY: '").substringBefore("',")
-        val MIX_STREAM_SERVER_KEY =
-            env.substringAfter("MIX_STREAM_SERVER_KEY: '").substringBefore("',")
+        
+        fun extractVar(name: String): String {
+            return Regex("""$name\s*:\s*['"](.*?)['"]""").find(env)?.groupValues?.get(1) ?: ""
+        }
+
+        val MIX_PREFIX_AUTH_ROUTE_PARAM = extractVar("MIX_PREFIX_AUTH_ROUTE_PARAM")
+        val MIX_AUTH_ROUTE_PARAM = extractVar("MIX_AUTH_ROUTE_PARAM")
+        val MIX_AUTH_KEY = extractVar("MIX_AUTH_KEY")
+        val MIX_AUTH_TOKEN = extractVar("MIX_AUTH_TOKEN")
+        val MIX_PAGE_TOKEN_KEY = extractVar("MIX_PAGE_TOKEN_KEY")
+        val MIX_STREAM_SERVER_KEY = extractVar("MIX_STREAM_SERVER_KEY")
+
         return Assets(
             MIX_PREFIX_AUTH_ROUTE_PARAM,
             MIX_AUTH_ROUTE_PARAM,
@@ -296,5 +322,4 @@ class KuramanimeProvider : MainAPI() {
         val MIX_PAGE_TOKEN_KEY: String?,
         val MIX_STREAM_SERVER_KEY: String?,
     )
-
 }
