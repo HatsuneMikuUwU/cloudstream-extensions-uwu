@@ -3,7 +3,6 @@ package com.hexated
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
-import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -11,6 +10,9 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -149,105 +151,107 @@ class AnimeSailProvider : MainAPI() {
 
         val document = request(data).document
 
-        // Menggunakan amap untuk proses async per item
-        document.select(".mobius > .mirror > option").amap {
-            // Gunakan try-catch biasa, bukan safeApiCall, agar support suspend function
-            try {
-                val dataEm = it.attr("data-em")
-                if (dataEm.isBlank()) return@amap
-
-                // Decode base64 link
-                val iframe = fixUrl(
-                    Jsoup.parse(base64Decode(dataEm)).select("iframe").attr("src")
-                )
-                
-                val label = it.text()
-                val quality = getIndexQuality(label)
-
-                when {
-                    // 1. GENERIC INTERNAL PLAYER HANDLER
-                    // Menangkap semua player yang ada di /utils/player/ (Kodir, Arch, Race, Hex, Vip, dll)
-                    iframe.contains("/utils/player/") -> {
-                        val playerDoc = request(iframe, ref = data).document
-                        
-                        // Cek apakah pakai tag <source> (Style Arch/Race/Hex)
-                        val source = playerDoc.select("source").attr("src")
-                        
-                        if (source.isNotBlank()) {
-                            val sourceName = when {
-                                iframe.contains("/arch/") -> "Arch"
-                                iframe.contains("/race/") -> "Race"
-                                iframe.contains("/hexupload/") -> "Hexupload"
-                                iframe.contains("/pomf/") -> "Pomf"
-                                else -> "Internal"
-                            }
-                            callback.invoke(
-                                newExtractorLink(
-                                    source = sourceName,
-                                    name = "$sourceName $label",
-                                    url = source,
-                                    INFER_TYPE
-                                ) {
-                                    referer = mainUrl
-                                    this.quality = quality
-                                }
+        // Menggunakan coroutineScope + async sebagai pengganti amap untuk menghindari error
+        coroutineScope {
+            document.select(".mobius > .mirror > option").map { element ->
+                async {
+                    try {
+                        val dataEm = element.attr("data-em")
+                        if (dataEm.isNotBlank()) {
+                            
+                            // Decode base64
+                            val iframe = fixUrl(
+                                Jsoup.parse(base64Decode(dataEm)).select("iframe").attr("src")
                             )
-                        } 
-                        // Jika tidak ada <source>, cek di script (Style Kodir)
-                        else {
-                            val script = playerDoc.select("script").html()
-                            // Regex cari link http...mp4/m3u8 di dalam variable javascript
-                            val linkRaw = Regex("""src\s*=\s*['"](http.*?)['"]""").find(script)?.groupValues?.get(1)
-                                ?: playerDoc.toString().substringAfter("= `").substringBefore("`;") // Fallback
+                            
+                            val label = element.text()
+                            val quality = getIndexQuality(label)
 
-                            val finalLink = if (linkRaw.contains("http")) {
-                                Jsoup.parse(linkRaw).select("source").attr("src").ifBlank { linkRaw }
-                            } else null
+                            when {
+                                // 1. GENERIC INTERNAL PLAYER HANDLER
+                                iframe.contains("/utils/player/") -> {
+                                    val playerDoc = request(iframe, ref = data).document
+                                    
+                                    val source = playerDoc.select("source").attr("src")
+                                    
+                                    if (source.isNotBlank()) {
+                                        val sourceName = when {
+                                            iframe.contains("/arch/") -> "Arch"
+                                            iframe.contains("/race/") -> "Race"
+                                            iframe.contains("/hexupload/") -> "Hexupload"
+                                            iframe.contains("/pomf/") -> "Pomf"
+                                            else -> "Internal"
+                                        }
+                                        callback.invoke(
+                                            newExtractorLink(
+                                                source = sourceName,
+                                                name = "$sourceName $label",
+                                                url = source,
+                                                INFER_TYPE
+                                            ) {
+                                                referer = mainUrl
+                                                this.quality = quality
+                                            }
+                                        )
+                                    } 
+                                    else {
+                                        val script = playerDoc.select("script").html()
+                                        val linkRaw = Regex("""src\s*=\s*['"](http.*?)['"]""").find(script)?.groupValues?.get(1)
+                                             ?: playerDoc.toString().substringAfter("= `").substringBefore("`;")
 
-                            if (!finalLink.isNullOrBlank()) {
-                                callback.invoke(
-                                    newExtractorLink(
-                                        source = "Kodir",
-                                        name = "Kodir $label",
-                                        url = finalLink,
-                                        INFER_TYPE
-                                    ) {
-                                        referer = mainUrl
-                                        this.quality = quality
+                                        val finalLink = if (linkRaw.contains("http")) {
+                                            Jsoup.parse(linkRaw).select("source").attr("src").ifBlank { linkRaw }
+                                        } else null
+
+                                        if (!finalLink.isNullOrBlank()) {
+                                            callback.invoke(
+                                                newExtractorLink(
+                                                    source = "Kodir",
+                                                    name = "Kodir $label",
+                                                    url = finalLink,
+                                                    INFER_TYPE
+                                                ) {
+                                                    referer = mainUrl
+                                                    this.quality = quality
+                                                }
+                                            )
+                                        }
                                     }
-                                )
+                                }
+
+                                // 2. REDIRECT HANDLER
+                                iframe.contains("aghanim.xyz") || iframe.contains("rasa-cintaku") -> {
+                                    val id = Regex("""id=([^&]+)""").find(iframe)?.groupValues?.get(1)
+                                    if (id != null) {
+                                        val link = "https://rasa-cintaku-semakin-berantai.xyz/v/$id"
+                                        loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
+                                    }
+                                }
+
+                                // 3. EXTERNAL PLAYER
+                                iframe.contains("framezilla") || iframe.contains("uservideo") -> {
+                                     val innerLink = request(iframe, ref = data).document.select("iframe").attr("src")
+                                     if(innerLink.isNotBlank()){
+                                         loadFixedExtractor(fixUrl(innerLink), quality, mainUrl, subtitleCallback, callback)
+                                     }
+                                }
+
+                                // SKIP BAD SOURCES
+                                iframe.contains("/fichan/") || iframe.contains("/blogger/") -> {
+                                    // do nothing
+                                }
+
+                                // 4. FALLBACK
+                                else -> {
+                                    loadFixedExtractor(iframe, quality, mainUrl, subtitleCallback, callback)
+                                }
                             }
                         }
-                    }
-
-                    // 2. REDIRECT HANDLER (Aghanim / Rasa Cintaku)
-                    iframe.contains("aghanim.xyz") || iframe.contains("rasa-cintaku") -> {
-                        val id = Regex("""id=([^&]+)""").find(iframe)?.groupValues?.get(1)
-                        if (id != null) {
-                            val link = "https://rasa-cintaku-semakin-berantai.xyz/v/$id"
-                            loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
-                        }
-                    }
-
-                    // 3. EXTERNAL PLAYER (Framezilla, Uservideo, dll)
-                    iframe.contains("framezilla") || iframe.contains("uservideo") -> {
-                         val innerLink = request(iframe, ref = data).document.select("iframe").attr("src")
-                         if(innerLink.isNotBlank()){
-                             loadFixedExtractor(fixUrl(innerLink), quality, mainUrl, subtitleCallback, callback)
-                         }
-                    }
-
-                    // SKIP BAD SOURCES
-                    iframe.contains("/fichan/") || iframe.contains("/blogger/") -> return@amap
-
-                    // 4. FALLBACK (Sisanya biarkan Extractor bawaan CS menangani)
-                    else -> {
-                        loadFixedExtractor(iframe, quality, mainUrl, subtitleCallback, callback)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            }.awaitAll()
         }
         return true
     }
@@ -259,7 +263,6 @@ class AnimeSailProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        // RunBlocking dihapus, langsung panggil fungsi suspend loadExtractor
         loadExtractor(url, referer, subtitleCallback) { link ->
             callback.invoke(
                 newExtractorLink(
