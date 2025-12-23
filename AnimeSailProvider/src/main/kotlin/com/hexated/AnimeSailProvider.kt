@@ -55,9 +55,9 @@ class AnimeSailProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/page/" to "Episode Terbaru",
-        "$mainUrl/movie-terbaru/page/" to "Movie Terbaru",
-        "$mainUrl/genres/donghua/page/" to "Donghua"
+        "$mainUrl/rilisan-anime-terbaru/page/" to "Episode Anime Terbaru",
+        "$mainUrl/rilisan-donghua-terbaru/page/" to "Episode Donghua Terbaru",
+        "$mainUrl/movie-terbaru/page/" to "Movie Terbaru"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
