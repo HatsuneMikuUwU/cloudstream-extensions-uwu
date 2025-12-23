@@ -1,14 +1,23 @@
-version = 1
+version = 7
 
 cloudstream {
-    description = "Ngefilm - Streaming Movie and TV Series"
+    description = "Ngefilm"
     language = "id"
-    authors = listOf("Asm0d3usX")
-	isCrossPlatform = true
-    status = 1
+    authors = listOf("Duro92")
+
+    /**
+     * Status int as the following:
+     * 0: Down
+     * 1: Ok
+     * 2: Slow
+     * 3: Beta only
+     * */
+    status = 1 // will be 3 if unspecified
     tvTypes = listOf(
         "AsianDrama",
         "TvSeries",
         "Movie",
     )
+
+    iconUrl = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://new18.ngefilm.site&size=%size%"
 }

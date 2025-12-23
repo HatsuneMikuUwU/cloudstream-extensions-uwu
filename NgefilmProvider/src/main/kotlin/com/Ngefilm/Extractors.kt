@@ -14,14 +14,42 @@ import com.lagradost.cloudstream3.base64Decode
 import com.lagradost.cloudstream3.extractors.StreamWishExtractor
 import com.lagradost.cloudstream3.extractors.Gdriveplayer
 import com.lagradost.cloudstream3.extractors.VidStack
+import com.lagradost.cloudstream3.extractors.Hxfile
+import com.lagradost.cloudstream3.extractors.DoodLaExtractor
+import com.fasterxml.jackson.annotation.JsonProperty
 import java.net.URI
+
+class Movearnpre : Dingtezuni() {
+    override var name = "Earnvids"
+    override var mainUrl = "https://movearnpre.com"
+}
+
+class Vidhidepre : Dingtezuni() {
+    override var name = "Vidhidepre"
+    override var mainUrl = "https://vidhidepre.com"
+}
+
+class Dhtpre : Dingtezuni() {
+    override var name = "Earnvids"
+    override var mainUrl = "https://dhtpre.com"
+}
+
+class Mivalyo : Dingtezuni() {
+    override var name = "Earnvids"
+    override var mainUrl = "https://mivalyo.com"
+}
+
+class Bingezove : Dingtezuni() {
+    override var name = "Earnvids"
+    override var mainUrl = "https://bingezove.com"
+}
 
 open class Dingtezuni : ExtractorApi() {
     override val name = "Earnvids"
     override val mainUrl = "https://dingtezuni.com"
     override val requiresReferer = true
 
-	override suspend fun getUrl(
+ override suspend fun getUrl(
         url: String,
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -46,6 +74,7 @@ open class Dingtezuni : ExtractorApi() {
             response.document.selectFirst("script:containsData(sources:)")?.data()
         } ?: return
 
+        // m3u8 urls could be prefixed by 'file:', 'hls2:' or 'hls4:', so we just match ':'
         Regex(":\\s*\"(.*?m3u8.*?)\"").findAll(script).forEach { m3u8Match ->
             generateM3u8(
                 name,
@@ -88,27 +117,11 @@ class P2pplay : VidStack() {
     override var requiresReferer = true
 }
 
-class Shorticu : StreamWishExtractor() {
-    override val name: String = "Shorticu"
-    override val mainUrl: String = "https://short.icu"
+class Xshotcok : Hxfile() {
+    override val name = "Xshotcok"
+    override val mainUrl = "https://xshotcok.com"
 }
 
-class Movearnpre : Dingtezuni() {
-    override var name = "Earnvids"
-    override var mainUrl = "https://movearnpre.com"
-}
-
-class Dhtpre : Dingtezuni() {
-    override var name = "Earnvids"
-    override var mainUrl = "https://dhtpre.com"
-}
-
-class Mivalyo : Dingtezuni() {
-    override var name = "Earnvids"
-    override var mainUrl = "https://mivalyo.com"
-}
-
-class Bingezove : Dingtezuni() {
-    override var name = "Earnvids"
-    override var mainUrl = "https://bingezove.com"
+class Dsvplay : DoodLaExtractor() {
+    override var mainUrl = "https://dsvplay.com"
 }
