@@ -172,33 +172,50 @@ class KuramanimeProvider : MainAPI() {
             headers = headers,
             cookies = cookies
         )
-        
-        // Handle error response gracefuly
-        if(response.code != 200) return
-        
+
         val document = response.document
-        document.select("video#player > source").map {
+        val responseText = response.text
+
+        // 1. Metode Standar: Cari tag HTML Video
+        document.select("video source").map {
             val link = fixUrl(it.attr("src"))
             val quality = it.attr("size").toIntOrNull()
             callback.invoke(
                 newExtractorLink(
-                    fixTitle(server),
-                    fixTitle(server),
+                    "$name $server",
+                    "$name $server",
                     link,
                     INFER_TYPE
                 ) {
-                    this.headers = mapOf(
-                        "Referer" to url, // Important for streaming
-                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
-                    )
+                    this.headers = mapOf("Referer" to url)
                     this.quality = quality ?: Qualities.Unknown.value
                 }
             )
         }
+
+        // 2. Metode Agresif: Cari URL di dalam Script JS (JWPlayer/Clappr hidden sources)
+        // Mencari pola: file: "..." atau src: "..." yang berakhiran m3u8 atau mp4
+        val scriptRegex = Regex("""(?i)(file|src|source)\s*:\s*["']([^"']+\.(?:m3u8|mp4))["']""")
         
-        // Fallback for download links if video tag fails
-        if (server == "kuramadrive") {
-            document.select("div#animeDownloadLink a").amap {
+        scriptRegex.findAll(responseText).forEach { match ->
+            val link = fixUrl(match.groupValues[2].replace("\\", "")) // Bersihkan backslash escape
+            
+            callback.invoke(
+                newExtractorLink(
+                    "$name $server (Script)",
+                    "$name $server (Script)",
+                    link,
+                    INFER_TYPE
+                ) {
+                    this.headers = mapOf("Referer" to url)
+                    this.quality = Qualities.Unknown.value
+                }
+            )
+        }
+
+        // 3. Fallback Download Link (Khusus KuramaDrive)
+        if (server.contains("kuramadrive", true)) {
+            document.select("div#animeDownloadLink a, div.download-link a").amap {
                 loadExtractor(it.attr("href"), "$mainUrl/", subtitleCallback, callback)
             }
         }
@@ -215,63 +232,78 @@ class KuramanimeProvider : MainAPI() {
         val res = req.document
         cookies = req.cookies
 
-        // Get CSRF Token
-        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") 
-            ?: return false
+        // 1. Ambil CSRF Token
+        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
         
-        // Get JS Asset Key (support data-kk or data-kps)
+        // 2. Ambil ID Script (data-kk atau data-kps)
         val scriptData = res.selectFirst("div[data-kk]")?.attr("data-kk") 
             ?: res.selectFirst("div[data-kps]")?.attr("data-kps") 
-            ?: return false
+            ?: return false 
 
         val assets = getAssets(scriptData)
 
-        // Base Headers
+        // 3. Header Dasar
         val baseHeaders = mapOf(
             "X-CSRF-TOKEN" to token,
             "X-Requested-With" to "XMLHttpRequest",
-            "Referer" to data
+            "Referer" to data,
+            "Origin" to mainUrl
         )
 
-        // Auth headers for the token request
+        // Header khusus Auth
         val authHeaders = baseHeaders + mapOf(
             "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
             "X-Request-ID" to randomId(),
             "X-Request-Index" to "0",
         )
 
+        // 4. Request Page Token Key
         val tokenKeyUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
-        
-        // Get the dynamic key
-        val tokenKey = app.get(
-            tokenKeyUrl,
-            headers = authHeaders,
-            cookies = cookies
-        ).text
+        val tokenKeyResponse = app.get(tokenKeyUrl, headers = authHeaders, cookies = cookies)
+        val tokenKey = tokenKeyResponse.text.trim()
 
-        // Stream headers (DO NOT include hardcoded Bearer token)
+        if (tokenKey.isBlank()) return false 
+
+        // 5. Ambil Daftar Server
+        val serverElements = res.select("select#changeServer option")
+        
+        if (serverElements.isEmpty()) {
+            // Jika dropdown server kosong, coba cek iframe langsung
+            val directIframe = res.select("div.iframe-container iframe").attr("src")
+            if (directIframe.isNotBlank()) {
+                loadExtractor(fixUrl(directIframe), "$mainUrl/", subtitleCallback, callback)
+                return true
+            }
+            return false
+        }
+
         val streamHeaders = baseHeaders + mapOf(
             "Alt-Used" to URI(mainUrl).host
         )
 
-        res.select("select#changeServer option").amap { source ->
+        // 6. Loop setiap server
+        serverElements.amap { source ->
             val server = source.attr("value")
             val link = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
             
-            if (server.contains(Regex("(?i)kuramadrive|archive"))) {
+            // Server Kurama/Archive biasanya local source, sisanya iframe
+            if (server.contains(Regex("(?i)kurama|archive"))) {
                 invokeLocalSource(link, server, streamHeaders, subtitleCallback, callback)
             } else {
-                val iframeReq = app.get(
-                    link,
-                    referer = data,
-                    headers = streamHeaders,
-                    cookies = cookies
-                )
-                
-                // Check if it's an iframe source
-                val iframeSrc = iframeReq.document.select("div.iframe-container iframe").attr("src")
-                if (iframeSrc.isNotEmpty()) {
-                    loadExtractor(fixUrl(iframeSrc), "$mainUrl/", subtitleCallback, callback)
+                try {
+                    val iframeReq = app.get(
+                        link,
+                        referer = data,
+                        headers = streamHeaders,
+                        cookies = cookies
+                    )
+                    
+                    val iframeSrc = iframeReq.document.select("iframe").attr("src")
+                    if (iframeSrc.isNotBlank()) {
+                        loadExtractor(fixUrl(iframeSrc), "$mainUrl/", subtitleCallback, callback)
+                    }
+                } catch (e: Exception) {
+                    // Abaikan jika satu server gagal, lanjut ke server lain
                 }
             }
         }
@@ -282,7 +314,7 @@ class KuramanimeProvider : MainAPI() {
     private suspend fun getAssets(bpjs: String?): Assets {
         val env = app.get("$mainUrl/assets/js/$bpjs.js").text
         
-        // Robust Regex extraction
+        // Regex robust: menangani variasi spasi dan kutip (' atau ")
         fun extract(key: String): String {
             val regex = Regex("""$key\s*:\s*['"]([^'"]+)['"]""")
             return regex.find(env)?.groupValues?.get(1) ?: ""
