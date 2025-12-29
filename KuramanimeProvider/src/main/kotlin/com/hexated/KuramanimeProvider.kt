@@ -84,6 +84,7 @@ class KuramanimeProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(episode)
         }
+
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -158,6 +159,7 @@ class KuramanimeProvider : MainAPI() {
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
+
     }
 
     private suspend fun invokeLocalSource(
@@ -167,55 +169,33 @@ class KuramanimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val response = app.get(
+        val document = app.get(
             url,
             headers = headers,
             cookies = cookies
-        )
-
-        val document = response.document
-        val responseText = response.text
-
-        // 1. Metode Standar: Cari tag HTML Video
-        document.select("video source").map {
+        ).document
+        document.select("video#player > source").map {
             val link = fixUrl(it.attr("src"))
             val quality = it.attr("size").toIntOrNull()
             callback.invoke(
                 newExtractorLink(
-                    "$name $server",
-                    "$name $server",
+                    fixTitle(server),
+                    fixTitle(server),
                     link,
                     INFER_TYPE
                 ) {
-                    this.headers = mapOf("Referer" to url)
+                    this.headers = mapOf(
+                        "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
+                        "Range" to "bytes=0-",
+                        "Sec-Fetch-Dest" to "video",
+                        "Sec-Fetch-Mode" to "no-cors",
+                    )
                     this.quality = quality ?: Qualities.Unknown.value
                 }
             )
         }
-
-        // 2. Metode Agresif: Cari URL di dalam Script JS (JWPlayer/Clappr hidden sources)
-        // Mencari pola: file: "..." atau src: "..." yang berakhiran m3u8 atau mp4
-        val scriptRegex = Regex("""(?i)(file|src|source)\s*:\s*["']([^"']+\.(?:m3u8|mp4))["']""")
-        
-        scriptRegex.findAll(responseText).forEach { match ->
-            val link = fixUrl(match.groupValues[2].replace("\\", "")) // Bersihkan backslash escape
-            
-            callback.invoke(
-                newExtractorLink(
-                    "$name $server (Script)",
-                    "$name $server (Script)",
-                    link,
-                    INFER_TYPE
-                ) {
-                    this.headers = mapOf("Referer" to url)
-                    this.quality = Qualities.Unknown.value
-                }
-            )
-        }
-
-        // 3. Fallback Download Link (Khusus KuramaDrive)
-        if (server.contains("kuramadrive", true)) {
-            document.select("div#animeDownloadLink a, div.download-link a").amap {
+        if (server == "kuramadrive") {
+            document.select("div#animeDownloadLink a").amap {
                 loadExtractor(it.attr("href"), "$mainUrl/", subtitleCallback, callback)
             }
         }
@@ -232,101 +212,72 @@ class KuramanimeProvider : MainAPI() {
         val res = req.document
         cookies = req.cookies
 
-        // 1. Ambil CSRF Token
         val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
-        
-        // 2. Ambil ID Script (data-kk atau data-kps)
-        val scriptData = res.selectFirst("div[data-kk]")?.attr("data-kk") 
-            ?: res.selectFirst("div[data-kps]")?.attr("data-kps") 
-            ?: return false 
+        val dataKps = res.selectFirst("div.col-lg-12.mt-3")?.attr("data-kk") ?: return false
 
-        val assets = getAssets(scriptData)
+        val assets = getAssets(dataKps)
 
-        // 3. Header Dasar
-        val baseHeaders = mapOf(
+        var headers = mapOf(
             "X-CSRF-TOKEN" to token,
-            "X-Requested-With" to "XMLHttpRequest",
-            "Referer" to data,
-            "Origin" to mainUrl
-        )
-
-        // Header khusus Auth
-        val authHeaders = baseHeaders + mapOf(
             "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
             "X-Request-ID" to randomId(),
             "X-Request-Index" to "0",
+            "X-Requested-With" to "XMLHttpRequest",
         )
 
-        // 4. Request Page Token Key
-        val tokenKeyUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
-        val tokenKeyResponse = app.get(tokenKeyUrl, headers = authHeaders, cookies = cookies)
-        val tokenKey = tokenKeyResponse.text.trim()
+        val tokenKey = app.get(
+            "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}",
+            headers = headers,
+            cookies = cookies
+        ).text
 
-        if (tokenKey.isBlank()) return false 
-
-        // 5. Ambil Daftar Server
-        val serverElements = res.select("select#changeServer option")
-        
-        if (serverElements.isEmpty()) {
-            // Jika dropdown server kosong, coba cek iframe langsung
-            val directIframe = res.select("div.iframe-container iframe").attr("src")
-            if (directIframe.isNotBlank()) {
-                loadExtractor(fixUrl(directIframe), "$mainUrl/", subtitleCallback, callback)
-                return true
-            }
-            return false
-        }
-
-        val streamHeaders = baseHeaders + mapOf(
-            "Alt-Used" to URI(mainUrl).host
+        headers = mapOf(
+            "Alt-Used" to URI(mainUrl).host,
+            "Authorization" to "Bearer 39F25KMTgDv0EQCqwRF9kBWxcSrHOGKc",
+            "X-CSRF-TOKEN" to token,
+            "X-Requested-With" to "XMLHttpRequest",
         )
 
-        // 6. Loop setiap server
-        serverElements.amap { source ->
+        res.select("select#changeServer option").amap { source ->
             val server = source.attr("value")
-            val link = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
-            
-            // Server Kurama/Archive biasanya local source, sisanya iframe
-            if (server.contains(Regex("(?i)kurama|archive"))) {
-                invokeLocalSource(link, server, streamHeaders, subtitleCallback, callback)
+            val link =
+                "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
+            if (server.contains(Regex("(?i)kuramadrive|archive"))) {
+                invokeLocalSource(link, server, headers, subtitleCallback, callback)
             } else {
-                try {
-                    val iframeReq = app.get(
-                        link,
-                        referer = data,
-                        headers = streamHeaders,
-                        cookies = cookies
-                    )
-                    
-                    val iframeSrc = iframeReq.document.select("iframe").attr("src")
-                    if (iframeSrc.isNotBlank()) {
-                        loadExtractor(fixUrl(iframeSrc), "$mainUrl/", subtitleCallback, callback)
-                    }
-                } catch (e: Exception) {
-                    // Abaikan jika satu server gagal, lanjut ke server lain
+                app.get(
+                    link,
+                    referer = data,
+                    headers = headers,
+                    cookies = cookies
+                ).document.select("div.iframe-container iframe").attr("src").let { videoUrl ->
+                    loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
                 }
             }
         }
+
 
         return true
     }
 
     private suspend fun getAssets(bpjs: String?): Assets {
         val env = app.get("$mainUrl/assets/js/$bpjs.js").text
-        
-        // Regex robust: menangani variasi spasi dan kutip (' atau ")
-        fun extract(key: String): String {
-            val regex = Regex("""$key\s*:\s*['"]([^'"]+)['"]""")
-            return regex.find(env)?.groupValues?.get(1) ?: ""
-        }
-
+        val MIX_PREFIX_AUTH_ROUTE_PARAM =
+            env.substringAfter("MIX_PREFIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
+        val MIX_AUTH_ROUTE_PARAM =
+            env.substringAfter("MIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
+        val MIX_AUTH_KEY = env.substringAfter("MIX_AUTH_KEY: '").substringBefore("',")
+        val MIX_AUTH_TOKEN = env.substringAfter("MIX_AUTH_TOKEN: '").substringBefore("',")
+        val MIX_PAGE_TOKEN_KEY = env.substringAfter("MIX_PAGE_TOKEN_KEY: '").substringBefore("',")
+        val MIX_STREAM_SERVER_KEY =
+            env.substringAfter("MIX_STREAM_SERVER_KEY: '").substringBefore("',")
         return Assets(
-            MIX_PREFIX_AUTH_ROUTE_PARAM = extract("MIX_PREFIX_AUTH_ROUTE_PARAM"),
-            MIX_AUTH_ROUTE_PARAM = extract("MIX_AUTH_ROUTE_PARAM"),
-            MIX_AUTH_KEY = extract("MIX_AUTH_KEY"),
-            MIX_AUTH_TOKEN = extract("MIX_AUTH_TOKEN"),
-            MIX_PAGE_TOKEN_KEY = extract("MIX_PAGE_TOKEN_KEY"),
-            MIX_STREAM_SERVER_KEY = extract("MIX_STREAM_SERVER_KEY")
+            MIX_PREFIX_AUTH_ROUTE_PARAM,
+            MIX_AUTH_ROUTE_PARAM,
+            MIX_AUTH_KEY,
+            MIX_AUTH_TOKEN,
+            MIX_PAGE_TOKEN_KEY,
+            MIX_STREAM_SERVER_KEY
         )
     }
 
@@ -338,11 +289,12 @@ class KuramanimeProvider : MainAPI() {
     }
 
     data class Assets(
-        val MIX_PREFIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_KEY: String,
-        val MIX_AUTH_TOKEN: String,
-        val MIX_PAGE_TOKEN_KEY: String,
-        val MIX_STREAM_SERVER_KEY: String,
+        val MIX_PREFIX_AUTH_ROUTE_PARAM: String?,
+        val MIX_AUTH_ROUTE_PARAM: String?,
+        val MIX_AUTH_KEY: String?,
+        val MIX_AUTH_TOKEN: String?,
+        val MIX_PAGE_TOKEN_KEY: String?,
+        val MIX_STREAM_SERVER_KEY: String?,
     )
+
 }
