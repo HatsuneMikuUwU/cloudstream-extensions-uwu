@@ -14,7 +14,7 @@ import org.jsoup.nodes.Element
 import java.net.URI
 
 class KuramanimeProvider : MainAPI() {
-    override var mainUrl = "https://v5.kuramanime.blog"
+    override var mainUrl = "https://v9.kuramanime.tel"
     override var name = "Kuramanime"
     override val hasQuickSearch = false
     override val hasMainPage = true
@@ -84,7 +84,6 @@ class KuramanimeProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(episode)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -159,7 +158,6 @@ class KuramanimeProvider : MainAPI() {
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
-
     }
 
     private suspend fun invokeLocalSource(
@@ -169,11 +167,16 @@ class KuramanimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val document = app.get(
+        val response = app.get(
             url,
             headers = headers,
             cookies = cookies
-        ).document
+        )
+        
+        // Handle error response gracefuly
+        if(response.code != 200) return
+        
+        val document = response.document
         document.select("video#player > source").map {
             val link = fixUrl(it.attr("src"))
             val quality = it.attr("size").toIntOrNull()
@@ -185,15 +188,15 @@ class KuramanimeProvider : MainAPI() {
                     INFER_TYPE
                 ) {
                     this.headers = mapOf(
-                        "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
-                        "Range" to "bytes=0-",
-                        "Sec-Fetch-Dest" to "video",
-                        "Sec-Fetch-Mode" to "no-cors",
+                        "Referer" to url, // Important for streaming
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
                     )
                     this.quality = quality ?: Qualities.Unknown.value
                 }
             )
         }
+        
+        // Fallback for download links if video tag fails
         if (server == "kuramadrive") {
             document.select("div#animeDownloadLink a").amap {
                 loadExtractor(it.attr("href"), "$mainUrl/", subtitleCallback, callback)
@@ -212,72 +215,86 @@ class KuramanimeProvider : MainAPI() {
         val res = req.document
         cookies = req.cookies
 
-        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
-        val dataKps = res.selectFirst("div.col-lg-12.mt-3")?.attr("data-kk") ?: return false
+        // Get CSRF Token
+        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") 
+            ?: return false
+        
+        // Get JS Asset Key (support data-kk or data-kps)
+        val scriptData = res.selectFirst("div[data-kk]")?.attr("data-kk") 
+            ?: res.selectFirst("div[data-kps]")?.attr("data-kps") 
+            ?: return false
 
-        val assets = getAssets(dataKps)
+        val assets = getAssets(scriptData)
 
-        var headers = mapOf(
+        // Base Headers
+        val baseHeaders = mapOf(
             "X-CSRF-TOKEN" to token,
+            "X-Requested-With" to "XMLHttpRequest",
+            "Referer" to data
+        )
+
+        // Auth headers for the token request
+        val authHeaders = baseHeaders + mapOf(
             "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
             "X-Request-ID" to randomId(),
             "X-Request-Index" to "0",
-            "X-Requested-With" to "XMLHttpRequest",
         )
 
+        val tokenKeyUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
+        
+        // Get the dynamic key
         val tokenKey = app.get(
-            "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}",
-            headers = headers,
+            tokenKeyUrl,
+            headers = authHeaders,
             cookies = cookies
         ).text
 
-        headers = mapOf(
-            "Alt-Used" to URI(mainUrl).host,
-            "Authorization" to "Bearer 39F25KMTgDv0EQCqwRF9kBWxcSrHOGKc",
-            "X-CSRF-TOKEN" to token,
-            "X-Requested-With" to "XMLHttpRequest",
+        // Stream headers (DO NOT include hardcoded Bearer token)
+        val streamHeaders = baseHeaders + mapOf(
+            "Alt-Used" to URI(mainUrl).host
         )
 
         res.select("select#changeServer option").amap { source ->
             val server = source.attr("value")
-            val link =
-                "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
+            val link = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
+            
             if (server.contains(Regex("(?i)kuramadrive|archive"))) {
-                invokeLocalSource(link, server, headers, subtitleCallback, callback)
+                invokeLocalSource(link, server, streamHeaders, subtitleCallback, callback)
             } else {
-                app.get(
+                val iframeReq = app.get(
                     link,
                     referer = data,
-                    headers = headers,
+                    headers = streamHeaders,
                     cookies = cookies
-                ).document.select("div.iframe-container iframe").attr("src").let { videoUrl ->
-                    loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
+                )
+                
+                // Check if it's an iframe source
+                val iframeSrc = iframeReq.document.select("div.iframe-container iframe").attr("src")
+                if (iframeSrc.isNotEmpty()) {
+                    loadExtractor(fixUrl(iframeSrc), "$mainUrl/", subtitleCallback, callback)
                 }
             }
         }
-
 
         return true
     }
 
     private suspend fun getAssets(bpjs: String?): Assets {
         val env = app.get("$mainUrl/assets/js/$bpjs.js").text
-        val MIX_PREFIX_AUTH_ROUTE_PARAM =
-            env.substringAfter("MIX_PREFIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
-        val MIX_AUTH_ROUTE_PARAM =
-            env.substringAfter("MIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
-        val MIX_AUTH_KEY = env.substringAfter("MIX_AUTH_KEY: '").substringBefore("',")
-        val MIX_AUTH_TOKEN = env.substringAfter("MIX_AUTH_TOKEN: '").substringBefore("',")
-        val MIX_PAGE_TOKEN_KEY = env.substringAfter("MIX_PAGE_TOKEN_KEY: '").substringBefore("',")
-        val MIX_STREAM_SERVER_KEY =
-            env.substringAfter("MIX_STREAM_SERVER_KEY: '").substringBefore("',")
+        
+        // Robust Regex extraction
+        fun extract(key: String): String {
+            val regex = Regex("""$key\s*:\s*['"]([^'"]+)['"]""")
+            return regex.find(env)?.groupValues?.get(1) ?: ""
+        }
+
         return Assets(
-            MIX_PREFIX_AUTH_ROUTE_PARAM,
-            MIX_AUTH_ROUTE_PARAM,
-            MIX_AUTH_KEY,
-            MIX_AUTH_TOKEN,
-            MIX_PAGE_TOKEN_KEY,
-            MIX_STREAM_SERVER_KEY
+            MIX_PREFIX_AUTH_ROUTE_PARAM = extract("MIX_PREFIX_AUTH_ROUTE_PARAM"),
+            MIX_AUTH_ROUTE_PARAM = extract("MIX_AUTH_ROUTE_PARAM"),
+            MIX_AUTH_KEY = extract("MIX_AUTH_KEY"),
+            MIX_AUTH_TOKEN = extract("MIX_AUTH_TOKEN"),
+            MIX_PAGE_TOKEN_KEY = extract("MIX_PAGE_TOKEN_KEY"),
+            MIX_STREAM_SERVER_KEY = extract("MIX_STREAM_SERVER_KEY")
         )
     }
 
@@ -289,12 +306,11 @@ class KuramanimeProvider : MainAPI() {
     }
 
     data class Assets(
-        val MIX_PREFIX_AUTH_ROUTE_PARAM: String?,
-        val MIX_AUTH_ROUTE_PARAM: String?,
-        val MIX_AUTH_KEY: String?,
-        val MIX_AUTH_TOKEN: String?,
-        val MIX_PAGE_TOKEN_KEY: String?,
-        val MIX_STREAM_SERVER_KEY: String?,
+        val MIX_PREFIX_AUTH_ROUTE_PARAM: String,
+        val MIX_AUTH_ROUTE_PARAM: String,
+        val MIX_AUTH_KEY: String,
+        val MIX_AUTH_TOKEN: String,
+        val MIX_PAGE_TOKEN_KEY: String,
+        val MIX_STREAM_SERVER_KEY: String,
     )
-
 }
