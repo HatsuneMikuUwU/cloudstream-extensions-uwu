@@ -12,13 +12,13 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
-import com.lagradost.cloudstream3.network.CloudflareInterceptor // TAMBAHAN PENTING
+// import com.lagradost.cloudstream3.network.CloudflareInterceptor <--- INI DIHAPUS KARENA ERROR
 import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class AnimeSailProvider : MainAPI() {
-    override var mainUrl = "https://154.26.137.28" // Jika memungkinkan, gunakan domain asli jika IP ini diblokir CF
+    override var mainUrl = "https://154.26.137.28"
     override var name = "AnimeSail"
     override val hasMainPage = true
     override var lang = "id"
@@ -50,14 +50,13 @@ class AnimeSailProvider : MainAPI() {
         return app.get(
             url,
             headers = mapOf(
-                // User-Agent statis sering membantu bypass CF
+                // Header ini adalah kunci utama bypass Cloudflare sederhana
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
             ),
             cookies = mapOf("_as_ipin_ct" to "ID"),
-            referer = ref,
-            // INI SOLUSINYA: Menggunakan interceptor untuk menangani challenge Cloudflare
-            interceptor = CloudflareInterceptor(mainUrl)
+            referer = ref
+            // interceptor = CloudflareInterceptor(mainUrl) <--- INI DIHAPUS
         )
     }
 
