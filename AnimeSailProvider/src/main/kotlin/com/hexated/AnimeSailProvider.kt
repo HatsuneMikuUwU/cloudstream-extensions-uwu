@@ -12,12 +12,13 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import com.lagradost.cloudstream3.network.CloudflareInterceptor // TAMBAHAN PENTING
 import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class AnimeSailProvider : MainAPI() {
-    override var mainUrl = "https://154.26.137.28"
+    override var mainUrl = "https://154.26.137.28" // Jika memungkinkan, gunakan domain asli jika IP ini diblokir CF
     override var name = "AnimeSail"
     override val hasMainPage = true
     override var lang = "id"
@@ -48,9 +49,15 @@ class AnimeSailProvider : MainAPI() {
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            headers = mapOf("Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"),
+            headers = mapOf(
+                // User-Agent statis sering membantu bypass CF
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+            ),
             cookies = mapOf("_as_ipin_ct" to "ID"),
-            referer = ref
+            referer = ref,
+            // INI SOLUSINYA: Menggunakan interceptor untuk menangani challenge Cloudflare
+            interceptor = CloudflareInterceptor(mainUrl)
         )
     }
 
@@ -203,9 +210,7 @@ class AnimeSailProvider : MainAPI() {
                                 }
                             )
                         }
-                    //                    skip for now
-                    //                    iframe.startsWith("$mainUrl/utils/player/fichan/") -> ""
-                    //                    iframe.startsWith("$mainUrl/utils/player/blogger/") -> ""
+                    
                     iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
                         val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
                             iframe.substringAfter("id=").substringBefore("&token")
@@ -268,5 +273,4 @@ class AnimeSailProvider : MainAPI() {
         return Regex("(\\d{3,4})[pP]").find(str)?.groupValues?.getOrNull(1)?.toIntOrNull()
             ?: Qualities.Unknown.value
     }
-
 }
