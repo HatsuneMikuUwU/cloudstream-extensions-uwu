@@ -34,7 +34,7 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-		"daftar-anime-2/?title=&status=&type=&order=latest/page/%d" to "Terbaru",
+		"daftar-anime-2/?title=&status=&type=&order=update/page/%d" to "Terbaru",
 		"daftar-anime-2/?title=&status=Finished+Airing&type=&order=update/page/%d/" to "Selesai",
 		"daftar-anime-2/?title=&status=&type=Movie&order=update/page/%d/" to "Movie",
     )
