@@ -34,12 +34,9 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-		"anime-terbaru/page/%d" to "Terbaru",
+		"daftar-anime-2/?title=&status=&type=&order=latest/page/%d" to "Terbaru",
 		"daftar-anime-2/?title=&status=Finished+Airing&type=&order=update/page/%d/" to "Selesai",
-		"genre/sci-fi/page/%d/" to "SCI-FI",
-        "genre/school/page/%d/" to "School",
-		"genre/fantasy/page/%d/" to "Fantasy",
-		"genre/adventure/page/%d/" to "Adventure",
+		"daftar-anime-2/?title=&status=&type=Movie&order=update/page/%d/" to "Movie",
     )
 	
 	
@@ -53,20 +50,7 @@ class SamehadakuProvider : MainAPI() {
 			if (request.name == "Terbaru") it.toLatestAnimeResult()
 			else it.toSearchResult()
 		}
-		// Mengecek apakah request saat ini adalah halaman "Terbaru"
-		val isLandscape = request.name == "Terbaru"
-
-		// Menggunakan HomePageList secara eksplisit agar bisa mengatur isHorizontalImages
-		return HomePageResponse(
-			items = listOf(
-				HomePageList(
-					name = request.name,
-					list = homeList,
-					isHorizontalImages = isLandscape
-				)
-			),
-			hasNext = true // Ubah menjadi false jika scraping kamu tidak mendeteksi halaman selanjutnya
-		)
+		return newHomePageResponse(request.name, homeList)
 	}
 
 	private fun Element.toSearchResult(): AnimeSearchResponse? {
