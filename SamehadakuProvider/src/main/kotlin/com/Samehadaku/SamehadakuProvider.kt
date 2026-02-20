@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 
 class SamehadakuProvider : MainAPI() {
@@ -38,7 +37,6 @@ class SamehadakuProvider : MainAPI() {
 		"daftar-anime-2/?title=&status=Finished+Airing&type=&order=update/page/%d/" to "Selesai",
 		"daftar-anime-2/?title=&status=&type=Movie&order=update/page/%d/" to "Movie",
     )
-	
 	
 	override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
 		val document = app.get("$mainUrl/${request.data.format(page)}").document
@@ -98,7 +96,10 @@ class SamehadakuProvider : MainAPI() {
         }
         val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null)
         val type = getType(document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()?.lowercase() ?: "tv")
-        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toRatingInt()
+        
+        // Memperbaiki toRatingInt() yang usang menjadi toDoubleOrNull()
+        val scoreInfo = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()
+        
         val description = document.select("div.desc p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
 
@@ -120,7 +121,10 @@ class SamehadakuProvider : MainAPI() {
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
-            this.rating = rating
+            
+            // Mengubah rating lama menjadi format score baru
+            this.score = scoreInfo
+            
             plot = description
             addTrailer(trailer)
             this.tags = tags
@@ -138,8 +142,9 @@ class SamehadakuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
 
-        document.select("div#downloadb li").apmap { el ->
-            el.select("a").apmap {
+        // Mengubah apmap menjadi amap agar tidak crash/usang
+        document.select("div#downloadb li").amap { el ->
+            el.select("a").amap {
                 loadFixedExtractor(
                     fixUrl(it.attr("href")),
                     el.select("strong").text(),
@@ -160,16 +165,15 @@ class SamehadakuProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            runBlocking {
-                callback.invoke(
-                    newExtractorLink(link.name, link.name, link.url, link.type) {
-                        this.referer = link.referer
-                        this.quality = name.fixQuality()
-                        this.headers = link.headers
-                        this.extractorData = link.extractorData
-                    }
-                )
-            }
+            // Menghapus runBlocking karena sudah berada dalam suspend dan bisa membekukan UI
+            callback.invoke(
+                newExtractorLink(link.name, link.name, link.url, link.type) {
+                    this.referer = link.referer
+                    this.quality = name.fixQuality()
+                    this.headers = link.headers
+                    this.extractorData = link.extractorData
+                }
+            )
         }
     }
 
