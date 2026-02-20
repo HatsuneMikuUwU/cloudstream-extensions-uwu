@@ -12,8 +12,8 @@ buildscript {
 
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3") // Jangan diganti ke versi terbaru, karena ada masalah dengan versi terbaru
-        classpath("com.github.recloudstream:gradle:master-SNAPSHOT")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+        classpath("com.github.recloudstream:gradle:-SNAPSHOT")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
 }
 
@@ -35,13 +35,12 @@ subprojects {
     apply(plugin = "com.lagradost.cloudstream3.gradle")
 
     cloudstream {
-        setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu")
-        authors = listOf("UwU")
+        setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/Asm0d3usX/CloudX")
+        authors = listOf("Asm0d3usX")
     }
 
-
     android {
-        namespace = "com.uwu"
+        namespace = "com.asm0d3usx"
 
         defaultConfig {
             minSdk = 26
