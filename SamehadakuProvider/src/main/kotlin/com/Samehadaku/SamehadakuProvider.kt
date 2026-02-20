@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 
 class SamehadakuProvider : MainAPI() {
@@ -33,49 +34,49 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-		"anime-terbaru/page/%d" to "Terbaru",
-		"daftar-anime-2/?title=&status=Finished+Airing&type=&order=update/page/%d/" to "Selesai",
-		"daftar-anime-2/?title=&status=&type=Movie&order=update/page/%d/" to "Movie",
+        "anime-terbaru/page/%d" to "Terbaru",
+        "daftar-anime-2/?title=&status=Finished+Airing&type=&order=update/page/%d/" to "Selesai",
+        "daftar-anime-2/?title=&status=&type=Movie&order=update/page/%d/" to "Movie",
     )
-	
-	override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-		val document = app.get("$mainUrl/${request.data.format(page)}").document
-		val items = when (request.name) {
-			"Terbaru" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
-			else -> document.select("article.animpost")
-		}
-		val homeList = items.mapNotNull {
-			if (request.name == "Terbaru") it.toLatestAnimeResult()
-			else it.toSearchResult()
-		}
-		return newHomePageResponse(request.name, homeList)
-	}
+    
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val document = app.get("$mainUrl/${request.data.format(page)}").document
+        val items = when (request.name) {
+            "Terbaru" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
+            else -> document.select("article.animpost")
+        }
+        val homeList = items.mapNotNull {
+            if (request.name == "Terbaru") it.toLatestAnimeResult()
+            else it.toSearchResult()
+        }
+        return newHomePageResponse(request.name, homeList)
+    }
 
-	private fun Element.toSearchResult(): AnimeSearchResponse? {
-		val a = this.selectFirst("div.animepost a") ?: return null
-		val title = a.selectFirst("div.title h2")?.text()?.trim() ?: a.attr("title") ?: return null
-		val href = fixUrlNull(a.attr("href")) ?: return null
-		val posterUrl = fixUrlNull(this.selectFirst("div.content-thumb img")?.attr("src"))
-		val statusText = a.selectFirst("div.data > div.type")?.text()?.trim() ?: ""
+    private fun Element.toSearchResult(): AnimeSearchResponse? {
+        val a = this.selectFirst("div.animepost a") ?: return null
+        val title = a.selectFirst("div.title h2")?.text()?.trim() ?: a.attr("title") ?: return null
+        val href = fixUrlNull(a.attr("href")) ?: return null
+        val posterUrl = fixUrlNull(this.selectFirst("div.content-thumb img")?.attr("src"))
+        val statusText = a.selectFirst("div.data > div.type")?.text()?.trim() ?: ""
 
-		return newAnimeSearchResponse(title, href, TvType.Anime) {
-			this.posterUrl = posterUrl
-			addDubStatus(statusText)
-		}
-	}
+        return newAnimeSearchResponse(title, href, TvType.Anime) {
+            this.posterUrl = posterUrl
+            addDubStatus(statusText)
+        }
+    }
 
-	private fun Element.toLatestAnimeResult(): AnimeSearchResponse? {
-		val a = this.selectFirst("div.thumb a") ?: return null
-		val title = this.selectFirst("h2.entry-title a")?.text()?.trim() ?: a.attr("title") ?: return null
-		val href = fixUrlNull(a.attr("href")) ?: return null
-		val posterUrl = fixUrlNull(a.selectFirst("img")?.attr("src"))
-		val epNum = this.selectFirst("div.dtla author")?.text()?.toIntOrNull()
+    private fun Element.toLatestAnimeResult(): AnimeSearchResponse? {
+        val a = this.selectFirst("div.thumb a") ?: return null
+        val title = this.selectFirst("h2.entry-title a")?.text()?.trim() ?: a.attr("title") ?: return null
+        val href = fixUrlNull(a.attr("href")) ?: return null
+        val posterUrl = fixUrlNull(a.selectFirst("img")?.attr("src"))
+        val epNum = this.selectFirst("div.dtla author")?.text()?.toIntOrNull()
 
-		return newAnimeSearchResponse(title, href, TvType.Anime) {
-			this.posterUrl = posterUrl
-			addSub(epNum)
-		}
-	}
+        return newAnimeSearchResponse(title, href, TvType.Anime) {
+            this.posterUrl = posterUrl
+            addSub(epNum)
+        }
+    }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
@@ -96,10 +97,6 @@ class SamehadakuProvider : MainAPI() {
         }
         val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null)
         val type = getType(document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()?.lowercase() ?: "tv")
-        
-        // Memperbaiki toRatingInt() yang usang menjadi toDoubleOrNull()
-        val scoreInfo = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()
-        
         val description = document.select("div.desc p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
 
@@ -121,10 +118,6 @@ class SamehadakuProvider : MainAPI() {
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
-            
-            // Mengubah rating lama menjadi format score baru
-            this.score = scoreInfo
-            
             plot = description
             addTrailer(trailer)
             this.tags = tags
@@ -137,12 +130,11 @@ class SamehadakuProvider : MainAPI() {
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        subtitleCallback: suspend (SubtitleFile) -> Unit,
+        callback: suspend (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
 
-        // Mengubah apmap menjadi amap agar tidak crash/usang
         document.select("div#downloadb li").amap { el ->
             el.select("a").amap {
                 loadFixedExtractor(
@@ -161,19 +153,20 @@ class SamehadakuProvider : MainAPI() {
         url: String,
         name: String,
         referer: String? = null,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        subtitleCallback: suspend (SubtitleFile) -> Unit,
+        callback: suspend (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            // Menghapus runBlocking karena sudah berada dalam suspend dan bisa membekukan UI
-            callback.invoke(
-                newExtractorLink(link.name, link.name, link.url, link.type) {
-                    this.referer = link.referer
-                    this.quality = name.fixQuality()
-                    this.headers = link.headers
-                    this.extractorData = link.extractorData
-                }
-            )
+            runBlocking {
+                callback.invoke(
+                    newExtractorLink(link.name, link.name, link.url, link.type) {
+                        this.referer = link.referer
+                        this.quality = name.fixQuality()
+                        this.headers = link.headers
+                        this.extractorData = link.extractorData
+                    }
+                )
+            }
         }
     }
 
