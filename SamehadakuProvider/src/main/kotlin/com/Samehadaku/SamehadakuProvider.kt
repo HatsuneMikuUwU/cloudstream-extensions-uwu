@@ -130,8 +130,8 @@ class SamehadakuProvider : MainAPI() {
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
-        subtitleCallback: suspend (SubtitleFile) -> Unit,
-        callback: suspend (ExtractorLink) -> Unit
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
 
@@ -153,8 +153,8 @@ class SamehadakuProvider : MainAPI() {
         url: String,
         name: String,
         referer: String? = null,
-        subtitleCallback: suspend (SubtitleFile) -> Unit,
-        callback: suspend (ExtractorLink) -> Unit
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
             runBlocking {
