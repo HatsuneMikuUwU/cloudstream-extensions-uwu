@@ -1,9 +1,9 @@
-version = 2
+version = 1
 
 cloudstream {
-    description = "Anichin"
+    description = "Anichin — Anime Sub Indo"
     language = "id"
-    authors = listOf("Duro92")
+    authors = listOf("Miku")
 
     /**
      * Status int as the following:

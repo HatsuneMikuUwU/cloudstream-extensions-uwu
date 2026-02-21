@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 
 class SamehadakuProvider : MainAPI() {
@@ -48,7 +49,7 @@ class SamehadakuProvider : MainAPI() {
             if (request.name == "Terbaru") it.toLatestAnimeResult()
             else it.toSearchResult()
         }
-        
+
         val isLandscape = request.name == "Terbaru"
         val homePageList = HomePageList(request.name, homeList, isHorizontalImages = isLandscape)
         
@@ -89,9 +90,7 @@ class SamehadakuProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val fixUrl = if (url.contains("/anime/")) url
         else app.get(url).document.selectFirst("div.nvs.nvsc a")?.attr("href")
-
         val document = app.get(fixUrl ?: return null).document
-
         val title = document.selectFirst("h1.entry-title")?.text()?.removeBloat() ?: return null
         val poster = document.selectFirst("div.thumb > img")?.attr("src")
         val tags = document.select("div.genre-info > a").map { it.text() }
@@ -100,7 +99,7 @@ class SamehadakuProvider : MainAPI() {
         }
         val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null)
         val type = getType(document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()?.lowercase() ?: "tv")
-        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()    
+        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()       
         val description = document.select("div.desc p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
 
@@ -122,7 +121,7 @@ class SamehadakuProvider : MainAPI() {
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
-            this.score = rating?.let { Score.from10(it) }          
+            this.score = rating?.let { Score.from10(it) }
             plot = description
             addTrailer(trailer)
             this.tags = tags
@@ -162,14 +161,16 @@ class SamehadakuProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            callback.invoke(
-                newExtractorLink(link.name, link.name, link.url, link.type) {
-                    this.referer = link.referer
-                    this.quality = name.fixQuality()
-                    this.headers = link.headers
-                    this.extractorData = link.extractorData
-                }
-            )
+            runBlocking {
+                callback.invoke(
+                    newExtractorLink(link.name, link.name, link.url, link.type) {
+                        this.referer = link.referer
+                        this.quality = name.fixQuality()
+                        this.headers = link.headers
+                        this.extractorData = link.extractorData
+                    }
+                )
+            }
         }
     }
 
