@@ -11,7 +11,6 @@ import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.network.CloudflareInterceptor
 import com.lagradost.nicehttp.NiceResponse
 import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
@@ -49,13 +48,9 @@ class AnimeSailProvider : MainAPI() {
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            headers = mapOf(
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-            ),
+            headers = mapOf("Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"),
             cookies = mapOf("_as_ipin_ct" to "ID"),
-            referer = ref,
-            interceptor = CloudflareInterceptor()
+            referer = ref
         )
     }
 
