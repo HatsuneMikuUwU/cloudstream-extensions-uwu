@@ -34,10 +34,8 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "anime-terbaru/page/%d" to "Episode Terbaru",
-        "daftar-anime-2/?title=&status=&type=&order=update/page/%d" to "Terbaru",
+        "anime-terbaru/page/%d" to "Terbaru",
         "daftar-anime-2/?title=&status=Finished+Airing&type=&order=latest/page/%d/" to "Selesai",
-        "daftar-anime-2/?title=&status=&type=&order=popular/page/%d/" to "Popular",
         "daftar-anime-2/?title=&status=&type=Movie&order=latest/page/%d/" to "Movie",
     )
     
@@ -90,12 +88,8 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val fixUrl = if (url.contains("/anime/")) {
-            url
-        } else {
-            app.get(url).document.selectFirst("div.nvs.nvsc a")?.attr("href")
-        }
-
+        val fixUrl = if (url.contains("/anime/")) url
+        else app.get(url).document.selectFirst("div.nvs.nvsc a")?.attr("href")
         val document = app.get(fixUrl ?: return null).document
         val title = document.selectFirst("h1.entry-title")?.text()?.removeBloat() ?: return null
         val poster = document.selectFirst("div.thumb > img")?.attr("src")
@@ -103,30 +97,20 @@ class SamehadakuProvider : MainAPI() {
         val year = document.selectFirst("div.spe > span:contains(Rilis)")?.ownText()?.let {
             Regex("\\d,\\s(\\d*)").find(it)?.groupValues?.getOrNull(1)?.toIntOrNull()
         }
-        val status = getStatus(
-            document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null
-        )
-        val type =
-            getType(
-                document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()
-                    ?.lowercase()
-                    ?: "tv"
-            )
-        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toIntOrNull()
+        val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null)
+        val type = getType(document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()?.lowercase() ?: "tv")
+        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()       
         val description = document.select("div.desc p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
 
         val episodes = document.select("div.lstepsiode.listeps ul li").mapNotNull {
             val header = it.selectFirst("span.lchx > a") ?: return@mapNotNull null
-            val episode = Regex("Episode\\s?(\\d+)").find(header.text())?.groupValues?.getOrNull(1)
-                ?.toIntOrNull()
+            val episode = Regex("Episode\\s?(\\d+)").find(header.text())?.groupValues?.getOrNull(1)?.toIntOrNull()
             val link = fixUrl(header.attr("href"))
-            newEpisode(link) {this.episode = episode}
+            newEpisode(link) { this.episode = episode }
         }.reversed()
 
-        val recommendations = document.select("aside#sidebar ul li").mapNotNull {
-            it.toSearchResult()
-        }
+        val recommendations = document.select("aside#sidebar ul li").mapNotNull { it.toSearchResult() }
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
 
@@ -137,7 +121,7 @@ class SamehadakuProvider : MainAPI() {
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
-            this.score = Score.from10(rating)
+            this.score = rating?.let { Score.from10(it) }
             plot = description
             addTrailer(trailer)
             this.tags = tags
@@ -145,7 +129,6 @@ class SamehadakuProvider : MainAPI() {
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
-
     }
 
     override suspend fun loadLinks(
