@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 
 class SamehadakuProvider : MainAPI() {
@@ -49,7 +48,11 @@ class SamehadakuProvider : MainAPI() {
             if (request.name == "Terbaru") it.toLatestAnimeResult()
             else it.toSearchResult()
         }
-        return newHomePageResponse(request.name, homeList)
+        
+        val isLandscape = request.name == "Terbaru"
+        val homePageList = HomePageList(request.name, homeList, isHorizontalImages = isLandscape)
+        
+        return newHomePageResponse(listOf(homePageList))
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
@@ -97,6 +100,7 @@ class SamehadakuProvider : MainAPI() {
         }
         val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null)
         val type = getType(document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()?.lowercase() ?: "tv")
+        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()    
         val description = document.select("div.desc p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
 
@@ -118,6 +122,7 @@ class SamehadakuProvider : MainAPI() {
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
+            this.score = rating?.let { Score.from10(it) }          
             plot = description
             addTrailer(trailer)
             this.tags = tags
@@ -157,16 +162,14 @@ class SamehadakuProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            runBlocking {
-                callback.invoke(
-                    newExtractorLink(link.name, link.name, link.url, link.type) {
-                        this.referer = link.referer
-                        this.quality = name.fixQuality()
-                        this.headers = link.headers
-                        this.extractorData = link.extractorData
-                    }
-                )
-            }
+            callback.invoke(
+                newExtractorLink(link.name, link.name, link.url, link.type) {
+                    this.referer = link.referer
+                    this.quality = name.fixQuality()
+                    this.headers = link.headers
+                    this.extractorData = link.extractorData
+                }
+            )
         }
     }
 

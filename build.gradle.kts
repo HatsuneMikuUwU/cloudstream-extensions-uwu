@@ -11,9 +11,8 @@ buildscript {
     }
 
     dependencies {
-        classpath("com.android.tools.build:gradle:8.7.3") // Jangan diganti ke versi terbaru, karena ada masalah dengan versi terbaru
+        classpath("com.android.tools.build:gradle:8.7.3")
         classpath("com.github.recloudstream:gradle:-SNAPSHOT")
-        classpath("com.android.tools:r8:8.5.35")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
 }
@@ -36,12 +35,12 @@ subprojects {
     apply(plugin = "com.lagradost.cloudstream3.gradle")
 
     cloudstream {
-        setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/Asm0d3usX/CloudX")
-        authors = listOf("Asm0d3usX")
+        setRepo(System.getenv("GITHUB_REPOSITORY") ?: "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu")
+        authors = listOf("Miku")
     }
 
     android {
-        namespace = "com.asm0d3usx"
+        namespace = "com.miku"
 
         defaultConfig {
             minSdk = 26
@@ -78,20 +77,20 @@ subprojects {
         cloudstream("com.lagradost:cloudstream3:pre-release")
 
         // Other dependencies
-        implementation(kotlin("stdlib")) // Untuk Kotlin Standard Library
-        implementation("com.github.Blatzar:NiceHttp:0.4.13") // Untuk HTTP requests
-        implementation("org.jsoup:jsoup:1.19.1") // Untuk parsing HTML
-        implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.16.0") // JANGAN DIGANTI ke versi terbaru, karena ada masalah dengan versi terbaru
-        implementation("com.fasterxml.jackson.core:jackson-databind:2.16.0") // Untuk serialisasi/deserialisasi JSON
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1") // Untuk coroutines di Android
-        implementation("org.mozilla:rhino:1.8.0") // Untuk JavaScript engine
-        implementation("me.xdrop:fuzzywuzzy:1.4.0") // Untuk fuzzy matching
-        implementation("com.google.code.gson:gson:2.11.0") // Untuk serialisasi/deserialisasi JSON
-        implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0") // Untuk serialisasi/deserialisasi JSON
-        implementation("app.cash.quickjs:quickjs-android:0.9.2") // Untuk JavaScript engine
-        implementation("com.squareup.okhttp3:okhttp:4.12.0") // Untuk HTTP requests
-        implementation("androidx.core:core-ktx:1.16.0") // Untuk Log dan utilitas Android
-        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1") // Untuk coroutines
+        implementation(kotlin("stdlib"))
+        implementation("com.github.Blatzar:NiceHttp:0.4.13")
+        implementation("org.jsoup:jsoup:1.19.1")
+        implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.16.0")
+        implementation("com.fasterxml.jackson.core:jackson-databind:2.16.0")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+        implementation("org.mozilla:rhino:1.8.0")
+        implementation("me.xdrop:fuzzywuzzy:1.4.0")
+        implementation("com.google.code.gson:gson:2.11.0")
+        implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+        implementation("app.cash.quickjs:quickjs-android:0.9.2")
+        implementation("com.squareup.okhttp3:okhttp:4.12.0")
+        implementation("androidx.core:core-ktx:1.16.0")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
 
     }
 }
