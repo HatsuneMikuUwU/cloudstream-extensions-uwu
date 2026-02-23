@@ -1,12 +1,7 @@
 package com.animasu
 
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
-import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
-import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.base64Decode 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -111,19 +106,14 @@ class AnimasuProvider : MainAPI() {
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
-        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
-
         return newAnimeLoadResponse(title, url, type) {
-            posterUrl = tracker?.image ?: poster
-            backgroundPosterUrl = tracker?.cover
+            this.posterUrl = poster
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = getStatus(status)
             plot = document.select("div.sinopsis p").text()
             this.tags = table?.select("span:contains(Genre:) a")?.map { it.text() }
-            addTrailer(trailer)
-            addMalId(tracker?.malId)
-            addAniListId(tracker?.aniId?.toIntOrNull())
+            if (trailer != null) addTrailer(trailer)
         }
     }
 
@@ -135,7 +125,7 @@ class AnimasuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         
-        document.select(".mobius > .mirror > option").amap { option ->
+        document.select(".mobius > .mirror > option").mapNotNull { it }.amap { option ->
             val encodedValue = option.attr("value")
             val qualityLabel = option.text()
 
@@ -154,24 +144,22 @@ class AnimasuProvider : MainAPI() {
                                 link.quality
                             }
 
-                            if (detectedQuality == 360 || detectedQuality == 480 || detectedQuality == 720 || detectedQuality == 1080) {
-                                callback.invoke(
-                                    newExtractorLink(
-                                        link.source,
-                                        link.name,
-                                        link.url,
-                                        link.referer,
-                                        detectedQuality,
-                                        link.type,
-                                        link.headers,
-                                        link.extractorData
-                                    )
-                                )
-                            }
+                            callback.invoke(
+                                newExtractorLink(
+                                    source = link.source,
+                                    name = link.name,
+                                    url = link.url,
+                                    type = link.type
+                                ) {
+                                    this.quality = detectedQuality
+                                    this.referer = link.referer
+                                    this.headers = link.headers
+                                    this.extractorData = link.extractorData
+                                }
+                            )
                         }
                     }
                 } catch (e: Exception) {
-                    // Ignore errors
                 }
             }
         }
@@ -180,13 +168,7 @@ class AnimasuProvider : MainAPI() {
 
     private fun getIndexQuality(str: String?): Int {
         val raw = Regex("(\\d{3,4})[pP]").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
-        return when (raw) {
-            1080 -> 1080
-            720 -> 720
-            480 -> 480
-            360 -> 360
-            else -> Qualities.Unknown.value
-        }
+        return raw ?: Qualities.Unknown.value
     }
 
     private fun Element.getImageAttr(): String? {

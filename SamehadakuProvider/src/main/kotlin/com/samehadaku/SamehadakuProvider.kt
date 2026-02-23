@@ -37,34 +37,15 @@ class SamehadakuProvider : MainAPI() {
         "anime-terbaru/page/%d/" to "New Episodes",
         "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing Anime",
         "daftar-anime-2/page/%d/?status=Finished+Airing&order=latest" to "Complete Anime",
-        "genre/fantasy/page/%d/" to "Fantasy",
-        "genre/action/page/%d/" to "Action",
-        "genre/adventure/page/%d/" to "Adventure",
-        "genre/comedy/page/%d/" to "Comedy",
-        "genre/shounen/page/%d/" to "Shounen",
-        "genre/school/page/%d/" to "School",
-        "genre/romance/page/%d/" to "Romance",
-        "genre/drama/page/%d/" to "Drama",
-        "genre/supernatural/page/%d/" to "Supernatural",
-        "genre/isekai/page/%d/" to "Isekai",
-        "genre/sci-fi/page/%d/" to "SCI-FI",
-        "genre/seinen/page/%d/" to "Seinen",
-        "genre/reincarnation/page/%d/" to "Reincarnation",
-        "genre/super-power/page/%d/" to "Super Power",
-        "genre/historical/page/%d/" to "Historical",
-        "genre/mystery/page/%d/" to "Mystery",
-        "genre/harem/page/%d/" to "Harem",
-        "genre/ecchi/page/%d/" to "Ecchi",
-        "genre/slice-of-life/page/%d/" to "Slice Of Life",
-        "genre/sports/page/%d/" to "Sports",
+        "daftar-anime-2/page/%d/?order=popular" to "Most Popular",
     )
     
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get("$mainUrl/${request.data.format(page)}").document
         
         val items = when (request.name) {
-            "Terbaru" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
-            "Ongoing", "Selesai" -> document.select("div.animepost")
+            "New Episodes" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
+            "Ongoing Anime", "Complete Anime", "Most Popular" -> document.select("div.animepost")
             else -> document.select("article.animpost")
         }
 
