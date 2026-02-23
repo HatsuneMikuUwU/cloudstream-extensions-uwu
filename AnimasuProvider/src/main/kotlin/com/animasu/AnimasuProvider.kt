@@ -5,6 +5,8 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.base64Decode 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -129,7 +131,7 @@ class AnimasuProvider : MainAPI() {
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (newExtractorLink) -> Unit
+        callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
         
