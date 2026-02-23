@@ -1,10 +1,13 @@
 package com.animasu
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.base64Decode 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import android.util.Base64
 
 class AnimasuProvider : MainAPI() {
     override var mainUrl = "https://v1.animasu.app"
@@ -106,14 +109,19 @@ class AnimasuProvider : MainAPI() {
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
+        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
+
         return newAnimeLoadResponse(title, url, type) {
-            this.posterUrl = poster
+            posterUrl = tracker?.image ?: poster
+            backgroundPosterUrl = tracker?.cover
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = getStatus(status)
             plot = document.select("div.sinopsis p").text()
             this.tags = table?.select("span:contains(Genre:) a")?.map { it.text() }
-            if (trailer != null) addTrailer(trailer)
+            addTrailer(trailer)
+            addMalId(tracker?.malId)
+            addAniListId(tracker?.aniId?.toIntOrNull())
         }
     }
 
@@ -121,7 +129,7 @@ class AnimasuProvider : MainAPI() {
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        callback: (newExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
         
@@ -131,8 +139,7 @@ class AnimasuProvider : MainAPI() {
 
             if (encodedValue.isNotEmpty()) {
                 try {
-                    val decodedBytes = Base64.decode(encodedValue, Base64.DEFAULT)
-                    val iframeHtml = String(decodedBytes, Charsets.UTF_8)
+                    val iframeHtml = base64Decode(encodedValue)
                     val iframeUrl = Jsoup.parse(iframeHtml).select("iframe").attr("src")
 
                     if (iframeUrl.isNotEmpty()) {
@@ -145,18 +152,20 @@ class AnimasuProvider : MainAPI() {
                                 link.quality
                             }
 
-                            callback.invoke(
-                                newExtractorLink(
-                                    link.source,
-                                    link.name,
-                                    link.url,
-                                    link.referer,
-                                    detectedQuality,
-                                    link.type,
-                                    link.headers,
-                                    link.extractorData
+                            if (detectedQuality == 360 || detectedQuality == 480 || detectedQuality == 720 || detectedQuality == 1080) {
+                                callback.invoke(
+                                    newExtractorLink(
+                                        link.source,
+                                        link.name,
+                                        link.url,
+                                        link.referer,
+                                        detectedQuality,
+                                        link.type,
+                                        link.headers,
+                                        link.extractorData
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 } catch (e: Exception) {
