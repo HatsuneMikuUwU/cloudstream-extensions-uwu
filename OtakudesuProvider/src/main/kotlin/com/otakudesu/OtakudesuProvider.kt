@@ -1,4 +1,4 @@
-package com.hexated
+package com.otakudesu
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
@@ -53,8 +53,8 @@ class OtakudesuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/ongoing-anime/page/" to "Anime Ongoing",
-        "$mainUrl/complete-anime/page/" to "Anime Completed"
+        "$mainUrl/ongoing-anime/page/" to "Ongoing Anime",
+        "$mainUrl/complete-anime/page/" to "Complete Anime"
     )
 
     override suspend fun getMainPage(

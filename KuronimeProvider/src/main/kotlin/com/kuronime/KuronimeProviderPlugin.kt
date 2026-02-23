@@ -1,17 +1,14 @@
 
-package com.hexated
+package com.kuronime
 
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 import android.content.Context
 
 @CloudstreamPlugin
-class AnimasuPlugin: Plugin() {
+class KuronimeProviderPlugin: Plugin() {
     override fun load(context: Context) {
         // All providers should be added in this manner. Please don't edit the providers list directly.
-        registerMainAPI(Animasu())
-        registerExtractorAPI(Archivd())
-        registerExtractorAPI(Newuservideo())
-        registerExtractorAPI(Vidhidepro())
+        registerMainAPI(KuronimeProvider())
     }
 }

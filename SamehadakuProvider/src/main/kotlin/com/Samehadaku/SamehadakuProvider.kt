@@ -34,9 +34,9 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "anime-terbaru/page/%d/" to "Terbaru",
-        "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing",
-        "daftar-anime-2/page/%d/?status=Finished+Airing&order=latest" to "Selesai",
+        "anime-terbaru/page/%d/" to "New Episodes",
+        "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing Anime",
+        "daftar-anime-2/page/%d/?status=Finished+Airing&order=latest" to "Complete Anime",
         "genre/fantasy/page/%d/" to "Fantasy",
         "genre/action/page/%d/" to "Action",
         "genre/adventure/page/%d/" to "Adventure",

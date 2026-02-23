@@ -1,4 +1,4 @@
-package com.hexated
+package com.animesail
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId

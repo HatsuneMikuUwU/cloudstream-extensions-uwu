@@ -17,7 +17,7 @@ import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
 import org.jsoup.Jsoup
 
-class Anichin : MainAPI() {
+class AnichinProvider : MainAPI() {
     override var mainUrl = "https://anichin.watch"
     override var name = "Anichin"
     override val hasMainPage = true
@@ -35,11 +35,11 @@ class Anichin : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "donghua/?status=&type=&order=latest" to "Baru ditambahkan",
-        "donghua/?status=&type=&order=update" to "Update Terbaru",
-        "donghua/?status=&type=movie&order=update" to "Movie Terbaru",
-        "donghua/?status=&type=&order=popular" to "Terpopuler",
-        "donghua/?sub=&order=rating" to "Rating Terbaik",
+        "donghua/?status=&type=&order=latest" to "Just Added",
+        "donghua/?status=&type=&order=update" to "Latest Update",
+        "donghua/?status=&type=movie&order=update" to "Latest Movies",
+        "donghua/?status=&type=&order=popular" to "Most Popular",
+        "donghua/?sub=&order=rating" to "Best Rating",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {

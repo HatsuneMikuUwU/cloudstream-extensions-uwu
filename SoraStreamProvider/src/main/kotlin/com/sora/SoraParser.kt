@@ -1,4 +1,4 @@
-package com.hexated
+package com.sora
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import org.jsoup.Jsoup

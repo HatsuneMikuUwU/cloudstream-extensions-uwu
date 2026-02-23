@@ -1,18 +1,14 @@
 
-package com.hexated
+package com.animesail
 
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 import android.content.Context
 
 @CloudstreamPlugin
-class OtakudesuProviderPlugin: Plugin() {
+class AnimeSailProviderPlugin: Plugin() {
     override fun load(context: Context) {
         // All providers should be added in this manner. Please don't edit the providers list directly.
-        registerMainAPI(OtakudesuProvider())
-        registerExtractorAPI(Moedesu())
-        registerExtractorAPI(DesuBeta())
-        registerExtractorAPI(Desudesuhd())
-        registerExtractorAPI(Odvidhide())
+        registerMainAPI(AnimeSailProvider())
     }
 }

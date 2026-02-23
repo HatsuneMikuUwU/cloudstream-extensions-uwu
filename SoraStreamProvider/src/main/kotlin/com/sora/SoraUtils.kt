@@ -1,4 +1,4 @@
-package com.hexated
+package com.sora
 
 import android.util.Base64
 import com.hexated.SoraStream.Companion.anilistAPI
