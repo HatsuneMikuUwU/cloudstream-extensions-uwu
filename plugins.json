@@ -1,0 +1,637 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AlqanimeProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "AlqanimeProvider",
+        "internalName": "AlqanimeProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Alqanime \u2014 Streaming Anime, Donghua Subtitle Indonesia",
+        "fileSize": 72056,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://cloudstream.zvlz.my.id/icon/alqanime.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-45151087653d2a071c82409e64d3f5de1f4a70c2c72abdd0ae4fabc4bca69546"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnichinProvider.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "AnichinProvider",
+        "internalName": "AnichinProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Anichin \u2014 Streaming Donghua Subtitle Indonesia",
+        "fileSize": 34703,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "Cartoon"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.club&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-a75958e7b626c3bf24024fae30ed303923b91480a663e175656ad700bb084a16"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnimeSailProvider.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "AnimeSailProvider",
+        "internalName": "AnimeSailProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "AnimeSail \u2014 Streaming Anime, Donghua Subtitle Indonesia",
+        "fileSize": 35446,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://aghanim.xyz/wp-content/themes/animesail/assets/images/ico.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-747e01c15a6e56f7c1709367541627dd33671de20b7b998b88b4a0d84dad1848"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnimexinProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "AnimexinProvider",
+        "internalName": "AnimexinProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Animexin \u2014 Streaming Donghua Subtitle Indonesia",
+        "fileSize": 14790,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://animexin.dev/wp-content/uploads/2020/06/animexinv1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-022eac4cbddbff8fce317b43b40ac082d8edb0809ede22a1573674edf6a34ca9"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/AnoboyProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "AnoboyProvider",
+        "internalName": "AnoboyProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "AnoBoy \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 57520,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://anoboy.be&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-8df4e99a08364fdaee6bffb7f86e0ba31ff6d4dcdd9c00cc3f31c664d6f56ab9"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/Cinemax21Provider.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "Cinemax21Provider",
+        "internalName": "Cinemax21Provider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "CineMax21 \u2014 Streaming Movie and TV Series",
+        "fileSize": 241401,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://klikxxi.me/wp-content/uploads/2024/02/cropped-site-icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-4cafe2ad848e29363d1c6d24e43da5f3de2ea2189f126c51cb85a9d81c2405c3"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/DonghubProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "DonghubProvider",
+        "internalName": "DonghubProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Donghub \u2014 Streaming Donghua Subtitle Indonesia",
+        "fileSize": 18629,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "Cartoon"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://donghub.vip&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-8b6d3e97b28c5f465364cb47f4c058a81d0468477581f87b497790f9fed59dfd"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/DrakorProvider.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "DrakorProvider",
+        "internalName": "DrakorProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Drakor \u2014 Streaming Drama Korean, Movie and TV Series",
+        "fileSize": 236991,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://klikxxi.me/wp-content/uploads/2024/02/cropped-site-icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-eaf4e2842496de0cc4c46c3e7c1dde300c4580d625493bc3bced56f96f3f8138"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/DubbindoProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "DubbindoProvider",
+        "internalName": "DubbindoProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Dubbindo \u2014 Streaming Anime, Movie and TV Series",
+        "fileSize": 27349,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "TvSeries",
+            "Movie",
+            "Cartoon",
+            "Anime"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dubbindo.site&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-7be0773e15b5f24007177963147fa7b280d1027a48c522cfc1a84e90937fc20e"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/DutamovieProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "DutamovieProvider",
+        "internalName": "DutamovieProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "DutaMovie \u2014 Streaming Movie and TV Series",
+        "fileSize": 29080,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "AsianDrama"
+        ],
+        "iconUrl": "https://offshorebankservices.com/wp-content/uploads/2022/07/cropped-dutamovie21-512x512-1-60x60.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-480fba63d9328e7ebd4cef242d4f2bbd27b621c32c5074774ad456d5c0d43a20"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/HidoriStreamProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "HidoriStreamProvider",
+        "internalName": "HidoriStreamProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "HidoriStream \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 48481,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://v2.hidoristream.online&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-bcd04258798a3b774270c768f384426985f7605f4f2e7cb875ff8ddbc0cf429b"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/IdlixProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "IdlixProvider",
+        "internalName": "IdlixProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Idlix \u2014 Streaming Movie and TV Series",
+        "fileSize": 49490,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "TvSeries",
+            "Movie",
+            "AsianDrama"
+        ],
+        "iconUrl": "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://idlixian.com&size=16",
+        "apiVersion": 1,
+        "fileHash": "sha256-260c480adf94e2a756afe62329864086240fb572e52a410e8086e49ac5f149bd",
+        "jarFileSize": 199549,
+        "jarUrl": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/IdlixProvider.jar",
+        "jarHash": "sha256-8db8e1403830d36b2a7b2880e3e5f8994b319a74357c3dbee0aee55f59993f68"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/IndoMax21Provider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "IndoMax21Provider",
+        "internalName": "IndoMax21Provider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "IndoMax21 \u2014 Streaming Anime, Donghua, Hentai, Porn, Movie and TV Series",
+        "fileSize": 25748,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "NSFW"
+        ],
+        "iconUrl": "https://homecookingrocks.com/wp-content/uploads/2024/10/cropped-indomax21-favicon-color-1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-cbd7b6a51939c96934b0355f5fde94b18da8e2788c1a66ba4342018ba85c1cdf"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/JavHeyProvider.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "JavHeyProvider",
+        "internalName": "JavHeyProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "JavHey \u2014 Streaming Porn and JAV",
+        "fileSize": 22866,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "NSFW"
+        ],
+        "iconUrl": "https://missav.ws/missav/logo-square.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-a518515f54f1a59bb44e6468ca5a072ee29be95648a6f2ddd4e45fee8b5270f1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/KlikxxiProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "KlikxxiProvider",
+        "internalName": "KlikxxiProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "KlikXXI \u2014 Streaming Movie and TV Series",
+        "fileSize": 21109,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://klikxxi.fit&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-e2aef7c7f2c5c81bc29dc6439bef2569347e089b7a749c0b97a084eed87fda0d"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/KuramanimeProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "KuramanimeProvider",
+        "internalName": "KuramanimeProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Kuramanime \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 36278,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=kuramanime.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-323e7c34cf6f40e404477692ee2f71cf94eec85fea0e35d1a9c1ce8d8e52a813"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/KuronimeProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "KuronimeProvider",
+        "internalName": "KuronimeProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Kuronime \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 39462,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://play-lh.googleusercontent.com/EFMkS1T-8txjLFIl9QxjcTRLa7a7Muv08C04b7ongYgodoY_b2T3GpxzGAQEx-eitfQ=w256",
+        "apiVersion": 1,
+        "fileHash": "sha256-3dd02365736fe45b72cdce98bd165129c97c71f0b29df8135c675bfcd784d98b"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/LayarAsiaProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "LayarAsiaProvider",
+        "internalName": "LayarAsiaProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "LayarAsia \u2014 Streaming Drama Korean, Movie and TV Series",
+        "fileSize": 31999,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://layarasia.site&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-695952b1ffeb60038a141557f465b61d8346eae08b374f4e30e2941a99da37f2"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/LayarKacaProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "LayarKacaProvider",
+        "internalName": "LayarKacaProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "LayarKaca \u2014 Streaming Movie Subtitle Indonesia",
+        "fileSize": 34852,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://assets.lk21.party/favicons/apple-icon-144x144.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-9e92e02935cb6678d6aab3175e99f8ece1aed9b33c48ceea9044612ffc13076b"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/MovieboxProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "MovieboxProvider",
+        "internalName": "MovieboxProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "MovieBox \u2014 Streaming Movie Subtitle Indonesia",
+        "fileSize": 31395,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "TvSeries",
+            "Movie",
+            "Anime",
+            "AsianDrama"
+        ],
+        "iconUrl": "https://movieboxph.app/wp-content/uploads/2025/11/Movie-Box-icon.webp",
+        "apiVersion": 1,
+        "fileHash": "sha256-05e1b811f2c30d8ab03ca1da5d6b8452607e19281bd89b297c8d3109e93130ef"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/NekopoiProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "NekopoiProvider",
+        "internalName": "NekopoiProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "NekoPoi \u2014 Streaming Hentai, Porn and JAV Subtitle Indonesia",
+        "fileSize": 39520,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "NSFW"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=nekopoi.care&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-efafb69a350fd289b89379a020cc57dc84658170b7f7223fd58fe20d3ba2312a"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/NgeFilm21Provider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "NgeFilm21Provider",
+        "internalName": "NgeFilm21Provider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "NgeFilm21 \u2014 Streaming Movie and TV Series",
+        "fileSize": 31477,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://new31.ngefilm.site/wp-content/uploads/2023/08/cropped-imageedit_8_4481000408-60x60.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-67de017dde366d25bdc75efbdd4491fa301bafdcbdba4dc43afc2709ca687bc1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/NimegamiProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "NimegamiProvider",
+        "internalName": "NimegamiProvider",
+        "authors": [
+            "Hexated"
+        ],
+        "description": "Nimegami \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 25126,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=nimegami.id&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-954285e82e582b6be1eda9e0e3e17c193cff9ce616d67190480642e318332a32"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/NomatProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "NomatProvider",
+        "internalName": "NomatProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Nomat \u2014 Streaming Movie and TV Series",
+        "fileSize": 17208,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://nomat.site&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-e431a43acad1e6ba08f8df3c87059fc12355ab5f7a8da1e67716d9664678cd3a"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/NontonAnimeIDProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "NontonAnimeIDProvider",
+        "internalName": "NontonAnimeIDProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "NontonAnimeID \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 41785,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://s11.nontonanimeid.boats&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-352925fc0af8640639736ed45645df80f2a911a56303d51234df342e281430c9"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/OppaDramaProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "OppaDramaProvider",
+        "internalName": "OppaDramaProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "OppaDrama \u2014 Streaming Drama Korean, Movie and TV Series",
+        "fileSize": 25217,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AsianDrama",
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://45.11.57.243&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-09fc6e5bc0daeb820c4c83a3e3e6d0cc4b229bd427823c79855309427207eec1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/OtakudesuProvider.cs3",
+        "status": 1,
+        "version": 4,
+        "name": "OtakudesuProvider",
+        "internalName": "OtakudesuProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "OtakuDesu \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 36060,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRr-sfek8gXmLpcAppEpaYbUDVtndQbCm_boh1-E91QrmSvsw-2l3-s2JOP&s=10",
+        "apiVersion": 1,
+        "fileHash": "sha256-673141d6e8747ccb35a00610567d2058bb2093d886cd5359370ecba1fcb8efa0"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/PencuriMovieProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "PencuriMovieProvider",
+        "internalName": "PencuriMovieProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "PencuriMovie \u2014 Streaming Movie and TV Series",
+        "fileSize": 15283,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://ww03.pencurimovie.bond&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-b30b532b04974a77d13eb1461bc46abe06182fa5564e72ce7e426885cf2d43e1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/SamehadakuProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "SamehadakuProvider",
+        "internalName": "SamehadakuProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Samehadaku \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 30127,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://lh3.googleusercontent.com/zwKn_6sdYOdIiWg6Gtnx-Ar2DrVamlADnPN8BE4f84-a9aRo2Zc7mxbW5Qd26Z8cPFc",
+        "apiVersion": 1,
+        "fileHash": "sha256-e29c2a0587838c898e11d204890b47e46a573989da11dbc13b75717c20edaa5a"
+    }
+]
