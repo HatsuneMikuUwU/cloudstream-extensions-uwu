@@ -157,7 +157,7 @@ class AnimasuProvider : MainAPI() {
 
     private suspend fun loadFixedExtractor(
         url: String,
-        quality: String?,
+        qualityName: String,
         referer: String? = null,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
@@ -167,12 +167,12 @@ class AnimasuProvider : MainAPI() {
             extractedLinks.add(link)
         }
         
-        val extractedQuality = getIndexQuality(quality)
+        val extractedQuality = getIndexQuality(qualityName)
         
         extractedLinks.forEach { link ->
             val newLink = newExtractorLink(
                 source = link.source,
-                name = link.name,
+                name = "$qualityName - ${link.name}", 
                 url = link.url,
                 type = link.type 
             ) {
@@ -186,8 +186,16 @@ class AnimasuProvider : MainAPI() {
     }
 
     private fun getIndexQuality(str: String?): Int {
-        return Regex("(\\d{3,4})").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
-            ?: Qualities.Unknown.value
+        if (str == null) return Qualities.Unknown.value
+        val lower = str.lowercase()
+        return when {
+            lower.contains("1080") || lower.contains("fhd") -> 1080
+            lower.contains("720") || lower.contains("hd") -> 720
+            lower.contains("480") || lower.contains("sd") -> 480
+            lower.contains("360") -> 360
+            else -> Regex("(\\d{3,4})").find(str)?.groupValues?.getOrNull(1)?.toIntOrNull() 
+                ?: Qualities.Unknown.value
+        }
     }
 
     private fun Element.getImageAttr(): String? {
