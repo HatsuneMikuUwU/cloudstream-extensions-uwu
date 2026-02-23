@@ -67,7 +67,14 @@ class KuronimeProvider : MainAPI() {
         val home = document.select("article").map {
             it.toSearchResult()
         }
-        return newHomePageResponse(request.name, home)
+        
+        val isLandscape = request.name == "New Episodes"
+        
+        return newHomePageResponse(
+            name = request.name, 
+            list = home, 
+            isHorizontalImages = isLandscape 
+        )
     }
 
     private fun getProperAnimeLink(uri: String): String {
