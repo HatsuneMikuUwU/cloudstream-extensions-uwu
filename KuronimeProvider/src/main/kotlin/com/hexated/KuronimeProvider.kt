@@ -188,6 +188,7 @@ class KuronimeProvider : MainAPI() {
                     val decrypt = AesHelper.cryptoAESHandler(base64Decode(src), KEY.toByteArray(), false, "AES/CBC/NoPadding")
                     val sourceUrl = tryParseJson<Sources>(decrypt?.toJsonFormat())?.src?.replace("\\", "")
                     if (sourceUrl != null) {
+                        // PERBAIKAN: Menambahkan Qualities.Unknown.value sebelum header
                         M3u8Helper.generateM3u8(
                             this.name, 
                             sourceUrl, 
