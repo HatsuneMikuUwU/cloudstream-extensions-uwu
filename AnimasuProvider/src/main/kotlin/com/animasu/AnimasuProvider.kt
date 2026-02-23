@@ -173,11 +173,11 @@ class AnimasuProvider : MainAPI() {
             val newLink = newExtractorLink(
                 source = link.source,
                 name = link.name,
-                url = link.url
+                url = link.url,
+                type = link.type 
             ) {
                 this.referer = link.referer
                 this.quality = if (link.quality == Qualities.Unknown.value) extractedQuality else link.quality
-                this.isM3u8 = link.isM3u8
                 this.headers = link.headers
             }
             

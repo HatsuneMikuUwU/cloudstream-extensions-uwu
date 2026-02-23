@@ -50,11 +50,11 @@ class SamehadakuProvider : MainAPI() {
         }
 
         val homeList = items.mapNotNull {
-            if (request.name == "Terbaru") it.toLatestAnimeResult()
+            if (request.name == "New Episodes") it.toLatestAnimeResult()
             else it.toSearchResult()
         }
 
-        val isLandscape = request.name == "Terbaru"
+        val isLandscape = request.name == "New Episodes"
         
         return newHomePageResponse(
             listOf(HomePageList(request.name, homeList, isHorizontalImages = isLandscape)),
