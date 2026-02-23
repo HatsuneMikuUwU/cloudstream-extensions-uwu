@@ -144,7 +144,7 @@ class AnimasuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         
-        document.select(".mobius select.mirror option").toList().apmap { option ->
+        document.select(".mobius select.mirror option").toList().amap { option ->
             val rawValue = option.attr("value")
             if (rawValue.isNotEmpty()) {
                 val decodedHtml = base64Decode(rawValue)
