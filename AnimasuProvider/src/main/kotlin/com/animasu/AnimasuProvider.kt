@@ -162,21 +162,29 @@ class AnimasuProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        // 1. Kumpulkan semua link yang didapat ke dalam sebuah list terlebih dahulu
+        val extractedLinks = mutableListOf<ExtractorLink>()
         loadExtractor(url, referer, subtitleCallback) { link ->
-            val extractedQuality = getIndexQuality(quality)
+            extractedLinks.add(link)
+        }
+        
+        val extractedQuality = getIndexQuality(quality)
+        
+        // 2. Proses link di luar callback agar fungsi 'suspend' bisa dipanggil
+        extractedLinks.forEach { link ->
+            val newLink = newExtractorLink(
+                source = link.source,
+                name = link.name,
+                url = link.url
+            ) {
+                this.referer = link.referer
+                this.quality = if (link.quality == Qualities.Unknown.value) extractedQuality else link.quality
+                this.isM3u8 = link.isM3u8
+                this.headers = link.headers
+                this.extractorData = link.extractorData
+            }
             
-            callback.invoke(
-                newExtractorLink(
-                    link.source,
-                    link.name,
-                    link.url,
-                    link.referer,
-                    if (link.quality == Qualities.Unknown.value) extractedQuality else link.quality,
-                    link.isM3u8,
-                    link.headers,
-                    link.extractorData
-                )
-            )
+            callback.invoke(newLink)
         }
     }
 
