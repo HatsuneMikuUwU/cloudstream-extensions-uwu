@@ -68,14 +68,19 @@ class KuronimeProvider : MainAPI() {
             it.toSearchResult()
         }
         
+        // Menentukan apakah layout harus landscape berdasarkan nama request
         val isLandscape = request.name == "New Episodes"
         
+        // Bungkus dengan HomePageList agar bisa menggunakan isHorizontalImages
         return newHomePageResponse(
-            name = request.name, 
-            list = home, 
-            isHorizontalImages = isLandscape 
+            HomePageList(
+                name = request.name,
+                list = home,
+                isHorizontalImages = isLandscape
+            )
         )
     }
+
 
     private fun getProperAnimeLink(uri: String): String {
         return if (uri.contains("/anime/")) {
