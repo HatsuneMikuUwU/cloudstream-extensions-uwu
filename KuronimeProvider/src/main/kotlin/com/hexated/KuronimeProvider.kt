@@ -5,9 +5,12 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
+// TAMBAHKAN IMPORT INI
+import com.lagradost.cloudstream3.extractors.helper.AesHelper
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.M3u8Helper
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
@@ -16,7 +19,6 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.nodes.Element
-import java.net.URI
 
 class KuronimeProvider : MainAPI() {
     override var mainUrl = "https://kuronime.moe"
@@ -186,7 +188,13 @@ class KuronimeProvider : MainAPI() {
                     val decrypt = AesHelper.cryptoAESHandler(base64Decode(src), KEY.toByteArray(), false, "AES/CBC/NoPadding")
                     val sourceUrl = tryParseJson<Sources>(decrypt?.toJsonFormat())?.src?.replace("\\", "")
                     if (sourceUrl != null) {
-                        M3u8Helper.generateM3u8(this.name, sourceUrl, animekuUrl, mapOf("Origin" to animekuUrl)).forEach(callback)
+                        M3u8Helper.generateM3u8(
+                            this.name, 
+                            sourceUrl, 
+                            animekuUrl, 
+                            Qualities.Unknown.value, 
+                            mapOf("Origin" to animekuUrl)
+                        ).forEach(callback)
                     }
                 }
             },
@@ -218,7 +226,6 @@ class KuronimeProvider : MainAPI() {
         }
     }
 
-    // Data Classes
     data class Mirrors(@JsonProperty("embed") val embed: Map<String, Map<String, String>> = emptyMap())
     data class Sources(@JsonProperty("src") var src: String? = null)
     data class Servers(@JsonProperty("src") var src: String? = null, @JsonProperty("mirror") var mirror: String? = null)
