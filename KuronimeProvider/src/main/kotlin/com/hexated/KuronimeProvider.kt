@@ -64,19 +64,22 @@ class KuronimeProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val req = app.get(request.data + page)
+        val req = app.get(request.data.format(page))
         mainUrl = getBaseUrl(req.url)
         val document = req.document
-        val home = document.select("article").map {
+        
+        val home = document.select("article").mapNotNull {
             it.toSearchResult()
         }
+        
+        val isLandscape = request.name == "New Episodes"
         
         return newHomePageResponse(
             listOf(
                 HomePageList(
                     request.name,
                     home,
-                    isHorizontal = request.name == "New Episodes"
+                    isHorizontalImages = isLandscape
                 )
             ),
             hasNext = true
