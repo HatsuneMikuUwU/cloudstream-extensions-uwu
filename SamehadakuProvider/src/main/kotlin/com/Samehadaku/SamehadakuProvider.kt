@@ -34,9 +34,9 @@ class SamehadakuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "anime-terbaru/page/%d" to "Terbaru",
-        "daftar-anime-2/?title=&status=Currently+Airing&type=&order=latest/page/%d/" to "Ongoing",
-        "daftar-anime-2/?title=&status=Finished+Airing&type=&order=latest/page/%d/" to "Selesai",
+        "anime-terbaru/page/%d/" to "Terbaru",
+        "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing",
+        "daftar-anime-2/page/%d/?status=Finished+Airing&order=latest" to "Selesai",
         "genre/fantasy/page/%d/" to "Fantasy",
         "genre/action/page/%d/" to "Action",
         "genre/adventure/page/%d/" to "Adventure",
@@ -61,25 +61,32 @@ class SamehadakuProvider : MainAPI() {
     
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get("$mainUrl/${request.data.format(page)}").document
+        
         val items = when (request.name) {
             "Terbaru" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
+            "Ongoing", "Selesai" -> document.select("div.animepost")
             else -> document.select("article.animpost")
         }
+
         val homeList = items.mapNotNull {
             if (request.name == "Terbaru") it.toLatestAnimeResult()
             else it.toSearchResult()
         }
 
         val isLandscape = request.name == "Terbaru"
-        return newHomePageResponse(listOf(HomePageList(request.name, homeList, isHorizontalImages = isLandscape)))
+        
+        return newHomePageResponse(
+            listOf(HomePageList(request.name, homeList, isHorizontalImages = isLandscape)),
+            hasNext = homeList.isNotEmpty()
+        )
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val a = this.selectFirst("div.animepost a") ?: return null
-        val title = a.selectFirst("div.title h2")?.text()?.trim() ?: a.attr("title") ?: return null
+        val a = this.selectFirst("div.animepost a, div.animpost a") ?: return null
+        val title = a.selectFirst("div.title h2, div.tt h4")?.text()?.trim() ?: a.attr("title") ?: return null
         val href = fixUrlNull(a.attr("href")) ?: return null
-        val posterUrl = fixUrlNull(this.selectFirst("div.content-thumb img")?.attr("src"))
-        val statusText = a.selectFirst("div.data > div.type")?.text()?.trim() ?: ""
+        val posterUrl = fixUrlNull(this.selectFirst("div.content-thumb img, div.limit img")?.attr("src"))
+        val statusText = a.selectFirst("div.data > div.type, div.type")?.text()?.trim() ?: ""
 
         return newAnimeSearchResponse(title, href, TvType.Anime) {
             this.posterUrl = posterUrl
@@ -102,7 +109,7 @@ class SamehadakuProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
-        return document.select("main#main div.animepost").mapNotNull { it.toSearchResult() }
+        return document.select("div.animepost, article.animpost").mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -121,12 +128,13 @@ class SamehadakuProvider : MainAPI() {
             document.select("div.spe > span:contains(Rilis)").text()
         )?.groupValues?.getOrNull(1)?.toIntOrNull()
         
-        val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText()?.replace(":", "")?.trim() ?: "Completed")
+        val statusStr = document.selectFirst("div.spe > span:contains(Status)")?.ownText()?.replace(":", "")?.trim() ?: "Completed"
+        val status = getStatus(statusStr)
         val typeStr = document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.replace(":", "")?.trim()?.lowercase() ?: "tv"
         val type = getType(typeStr)
         
-        val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()       
-        val description = document.select("div.desc p").text().trim()
+        val rating = document.selectFirst("span.ratingValue, div.rating strong")?.text()?.replace("Rating", "")?.trim()?.toDoubleOrNull()       
+        val description = document.select("div.desc p, div.entry-content p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
 
         val episodes = document.select("div.lstepsiode.listeps ul li").mapNotNull {
@@ -136,7 +144,7 @@ class SamehadakuProvider : MainAPI() {
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
-        val recommendations = document.select("aside#sidebar ul li").mapNotNull { it.toSearchResult() }
+        val recommendations = document.select("aside#sidebar ul li, div.relat animepost").mapNotNull { it.toSearchResult() }
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
 
