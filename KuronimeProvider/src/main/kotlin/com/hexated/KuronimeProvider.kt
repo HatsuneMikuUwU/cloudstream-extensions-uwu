@@ -95,15 +95,22 @@ class KuronimeProvider : MainAPI() {
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
         val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
-        val title = this.select(".bsuxtt, .tt > h4").text().trim()
-        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image]")?.attr("src"))
+        
+        val title = this.select(".bsuxtt, .tt > h4, .tt > h2, .tt, .title, h2[itemprop=headline], .entry-title").text().trim().ifBlank {
+            this.selectFirst("a")?.attr("title")?.trim()
+                ?: this.selectFirst("img")?.attr("title")?.trim()
+                ?: this.selectFirst("img")?.attr("alt")?.trim()
+                ?: "Unknown Title"
+        }
+        
+        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image], img")?.getImageAttr())
         val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
         val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
+        
         return newAnimeSearchResponse(title, href, tvType) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)

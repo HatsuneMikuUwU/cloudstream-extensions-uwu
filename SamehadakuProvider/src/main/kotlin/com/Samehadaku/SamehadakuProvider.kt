@@ -35,6 +35,7 @@ class SamehadakuProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "anime-terbaru/page/%d" to "Terbaru",
+        "$mainUrl/daftar-anime-2/?title=&status=Finished Airing&type=TV&order=update/page/" to "Movie",
         "genre/fantasy/page/%d/" to "Fantasy",
         "genre/action/page/%d/" to "Action",
         "genre/adventure/page/%d/" to "Adventure",
@@ -69,9 +70,7 @@ class SamehadakuProvider : MainAPI() {
         }
 
         val isLandscape = request.name == "Terbaru"
-        val homePageList = HomePageList(request.name, homeList, isHorizontalImages = isLandscape)
-        
-        return newHomePageResponse(listOf(homePageList))
+        return newHomePageResponse(listOf(HomePageList(request.name, homeList, isHorizontalImages = isLandscape)))
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
@@ -107,16 +106,24 @@ class SamehadakuProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse? {
         val fixUrl = if (url.contains("/anime/")) url
-        else app.get(url).document.selectFirst("div.nvs.nvsc a")?.attr("href")
-        val document = app.get(fixUrl ?: return null).document
-        val title = document.selectFirst("h1.entry-title")?.text()?.removeBloat() ?: return null
+        else app.get(url).document.selectFirst("div.nvs.nvsc a")?.attr("href") ?: url
+        
+        val document = app.get(fixUrl).document
+        
+        val rawTitle = document.selectFirst("h1.entry-title")?.text() ?: return null
+        val title = rawTitle.replace(Regex("(?i)(Nonton|Anime|Subtitle\\s+Indonesia|Sub\\s+Indo|Lengkap|Batch)"), "").trim()
+        
         val poster = document.selectFirst("div.thumb > img")?.attr("src")
         val tags = document.select("div.genre-info > a").map { it.text() }
-        val year = document.selectFirst("div.spe > span:contains(Rilis)")?.ownText()?.let {
-            Regex("\\d,\\s(\\d*)").find(it)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        }
-        val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText() ?: return null)
-        val type = getType(document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.trim()?.lowercase() ?: "tv")
+        
+        val year = Regex("\\d, (\\d*)").find(
+            document.select("div.spe > span:contains(Rilis)").text()
+        )?.groupValues?.getOrNull(1)?.toIntOrNull()
+        
+        val status = getStatus(document.selectFirst("div.spe > span:contains(Status)")?.ownText()?.replace(":", "")?.trim() ?: "Completed")
+        val typeStr = document.selectFirst("div.spe > span:contains(Type)")?.ownText()?.replace(":", "")?.trim()?.lowercase() ?: "tv"
+        val type = getType(typeStr)
+        
         val rating = document.selectFirst("span.ratingValue")?.text()?.trim()?.toDoubleOrNull()       
         val description = document.select("div.desc p").text().trim()
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
@@ -144,6 +151,7 @@ class SamehadakuProvider : MainAPI() {
             addTrailer(trailer)
             this.tags = tags
             this.recommendations = recommendations
+            
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
@@ -198,7 +206,4 @@ class SamehadakuProvider : MainAPI() {
         "MP4HD" -> Qualities.P720.value
         else -> this.filter { it.isDigit() }.toIntOrNull() ?: Qualities.Unknown.value
     }
-
-    private fun String.removeBloat(): String =
-        this.replace(Regex("(Nonton)|(Anime)|(Subtitle\\sIndonesia)"), "").trim()
 }
