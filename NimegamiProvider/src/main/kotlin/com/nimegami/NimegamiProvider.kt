@@ -11,7 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 
-class Nimegami : MainAPI() {
+class NimegamiProvider : MainAPI() {
     override var mainUrl = "https://nimegami.id"
     override var name = "Nimegami"
     override val hasMainPage = true
