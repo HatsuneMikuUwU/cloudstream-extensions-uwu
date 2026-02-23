@@ -15,7 +15,7 @@ class MovieboxProvider : MainAPI() {
     override var mainUrl = "https://moviebox.ph"
     private val apiUrl = "https://fmoviesunblocked.net"
     override val instantLinkLoading = true
-    override var name = "MovieBox"
+    override var name = "Moviebox"
     override val hasMainPage = true
     override val hasQuickSearch = true
     override var lang = "id"
@@ -63,7 +63,6 @@ class MovieboxProvider : MainAPI() {
         val description = subject?.description
         val trailer = subject?.trailer?.videoAddress?.url
         val mediaScore = subject?.imdbRatingValue?.toDoubleOrNull()?.let { Score.from10(it) }
-        
         val actors = doc?.stars?.mapNotNull { cast ->
             ActorData(Actor(cast.name ?: return@mapNotNull null, cast.avatarUrl), roleString = cast.character)
         }?.distinctBy { it.actor }
