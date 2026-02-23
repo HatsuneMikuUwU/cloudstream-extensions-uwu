@@ -1,6 +1,7 @@
 {
-    "name": "Hatsune repository",
-    "description": "HexatedRepo",
+    "name": "Hatsune Repo",
+    "iconUrl": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/icon.png",
+    "description": "Hatsune Repository",
     "manifestVersion": 1,
     "pluginLists": [
       "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/plugins.json"
