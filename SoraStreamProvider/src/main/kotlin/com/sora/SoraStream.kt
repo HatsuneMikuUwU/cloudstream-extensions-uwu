@@ -1,21 +1,21 @@
 package com.sora
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.hexated.SoraExtractor.invokeEleven
-import com.hexated.SoraExtractor.invokeGomovies
-import com.hexated.SoraExtractor.invokeIdlix
-import com.hexated.SoraExtractor.invokeMapple
-import com.hexated.SoraExtractor.invokeSuperembed
-import com.hexated.SoraExtractor.invokeVidfast
-import com.hexated.SoraExtractor.invokeVidlink
-import com.hexated.SoraExtractor.invokeVidrock
-import com.hexated.SoraExtractor.invokeVidsrc
-import com.hexated.SoraExtractor.invokeVidsrccc
-import com.hexated.SoraExtractor.invokeVidsrccx
-import com.hexated.SoraExtractor.invokeVixsrc
-import com.hexated.SoraExtractor.invokeWatchsomuch
-import com.hexated.SoraExtractor.invokeWyzie
-import com.hexated.SoraExtractor.invokeXprime
+import com.sora.SoraExtractor.invokeEleven
+import com.sora.SoraExtractor.invokeGomovies
+import com.sora.SoraExtractor.invokeIdlix
+import com.sora.SoraExtractor.invokeMapple
+import com.sora.SoraExtractor.invokeSuperembed
+import com.sora.SoraExtractor.invokeVidfast
+import com.sora.SoraExtractor.invokeVidlink
+import com.sora.SoraExtractor.invokeVidrock
+import com.sora.SoraExtractor.invokeVidsrc
+import com.sora.SoraExtractor.invokeVidsrccc
+import com.sora.SoraExtractor.invokeVidsrccx
+import com.sora.SoraExtractor.invokeVixsrc
+import com.sora.SoraExtractor.invokeWatchsomuch
+import com.sora.SoraExtractor.invokeWyzie
+import com.sora.SoraExtractor.invokeXprime
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
@@ -41,7 +41,7 @@ open class SoraStream : TmdbProvider() {
 
     val wpRedisInterceptor by lazy { CloudflareKiller() }
 
-    /** AUTHOR : Hexated & Sora */
+    /** AUTHOR : Sora */
     companion object {
         /** TOOLS */
         private const val tmdbAPI = "https://api.themoviedb.org/3"

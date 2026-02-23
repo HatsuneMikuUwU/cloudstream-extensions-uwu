@@ -1,7 +1,7 @@
 package com.sora
 
 import android.util.Base64
-import com.hexated.SoraStream.Companion.anilistAPI
+import com.sora.SoraStream.Companion.anilistAPI
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.APIHolder.unixTimeMS
 import com.lagradost.cloudstream3.mvvm.logError

@@ -4,9 +4,7 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
-import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -69,11 +67,9 @@ class AnimasuProvider : MainAPI() {
                 (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
                     "-episode"
                 )
-
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
-
             "$mainUrl/anime/$title"
         }
     }
@@ -87,7 +83,6 @@ class AnimasuProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -99,22 +94,19 @@ class AnimasuProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title =
-            document.selectFirst("div.infox h1")?.text().toString().replace("Sub Indo", "").trim()
+        val title = document.selectFirst("div.infox h1")?.text().toString().replace("Sub Indo", "").trim()
         val poster = document.selectFirst("div.bigcontent img")?.getImageAttr()
 
         val table = document.selectFirst("div.infox div.spe")
         val type = getType(table?.selectFirst("span:contains(Jenis:)")?.ownText())
-        val year =
-            table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()
-                ?.toIntOrNull()
+        val year = table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()?.toIntOrNull()
         val status = table?.selectFirst("span:contains(Status:) font")?.text()
         val trailer = document.selectFirst("div.trailer iframe")?.attr("src")
+        
         val episodes = document.select("ul#daftarepisode > li").map {
             val link = fixUrl(it.selectFirst("a")!!.attr("href"))
             val name = it.selectFirst("a")?.text() ?: ""
-            val episode =
-                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
+            val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
@@ -141,12 +133,24 @@ class AnimasuProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
-        document.select(".mobius > .mirror > option").mapNotNull {
-                fixUrl(
-                    Jsoup.parse(base64Decode(it.attr("value"))).select("iframe").attr("src")
-                ) to it.text()
-            }.amap { (iframe, quality) ->
-            loadFixedExtractor(iframe, quality, "$mainUrl/", subtitleCallback, callback)
+        
+        document.select(".mobius select.mirror option").forEach { option ->
+            val rawValue = option.attr("value")
+            if (rawValue.isNotEmpty()) {
+                val decodedHtml = base64Decode(rawValue)
+                val iframeUrl = Jsoup.parse(decodedHtml).select("iframe").attr("src")
+                val qualityText = option.text()
+
+                if (iframeUrl.isNotEmpty()) {
+                    loadFixedExtractor(
+                        fixUrl(iframeUrl), 
+                        qualityText, 
+                        data, 
+                        subtitleCallback, 
+                        callback
+                    )
+                }
+            }
         }
         return true
     }
@@ -159,28 +163,25 @@ class AnimasuProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
-            runBlocking {
-                callback.invoke(
-                    newExtractorLink(
-                        link.name,
-                        link.name,
-                        link.url,
-                        link.type
-                    ) {
-                        this.referer = link.referer
-                        this.quality = if (link.type == ExtractorLinkType.M3U8 || link.name == "Uservideo") link.quality else getIndexQuality(
-                                quality
-                            )
-                        this.headers = link.headers
-                        this.extractorData = link.extractorData
-                    }
+            val extractedQuality = getIndexQuality(quality)
+            
+            callback.invoke(
+                ExtractorLink(
+                    link.source,
+                    link.name,
+                    link.url,
+                    link.referer,
+                    if (link.quality == Qualities.Unknown.value) extractedQuality else link.quality,
+                    link.isM3u8,
+                    link.headers,
+                    link.extractorData
                 )
-            }
+            )
         }
     }
 
     private fun getIndexQuality(str: String?): Int {
-        return Regex("(\\d{3,4})[pP]").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
+        return Regex("(\\d{3,4})").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
             ?: Qualities.Unknown.value
     }
 
@@ -192,5 +193,4 @@ class AnimasuProvider : MainAPI() {
             else -> this.attr("abs:src")
         }
     }
-
 }
