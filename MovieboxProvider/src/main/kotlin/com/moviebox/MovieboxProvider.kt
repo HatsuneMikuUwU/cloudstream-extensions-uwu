@@ -15,7 +15,7 @@ class MovieboxProvider : MainAPI() {
     override var mainUrl = "https://moviebox.ph"
     private val apiUrl = "https://fmoviesunblocked.net"
     override val instantLinkLoading = true
-    override var name = "Moviebox"
+    override var name = "MovieBox"
     override val hasMainPage = true
     override val hasQuickSearch = true
     override var lang = "id"
@@ -165,7 +165,7 @@ class MovieboxProvider : MainAPI() {
         @JsonProperty("trailer") val trailer: Trailer? = null,
         @JsonProperty("detailPath") val detailPath: String? = null
     ) {
-        fun toSearchResponse(provider: Moviebox): SearchResponse {
+        fun toSearchResponse(provider: MovieboxProvider): SearchResponse {
             return provider.newMovieSearchResponse(title ?: "", subjectId!!, if (subjectType == 1) TvType.Movie else TvType.TvSeries, false) {
                 this.posterUrl = cover?.url
             }
