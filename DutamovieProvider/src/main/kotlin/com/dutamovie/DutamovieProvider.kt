@@ -28,7 +28,7 @@ class DutamovieProvider : MainAPI() {
 		"adventure/page/%d/" to "Adventure",
 		"animation/page/%d/" to "Animation",
 		"hentai-dutamovie21/page/%d/" to "Hentai",
-		"film-semi/page/%d/" to "Porn",
+		"blog-category/film-semi/page/%d/" to "Porn",
 		"comedy/page/%d/" to "Comedy",
 		"crime/page/%d/" to "Crime",
 		"drama/page/%d/" to "Drama",
