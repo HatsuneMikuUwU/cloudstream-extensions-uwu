@@ -5,8 +5,6 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
-import com.lagradost.cloudstream3.amap
-import com.lagradost.cloudstream3.extractors.helper.AesHelper
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.M3u8Helper
@@ -19,7 +17,6 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.nodes.Element
 import java.net.URI
-import java.util.ArrayList
 
 class KuronimeProvider : MainAPI() {
     override var mainUrl = "https://kuronime.moe"
@@ -36,6 +33,7 @@ class KuronimeProvider : MainAPI() {
 
     companion object {
         const val KEY = "3&!Z0M,VIZ;dZW=="
+
         fun getType(t: String): TvType {
             return if (t.contains("OVA", true) || t.contains("Special", true)) TvType.OVA
             else if (t.contains("Movie", true)) TvType.AnimeMovie
@@ -48,6 +46,13 @@ class KuronimeProvider : MainAPI() {
                 "Ongoing" -> ShowStatus.Ongoing
                 else -> ShowStatus.Completed
             }
+        }
+
+        fun String.cleanTitle(): String {
+            return this.replace(Regex("(?i)(Subtitle|Sub) Indonesia"), "")
+                .replace(Regex("(?i)Episode\\s+\\d+"), "")
+                .replace(Regex("\\s-\\s$"), "")
+                .trim()
         }
     }
 
@@ -64,73 +69,29 @@ class KuronimeProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val req = app.get(request.data.format(page))
-        mainUrl = getBaseUrl(req.url)
-        val document = req.document
-        
-        val home = document.select("article").mapNotNull {
+        val req = app.get(request.data + page)
+        val home = req.document.select("article").mapNotNull {
             it.toSearchResult()
         }
-        
-        val isLandscape = request.name == "New Episodes"
-        
-        return newHomePageResponse(
-            listOf(
-                HomePageList(
-                    request.name,
-                    home,
-                    isHorizontalImages = isLandscape
-                )
-            ),
-            hasNext = true
-        )
+        return newHomePageResponse(request.name, home)
     }
 
-    private fun getProperAnimeLink(uri: String): String {
-        return if (uri.contains("/anime/")) {
-            uri
-        } else {
-            var title = uri.substringAfter("$mainUrl/")
-            title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> Regex("nonton-(.+)-episode").find(
-                    title
-                )?.groupValues?.get(1).toString()
-
-                (title.contains("-movie")) -> Regex("nonton-(.+)-movie").find(title)?.groupValues?.get(
-                    1
-                ).toString()
-
-                else -> title
-            }
-
-            "$mainUrl/anime/$title"
-        }
-    }
-
-    private fun Element.toSearchResult(): AnimeSearchResponse {
-        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
+    private fun Element.toSearchResult(): AnimeSearchResponse? {
+        val titleElement = this.selectFirst(".bsuxtt, .tt > h4, .tt > h2, .title, .entry-title")
+        val title = (titleElement?.text() ?: this.selectFirst("img")?.attr("alt"))?.cleanTitle() ?: return null
         
-        val title = this.select(".bsuxtt, .tt > h4, .tt > h2, .tt, .title, h2[itemprop=headline], .entry-title").text().trim().ifBlank {
-            this.selectFirst("a")?.attr("title")?.trim()
-                ?: this.selectFirst("img")?.attr("title")?.trim()
-                ?: this.selectFirst("img")?.attr("alt")?.trim()
-                ?: "Unknown Title"
-        }
-        
-        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image]")?.attr("src"))
-        val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
-        val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
-        
+        val href = fixUrl(this.selectFirst("a")?.attr("href") ?: return null)
+        val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+        val epNum = this.select(".ep").text().replace(Regex("\\D"), "").toIntOrNull()
+        val tvType = getType(this.select(".bt > span").text())
+
         return newAnimeSearchResponse(title, href, tvType) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
     }
 
-    override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
-
     override suspend fun search(query: String): List<SearchResponse>? {
-        mainUrl = app.get(mainUrl).url
         return app.post(
             "$mainUrl/wp-admin/admin-ajax.php", data = mapOf(
                 "action" to "ajaxy_sf",
@@ -139,7 +100,7 @@ class KuronimeProvider : MainAPI() {
             ), headers = mapOf("X-Requested-With" to "XMLHttpRequest")
         ).parsedSafe<Search>()?.anime?.firstOrNull()?.all?.mapNotNull {
             newAnimeSearchResponse(
-                it.postTitle ?: "",
+                it.postTitle?.cleanTitle() ?: "",
                 it.postLink ?: return@mapNotNull null,
                 TvType.Anime
             ) {
@@ -152,32 +113,37 @@ class KuronimeProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title = document.selectFirst(".entry-title")?.text().toString().trim()
-        val poster = document.selectFirst("div.l[itemprop=image] > img")?.attr("src")
-        val tags = document.select(".infodetail > ul > li:nth-child(2) > a").map { it.text() }
-        val type =
-            getType(
-                document.selectFirst(".infodetail > ul > li:nth-child(7)")?.ownText()
-                    ?.removePrefix(":")
-                    ?.lowercase()?.trim() ?: "tv"
-            )
+        val title = document.selectFirst(".entry-title")?.text()?.cleanTitle() 
+            ?: document.selectFirst("h1")?.text()?.cleanTitle() 
+            ?: "Unknown Title"
 
-        val trailer = document.selectFirst("div.tply iframe")?.attr("data-src")
-        val year = Regex("\\d, (\\d*)").find(
-            document.select(".infodetail > ul > li:nth-child(5)").text()
+        val poster = document.selectFirst("div.l[itemprop=image] > img, .thumb > img")?.attr("src")
+        val tags = document.select(".infodetail ul li:contains(Genre) a, .gencontent a").map { it.text() }
+        
+        val typeStr = document.selectFirst(".infodetail ul li:contains(Type)")?.ownText()?.replace(":", "")?.trim()
+        val type = getType(typeStr ?: "tv")
+
+        val year = Regex("(\\d{4})").find(
+            document.select(".infodetail ul li:contains(Released)").text()
         )?.groupValues?.get(1)?.toIntOrNull()
-        val status = getStatus(
-            document.selectFirst(".infodetail > ul > li:nth-child(3)")!!.ownText()
-                .replace(Regex("\\W"), "")
-        )
-        val description = document.select("span.const > p").text()
 
-        val episodes = document.select("div.bixbox.bxcl > ul > li").mapNotNull {
-            val link = it.selectFirst("a")?.attr("href") ?: return@mapNotNull null
-            val name = it.selectFirst("a")?.text() ?: return@mapNotNull null
-            val episode =
-                Regex("(\\d+[.,]?\\d*)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
-            newEpisode(link) { this.episode = episode }
+        val status = getStatus(
+            document.selectFirst(".infodetail ul li:contains(Status)")?.ownText()?.replace(":", "")?.trim() ?: ""
+        )
+        
+        val description = document.select(".entry-content[itemprop=description] p, .const p").text()
+        val trailer = document.selectFirst("iframe.youtube-player")?.attr("src")
+
+        val episodes = document.select("div.bixbox.bxcl ul li").mapNotNull {
+            val a = it.selectFirst("a") ?: return@mapNotNull null
+            val name = a.text()
+            val link = fixUrl(a.attr("href"))
+            val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.get(1)?.toIntOrNull()
+            
+            newEpisode(link) { 
+                this.episode = episode 
+                this.name = name
+            }
         }.reversed()
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
@@ -190,8 +156,8 @@ class KuronimeProvider : MainAPI() {
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
             plot = description
-            addTrailer(trailer)
             this.tags = tags
+            addTrailer(trailer)
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
@@ -203,136 +169,65 @@ class KuronimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-
         val document = app.get(data).document
-        val id = document.selectFirst("div#content script:containsData(is_singular)")?.data()
+        val id = document.selectFirst("script:containsData(_0xa100d42aa)")?.data()
             ?.substringAfter("_0xa100d42aa = \"")?.substringBefore("\";")
-            ?: throw ErrorLoadingException("No id found")
+            ?: return false
+
         val servers = app.post(
-            "$animekuUrl/api/v9/sources", requestBody = """{"id":"$id"}""".toRequestBody(
-                RequestBodyTypes.JSON.toMediaTypeOrNull()
-            ), referer = "$mainUrl/"
+            "$animekuUrl/api/v9/sources", 
+            requestBody = """{"id":"$id"}""".toRequestBody(RequestBodyTypes.JSON.toMediaTypeOrNull()),
+            referer = "$mainUrl/"
         ).parsedSafe<Servers>()
 
         runAllAsync(
             {
-                val decrypt = AesHelper.cryptoAESHandler(
-                    base64Decode(servers?.src ?: return@runAllAsync),
-                    KEY.toByteArray(),
-                    false,
-                    "AES/CBC/NoPadding"
-                )
-                val source =
-                    tryParseJson<Sources>(decrypt?.toJsonFormat())?.src?.replace("\\", "")
-                M3u8Helper.generateM3u8(
-                    this.name,
-                    source ?: return@runAllAsync,
-                    "$animekuUrl/",
-                    headers = mapOf("Origin" to animekuUrl)
-                ).forEach(callback)
-            },
-            {
-                val decrypt = AesHelper.cryptoAESHandler(
-                    base64Decode(servers?.mirror ?: return@runAllAsync),
-                    KEY.toByteArray(),
-                    false,
-                    "AES/CBC/NoPadding"
-                )
-                tryParseJson<Mirrors>(decrypt)?.embed?.map { embed ->
-                    embed.value.amap {
-                        loadFixedExtractor(
-                            it.value,
-                            embed.key.removePrefix("v"),
-                            "$mainUrl/",
-                            subtitleCallback,
-                            callback
-                        )
+                servers?.src?.let { src ->
+                    val decrypt = AesHelper.cryptoAESHandler(base64Decode(src), KEY.toByteArray(), false, "AES/CBC/NoPadding")
+                    val sourceUrl = tryParseJson<Sources>(decrypt?.toJsonFormat())?.src?.replace("\\", "")
+                    if (sourceUrl != null) {
+                        M3u8Helper.generateM3u8(this.name, sourceUrl, animekuUrl, mapOf("Origin" to animekuUrl)).forEach(callback)
                     }
                 }
-
+            },
+            {
+                servers?.mirror?.let { mirror ->
+                    val decrypt = AesHelper.cryptoAESHandler(base64Decode(mirror), KEY.toByteArray(), false, "AES/CBC/NoPadding")
+                    tryParseJson<Mirrors>(decrypt)?.embed?.forEach { (quality, links) ->
+                        links.forEach { (name, url) ->
+                            loadFixedExtractor(url, quality.removePrefix("v"), "$mainUrl/", subtitleCallback, callback)
+                        }
+                    }
+                }
             }
         )
-
         return true
     }
 
-    private fun String.toJsonFormat(): String {
-        return if (this.startsWith("\"")) this.substringAfter("\"").substringBeforeLast("\"")
-            .replace("\\\"", "\"") else this
-    }
+    private fun String.toJsonFormat() = if (this.startsWith("\"")) this.substring(1, this.length - 1).replace("\\\"", "\"") else this
 
-    private suspend fun loadFixedExtractor(
-        url: String? = null,
-        quality: String? = null,
-        referer: String? = null,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        loadExtractor(url ?: return, referer, subtitleCallback) { link ->
+    private suspend fun loadFixedExtractor(url: String, quality: String, referer: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
+        loadExtractor(url, referer, subtitleCallback) { link ->
             runBlocking {
-                callback.invoke(
-                    newExtractorLink(
-                        link.name,
-                        link.name,
-                        link.url,
-                        link.type,
-                    ) {
-                        this.referer = link.referer
-                        this.headers = link.headers
-                        this.extractorData = link.extractorData
-                        this.quality = getQualityFromName(quality)
-                    }
-                )
+                callback.invoke(newExtractorLink(link.name, link.name, link.url, link.type) {
+                    this.referer = link.referer
+                    this.headers = link.headers
+                    this.quality = getQualityFromName(quality)
+                })
             }
         }
     }
 
-    private fun getBaseUrl(url: String): String {
-        return URI(url).let {
-            "${it.scheme}://${it.host}"
-        }
-    }
-
-    private fun Element.getImageAttr(): String {
-        return when {
-            this.hasAttr("data-src") -> this.attr("abs:data-src")
-            this.hasAttr("data-lazy-src") -> this.attr("abs:data-lazy-src")
-            this.hasAttr("srcset") -> this.attr("abs:srcset").substringBefore(" ")
-            else -> this.attr("abs:src")
-        }
-    }
-
-    data class Mirrors(
-        @JsonProperty("embed") val embed: Map<String, Map<String, String>> = emptyMap(),
-    )
-
-    data class Sources(
-        @JsonProperty("src") var src: String? = null,
-    )
-
-    data class Servers(
-        @JsonProperty("src") var src: String? = null,
-        @JsonProperty("mirror") var mirror: String? = null,
-    )
-
+    // Data Classes
+    data class Mirrors(@JsonProperty("embed") val embed: Map<String, Map<String, String>> = emptyMap())
+    data class Sources(@JsonProperty("src") var src: String? = null)
+    data class Servers(@JsonProperty("src") var src: String? = null, @JsonProperty("mirror") var mirror: String? = null)
+    data class Search(@JsonProperty("anime") var anime: List<Anime>? = null)
+    data class Anime(@JsonProperty("all") var all: List<All>? = null)
     data class All(
         @JsonProperty("post_image") var postImage: String? = null,
-        @JsonProperty("post_image_html") var postImageHtml: String? = null,
-        @JsonProperty("ID") var ID: Int? = null,
         @JsonProperty("post_title") var postTitle: String? = null,
-        @JsonProperty("post_genres") var postGenres: String? = null,
-        @JsonProperty("post_type") var postType: String? = null,
         @JsonProperty("post_latest") var postLatest: String? = null,
-        @JsonProperty("post_sub") var postSub: String? = null,
         @JsonProperty("post_link") var postLink: String? = null
     )
-
-    data class Anime(
-        @JsonProperty("all") var all: ArrayList<All> = arrayListOf(),
-    )
-
-    data class Search(
-        @JsonProperty("anime") var anime: ArrayList<Anime> = arrayListOf()
-    )
-
 }
