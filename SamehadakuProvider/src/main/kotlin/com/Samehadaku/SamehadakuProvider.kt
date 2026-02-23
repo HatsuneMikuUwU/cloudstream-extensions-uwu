@@ -35,8 +35,8 @@ class SamehadakuProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "anime-terbaru/page/%d" to "Terbaru",
-        "daftar-anime-2/Finished+Airing/page/%d/" to "Selesai",
-        "daftar-anime-2/Movie/page/%d/" to "Movie",
+        "genre/fantasy/page/%d/" to "Fantasy",
+        "daftar-anime-2/movie/page/%d/" to "Movie",
     )
     
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
