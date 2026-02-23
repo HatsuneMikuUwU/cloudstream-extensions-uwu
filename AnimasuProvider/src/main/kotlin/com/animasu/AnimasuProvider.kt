@@ -1,6 +1,7 @@
 package com.animasu
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.base64Decode 
 import org.jsoup.Jsoup
@@ -113,7 +114,7 @@ class AnimasuProvider : MainAPI() {
             showStatus = getStatus(status)
             plot = document.select("div.sinopsis p").text()
             this.tags = table?.select("span:contains(Genre:) a")?.map { it.text() }
-            if (trailer != null) addTrailer(trailer)
+            if (!trailer.isNullOrBlank()) addTrailer(trailer)
         }
     }
 
@@ -125,7 +126,7 @@ class AnimasuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         
-        document.select(".mobius > .mirror > option").mapNotNull { it }.amap { option ->
+        document.select(".mobius > .mirror > option").toList().amap { option ->
             val encodedValue = option.attr("value")
             val qualityLabel = option.text()
 
@@ -160,6 +161,7 @@ class AnimasuProvider : MainAPI() {
                         }
                     }
                 } catch (e: Exception) {
+                    // Ignore
                 }
             }
         }
