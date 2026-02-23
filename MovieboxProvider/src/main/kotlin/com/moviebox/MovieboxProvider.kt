@@ -62,7 +62,7 @@ class MovieboxProvider : MainAPI() {
         val tvType = if (subject?.subjectType == 2) TvType.TvSeries else TvType.Movie
         val description = subject?.description
         val trailer = subject?.trailer?.videoAddress?.url
-        val mediaScore = subject?.imdbRatingValue?.toDoubleOrNull()?.let { Score(it, 10.0) }
+        val mediaScore = subject?.imdbRatingValue?.toDoubleOrNull()?.let { Score(it.toInt()) }
         
         val actors = doc?.stars?.mapNotNull { cast ->
             ActorData(Actor(cast.name ?: return@mapNotNull null, cast.avatarUrl), roleString = cast.character)
