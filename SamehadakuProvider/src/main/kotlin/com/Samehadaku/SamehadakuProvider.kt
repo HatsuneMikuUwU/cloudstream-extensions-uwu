@@ -36,7 +36,25 @@ class SamehadakuProvider : MainAPI() {
     override val mainPage = mainPageOf(
         "anime-terbaru/page/%d" to "Terbaru",
         "genre/fantasy/page/%d/" to "Fantasy",
-        "daftar-anime-2/movie/page/%d/" to "Movie",
+        "genre/action/page/%d/" to "Action",
+        "genre/adventure/page/%d/" to "Adventure",
+        "genre/comedy/page/%d/" to "Comedy",
+        "genre/shounen/page/%d/" to "Shounen",
+        "genre/school/page/%d/" to "School",
+        "genre/romance/page/%d/" to "Romance",
+        "genre/drama/page/%d/" to "Drama",
+        "genre/supernatural/page/%d/" to "Supernatural",
+        "genre/isekai/page/%d/" to "Isekai",
+        "genre/sci-fi/page/%d/" to "SCI-FI",
+        "genre/seinen/page/%d/" to "Seinen",
+        "genre/reincarnation/page/%d/" to "Reincarnation",
+        "genre/super-power/page/%d/" to "Super Power",
+        "genre/historical/page/%d/" to "Historical",
+        "genre/mystery/page/%d/" to "Mystery",
+        "genre/harem/page/%d/" to "Harem",
+        "genre/ecchi/page/%d/" to "Ecchi",
+        "genre/slice-of-life/page/%d/" to "Slice Of Life",
+        "genre/sports/page/%d/" to "Sports",
     )
     
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
