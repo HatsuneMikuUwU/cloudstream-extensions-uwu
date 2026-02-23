@@ -53,10 +53,11 @@ class KuronimeProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/page/" to "New Episodes",
-        "$mainUrl/popular-anime/page/" to "Popular Anime",
+        "$mainUrl/ongoing-anime/page/" to "Ongoing",
+        "$mainUrl/popular-anime/page/" to "Popular",
         "$mainUrl/movies/page/" to "Movies",
-//        "$mainUrl/genres/donghua/page/" to "Donghua",
-//        "$mainUrl/live-action/page/" to "Live Action",
+        "$mainUrl/genres/donghua/page/" to "Donghua",
+        "$mainUrl/live-action/page/" to "Live Action",
     )
 
     override suspend fun getMainPage(
@@ -69,7 +70,17 @@ class KuronimeProvider : MainAPI() {
         val home = document.select("article").map {
             it.toSearchResult()
         }
-        return newHomePageResponse(request.name, home)
+        
+        return newHomePageResponse(
+            listOf(
+                HomePageList(
+                    request.name,
+                    home,
+                    isHorizontal = request.name == "New Episodes"
+                )
+            ),
+            hasNext = true
+        )
     }
 
     private fun getProperAnimeLink(uri: String): String {
@@ -103,7 +114,7 @@ class KuronimeProvider : MainAPI() {
                 ?: "Unknown Title"
         }
         
-        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image], img")?.getImageAttr())
+        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image]")?.attr("src"))
         val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
         val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
         
