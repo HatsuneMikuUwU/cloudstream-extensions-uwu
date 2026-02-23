@@ -1,0 +1,354 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AlqanimeProvider.cs3",
+        "status": 1,
+        "version": 5,
+        "name": "AlqanimeProvider",
+        "internalName": "AlqanimeProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Alqanime \u2014 Streaming Anime, Donghua Subtitle Indonesia",
+        "fileSize": 91127,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://cloudstream.zvlz.my.id/icon/alqanime.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-be03e3b74101b0fdfaea14dcbdbaf0ed252fc6a6100748b4e17b1ea0a3282b84"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnichinProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "AnichinProvider",
+        "internalName": "AnichinProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Anichin \u2014 Streaming Donghua Subtitle Indonesia",
+        "fileSize": 57844,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "Cartoon"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.club&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-cf99a6fbe9752b8fac59847ff6f9d7264e59651390144c9d4e027ba7b37301cd"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
+        "status": 1,
+        "version": 10,
+        "name": "AnimeSailProvider",
+        "internalName": "AnimeSailProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "AnimeSail \u2014 Streaming Anime, Donghua Subtitle Indonesia",
+        "fileSize": 41237,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://aghanim.xyz/wp-content/themes/animesail/assets/images/ico.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-710e20c3a327096a2e9b0a26164db89fdf972db2bce76e7b1011406fe330c03b"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimexinProvider.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "AnimexinProvider",
+        "internalName": "AnimexinProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Animexin \u2014 Streaming Donghua Subtitle Indonesia",
+        "fileSize": 17096,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://animexin.dev/wp-content/uploads/2020/06/animexinv1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-ee934183221807e70642054ce8cc48952a69b7395ad76f65a9aaf60872b6e18e"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnoboyProvider.cs3",
+        "status": 1,
+        "version": 4,
+        "name": "AnoboyProvider",
+        "internalName": "AnoboyProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "AnoBoy \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 72572,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://anoboy.be&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-6477911c8161528f926e806b1b253acd8203cb1b71f08d6699baf16d2749b194"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DonghubProvider.cs3",
+        "status": 1,
+        "version": 2,
+        "name": "DonghubProvider",
+        "internalName": "DonghubProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Donghub \u2014 Streaming Donghua Subtitle Indonesia",
+        "fileSize": 20520,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie",
+            "Cartoon"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://donghub.vip&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-389c39e44ac7f6a9ef4dc52eb70cca6126f509f66ba8b5de796aba31a3ec11eb"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DubbindoProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "DubbindoProvider",
+        "internalName": "DubbindoProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Dubbindo \u2014 Streaming Anime, Movie and TV Series",
+        "fileSize": 27349,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "TvSeries",
+            "Movie",
+            "Cartoon",
+            "Anime"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=www.dubbindo.site&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-7be0773e15b5f24007177963147fa7b280d1027a48c522cfc1a84e90937fc20e"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/HidoriStreamProvider.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "HidoriStreamProvider",
+        "internalName": "HidoriStreamProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "HidoriStream \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 58222,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://v2.hidoristream.online&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-c4a5d4d192bf2fce8aa570b28cbec64fb933521068ef3d074c59ff2c8e2b9646"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/KuramanimeProvider.cs3",
+        "status": 1,
+        "version": 5,
+        "name": "KuramanimeProvider",
+        "internalName": "KuramanimeProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Kuramanime \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 60680,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=kuramanime.com&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-59a0498ac7b1a15ff9d1b6f09f5d3f7e4808de8d209087f8b36923e257d8948a"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/KuronimeProvider.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "KuronimeProvider",
+        "internalName": "KuronimeProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Kuronime \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 48468,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://play-lh.googleusercontent.com/EFMkS1T-8txjLFIl9QxjcTRLa7a7Muv08C04b7ongYgodoY_b2T3GpxzGAQEx-eitfQ=w256",
+        "apiVersion": 1,
+        "fileHash": "sha256-e4ab49bb6b06d3b79e0a97690e84036a96b7db4d63adfcefa3d9cb3d7e918df2"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/NekopoiProvider.cs3",
+        "status": 1,
+        "version": 3,
+        "name": "NekopoiProvider",
+        "internalName": "NekopoiProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "NekoPoi \u2014 Streaming Hentai, Porn and JAV Subtitle Indonesia",
+        "fileSize": 42799,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "NSFW"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=nekopoi.care&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-ae11146c25827e4419984bf259ee1aa0548394f78a48a97ad9ca43b4e77f3fd1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/NimegamiProvider.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "NimegamiProvider",
+        "internalName": "NimegamiProvider",
+        "authors": [
+            "Hexated"
+        ],
+        "description": "Nimegami \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 49363,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=nimegami.id&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-1327c6632ef4f8b796261083f0b0186500a63d2714221b60e172c3a7d434f9f2"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/NontonAnimeIDProvider.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "NontonAnimeIDProvider",
+        "internalName": "NontonAnimeIDProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "NontonAnimeID \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 51019,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://s11.nontonanimeid.boats&size=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-b907e67f8d285265c035421f3cdede57e025af01f4e0925a79ed97475167d72d"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/OtakudesuProvider.cs3",
+        "status": 1,
+        "version": 7,
+        "name": "OtakudesuProvider",
+        "internalName": "OtakudesuProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "OtakuDesu \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 44971,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRr-sfek8gXmLpcAppEpaYbUDVtndQbCm_boh1-E91QrmSvsw-2l3-s2JOP&s=10",
+        "apiVersion": 1,
+        "fileHash": "sha256-e11da5b72fe5002e029400cc7dffb7b9ac1eff98c9e6f54128ce7902525d16c8"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/SamehadakuProvider.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "SamehadakuProvider",
+        "internalName": "SamehadakuProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Samehadaku \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 39514,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "OVA",
+            "Anime"
+        ],
+        "iconUrl": "https://lh3.googleusercontent.com/zwKn_6sdYOdIiWg6Gtnx-Ar2DrVamlADnPN8BE4f84-a9aRo2Zc7mxbW5Qd26Z8cPFc",
+        "apiVersion": 1,
+        "fileHash": "sha256-0b811fab71b46aa5e874fcc2d9a00b768a0e04544dace2ef5851970aa137bee2"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/WinbuProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "WinbuProvider",
+        "internalName": "WinbuProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Winbu \u2014 Streaming Anime & Series with Indonesian Subtitles",
+        "fileSize": 49883,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA",
+            "TvSeries"
+        ],
+        "iconUrl": "https://winbu.org/wp-content/uploads/2025/04/file-0000000068a051f6aed60f781c75581b-conversation-id-67ef899f-e0f8-8011-8643-02848517c045-message-i-1-e1744432620825.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-baa71642490b86308e0c4f2923955c17a8c86b681e8d44e5203705516f0a64d0"
+    }
+]
