@@ -6,12 +6,13 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.net.URI
 
 class KuramanimeProvider : MainAPI() {
-    override var mainUrl = "https://v9.kuramanime.tel"
+    override var mainUrl = "https://v15.kuramanime.tel"
     override var name = "Kuramanime"
     override val hasQuickSearch = false
     override val hasMainPage = true
@@ -182,7 +183,7 @@ class KuramanimeProvider : MainAPI() {
             if (link.isNotBlank()) {
                 linkFound = true
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         source = name,
                         name = "Kurama Internal - $server",
                         url = link,
@@ -205,7 +206,7 @@ class KuramanimeProvider : MainAPI() {
                 
                 if (!link.contains("popads") && !link.contains("doubleclick")) {
                     callback.invoke(
-                        ExtractorLink(
+                        newExtractorLink(
                             source = name,
                             name = "Kurama Extracted - $server",
                             url = link,
