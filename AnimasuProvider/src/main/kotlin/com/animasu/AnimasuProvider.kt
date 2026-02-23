@@ -166,7 +166,7 @@ class AnimasuProvider : MainAPI() {
             val extractedQuality = getIndexQuality(quality)
             
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     link.source,
                     link.name,
                     link.url,
