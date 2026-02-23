@@ -10,6 +10,7 @@ import org.jsoup.nodes.Element
 
 class SamehadakuProvider : MainAPI() {
     override var mainUrl = "https://v1.samehadaku.how"
+    override var mainCloneUrl = "https://v1.samehadaku.how"
     override var name = "Samehadaku"
     override val hasMainPage = true
     override var lang = "id"
@@ -35,6 +36,8 @@ class SamehadakuProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "anime-terbaru/page/%d" to "Terbaru",
+        "$mainCloneUrl/daftar-anime-2/?title=&status=Finished+Airing&type=&order=latest/page/%d/" to "Selesai",
+        "$mainCloneUrl/daftar-anime-2/?title=&status=Currently+Airing&type=&order=latest/page/%d/" to "Ongoing",
         "genre/fantasy/page/%d/" to "Fantasy",
         "genre/action/page/%d/" to "Action",
         "genre/adventure/page/%d/" to "Adventure",
