@@ -126,16 +126,18 @@ class AnimasuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         
-        document.select(".mobius > .mirror > option").toList().amap { option ->
+        val options = document.select(".mobius > .mirror > option").toList()
+        
+        options.argamap { option ->
             val encodedValue = option.attr("value")
             val qualityLabel = option.text()
 
-            if (encodedValue.isNotEmpty()) {
+            if (encodedValue.isNotBlank()) {
                 try {
                     val iframeHtml = base64Decode(encodedValue)
                     val iframeUrl = Jsoup.parse(iframeHtml).select("iframe").attr("src")
 
-                    if (iframeUrl.isNotEmpty()) {
+                    if (iframeUrl.isNotBlank()) {
                         val fixedUrl = fixUrl(iframeUrl)
                         
                         loadExtractor(fixedUrl, "$mainUrl/", subtitleCallback) { link ->
