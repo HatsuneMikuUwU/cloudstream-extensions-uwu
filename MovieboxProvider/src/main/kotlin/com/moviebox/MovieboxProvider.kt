@@ -62,7 +62,7 @@ class MovieboxProvider : MainAPI() {
         val tvType = if (subject?.subjectType == 2) TvType.TvSeries else TvType.Movie
         val description = subject?.description
         val trailer = subject?.trailer?.videoAddress?.url
-        val ratingScore = subject?.imdbRatingValue?.toDoubleOrNull() 
+        val mediaScore = subject?.imdbRatingValue?.toDoubleOrNull()?.let { Score(it, 10.0) }
         
         val actors = doc?.stars?.mapNotNull { cast ->
             ActorData(Actor(cast.name ?: return@mapNotNull null, cast.avatarUrl), roleString = cast.character)
@@ -83,7 +83,7 @@ class MovieboxProvider : MainAPI() {
                 this.year = year
                 this.plot = description
                 this.tags = tags
-                this.score = ratingScore 
+                this.score = mediaScore 
                 this.actors = actors
                 this.recommendations = recommendations
                 addTrailer(trailer, addRaw = true)
@@ -94,7 +94,7 @@ class MovieboxProvider : MainAPI() {
                 this.year = year
                 this.plot = description
                 this.tags = tags
-                this.score = ratingScore 
+                this.score = mediaScore 
                 this.actors = actors
                 this.recommendations = recommendations
                 addTrailer(trailer, addRaw = true)
