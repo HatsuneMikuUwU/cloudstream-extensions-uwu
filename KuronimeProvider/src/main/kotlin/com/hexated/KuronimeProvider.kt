@@ -5,8 +5,6 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
-import com.lagradost.cloudstream3.amap
-import com.lagradost.cloudstream3.extractors.helper.AesHelper
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.M3u8Helper
@@ -20,6 +18,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.util.ArrayList
+import com.lagradost.cloudstream3.extractors.helper.AesHelper
 
 class KuronimeProvider : MainAPI() {
     override var mainUrl = "https://kuronime.moe"
@@ -93,15 +92,18 @@ class KuronimeProvider : MainAPI() {
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
         val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
-        val title = this.select(".bsuxtt, .tt > h4").text().trim()
+        
+        val title = this.select(".bsuxtt, .tt > h4, .entry-title, h2, h3").text().trim()
+        
         val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image]")?.attr("src"))
+        
         val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
         val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
+        
         return newAnimeSearchResponse(title, href, tvType) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
@@ -129,7 +131,7 @@ class KuronimeProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title = document.selectFirst("h1.entry-title")?.text().toString().trim()
+        val title = document.selectFirst(".entry-title")?.text().toString().trim()
         val poster = document.selectFirst("div.l[itemprop=image] > img")?.attr("src")
         val tags = document.select(".infodetail > ul > li:nth-child(2) > a").map { it.text() }
         val type =
@@ -143,10 +145,11 @@ class KuronimeProvider : MainAPI() {
         val year = Regex("\\d, (\\d*)").find(
             document.select(".infodetail > ul > li:nth-child(5)").text()
         )?.groupValues?.get(1)?.toIntOrNull()
-        val status = getStatus(
-            document.selectFirst(".infodetail > ul > li:nth-child(3)")!!.ownText()
-                .replace(Regex("\\W"), "")
-        )
+        
+        val statusElement = document.selectFirst(".infodetail > ul > li:nth-child(3)")
+        val statusText = statusElement?.ownText()?.replace(Regex("\\W"), "") ?: ""
+        val status = getStatus(statusText)
+        
         val description = document.select("span.const > p").text()
 
         val episodes = document.select("div.bixbox.bxcl > ul > li").mapNotNull {
@@ -216,9 +219,9 @@ class KuronimeProvider : MainAPI() {
                     "AES/CBC/NoPadding"
                 )
                 tryParseJson<Mirrors>(decrypt)?.embed?.map { embed ->
-                    embed.value.amap {
+                    embed.value.forEach { entry ->
                         loadFixedExtractor(
-                            it.value,
+                            entry.value,
                             embed.key.removePrefix("v"),
                             "$mainUrl/",
                             subtitleCallback,
@@ -226,7 +229,6 @@ class KuronimeProvider : MainAPI() {
                         )
                     }
                 }
-
             }
         )
 
@@ -270,15 +272,6 @@ class KuronimeProvider : MainAPI() {
         }
     }
 
-    private fun Element.getImageAttr(): String {
-        return when {
-            this.hasAttr("data-src") -> this.attr("abs:data-src")
-            this.hasAttr("data-lazy-src") -> this.attr("abs:data-lazy-src")
-            this.hasAttr("srcset") -> this.attr("abs:srcset").substringBefore(" ")
-            else -> this.attr("abs:src")
-        }
-    }
-
     data class Mirrors(
         @JsonProperty("embed") val embed: Map<String, Map<String, String>> = emptyMap(),
     )
@@ -311,5 +304,4 @@ class KuronimeProvider : MainAPI() {
     data class Search(
         @JsonProperty("anime") var anime: ArrayList<Anime> = arrayListOf()
     )
-
 }
