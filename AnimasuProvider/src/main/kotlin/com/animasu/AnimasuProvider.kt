@@ -1,14 +1,17 @@
 package com.animasu
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
+import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.utils.*
-import com.lagradost.cloudstream3.base64Decode 
+import kotlinx.coroutines.runBlocking
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class AnimasuProvider : MainAPI() {
-    override var mainUrl = "https://v1.animasu.app"
+    override var mainUrl = "https://v1.animasu.top"
     override var name = "Animasu"
     override val hasMainPage = true
     override var lang = "id"
@@ -63,10 +66,14 @@ class AnimasuProvider : MainAPI() {
         } else {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
+                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
+                    "-episode"
+                )
+
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
+
             "$mainUrl/anime/$title"
         }
     }
@@ -80,6 +87,7 @@ class AnimasuProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
+
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -91,30 +99,38 @@ class AnimasuProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title = document.selectFirst("div.infox h1")?.text()?.replace("Sub Indo", "")?.trim() ?: ""
+        val title =
+            document.selectFirst("div.infox h1")?.text().toString().replace("Sub Indo", "").trim()
         val poster = document.selectFirst("div.bigcontent img")?.getImageAttr()
 
         val table = document.selectFirst("div.infox div.spe")
         val type = getType(table?.selectFirst("span:contains(Jenis:)")?.ownText())
-        val year = table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()?.toIntOrNull()
+        val year =
+            table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()
+                ?.toIntOrNull()
         val status = table?.selectFirst("span:contains(Status:) font")?.text()
         val trailer = document.selectFirst("div.trailer iframe")?.attr("src")
-        
         val episodes = document.select("ul#daftarepisode > li").map {
             val link = fixUrl(it.selectFirst("a")!!.attr("href"))
             val name = it.selectFirst("a")?.text() ?: ""
-            val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val episode =
+                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
+        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
+
         return newAnimeLoadResponse(title, url, type) {
-            this.posterUrl = poster
+            posterUrl = tracker?.image ?: poster
+            backgroundPosterUrl = tracker?.cover
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = getStatus(status)
             plot = document.select("div.sinopsis p").text()
             this.tags = table?.select("span:contains(Genre:) a")?.map { it.text() }
-            if (!trailer.isNullOrBlank()) addTrailer(trailer)
+            addTrailer(trailer)
+            addMalId(tracker?.malId)
+            addAniListId(tracker?.aniId?.toIntOrNull())
         }
     }
 
@@ -125,54 +141,47 @@ class AnimasuProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(data).document
-        
-        val options = document.select(".mobius > .mirror > option").toList()
-        
-        options.argamap { option ->
-            val encodedValue = option.attr("value")
-            val qualityLabel = option.text()
-
-            if (encodedValue.isNotBlank()) {
-                try {
-                    val iframeHtml = base64Decode(encodedValue)
-                    val iframeUrl = Jsoup.parse(iframeHtml).select("iframe").attr("src")
-
-                    if (iframeUrl.isNotBlank()) {
-                        val fixedUrl = fixUrl(iframeUrl)
-                        
-                        loadExtractor(fixedUrl, "$mainUrl/", subtitleCallback) { link ->
-                            val detectedQuality = if (link.quality == Qualities.Unknown.value) {
-                                getIndexQuality(qualityLabel)
-                            } else {
-                                link.quality
-                            }
-
-                            callback.invoke(
-                                newExtractorLink(
-                                    source = link.source,
-                                    name = link.name,
-                                    url = link.url,
-                                    type = link.type
-                                ) {
-                                    this.quality = detectedQuality
-                                    this.referer = link.referer
-                                    this.headers = link.headers
-                                    this.extractorData = link.extractorData
-                                }
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Ignore
-                }
-            }
+        document.select(".mobius > .mirror > option").mapNotNull {
+                fixUrl(
+                    Jsoup.parse(base64Decode(it.attr("value"))).select("iframe").attr("src")
+                ) to it.text()
+            }.amap { (iframe, quality) ->
+            loadFixedExtractor(iframe, quality, "$mainUrl/", subtitleCallback, callback)
         }
         return true
     }
 
+    private suspend fun loadFixedExtractor(
+        url: String,
+        quality: String?,
+        referer: String? = null,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        loadExtractor(url, referer, subtitleCallback) { link ->
+            runBlocking {
+                callback.invoke(
+                    newExtractorLink(
+                        link.name,
+                        link.name,
+                        link.url,
+                        link.type
+                    ) {
+                        this.referer = link.referer
+                        this.quality = if (link.type == ExtractorLinkType.M3U8 || link.name == "Uservideo") link.quality else getIndexQuality(
+                                quality
+                            )
+                        this.headers = link.headers
+                        this.extractorData = link.extractorData
+                    }
+                )
+            }
+        }
+    }
+
     private fun getIndexQuality(str: String?): Int {
-        val raw = Regex("(\\d{3,4})[pP]").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
-        return raw ?: Qualities.Unknown.value
+        return Regex("(\\d{3,4})[pP]").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Qualities.Unknown.value
     }
 
     private fun Element.getImageAttr(): String? {
@@ -183,4 +192,5 @@ class AnimasuProvider : MainAPI() {
             else -> this.attr("abs:src")
         }
     }
+
 }
