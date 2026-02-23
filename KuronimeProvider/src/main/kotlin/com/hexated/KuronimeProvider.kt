@@ -92,25 +92,17 @@ class KuronimeProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
-    val a = this.selectFirst("a")
-    val href = getProperAnimeLink(fixUrlNull(a?.attr("href")).toString())
-    
-    // PERBAIKAN DI SINI:
-    // Mencari di class .tt h2, atau .tt h4, atau ambil dari atribut 'title' di tag <a>
-    val title = this.selectFirst(".tt h2, .tt h3, .tt h4, .bsuxtt")?.text()?.trim() 
-                ?: a?.attr("title")?.substringBefore(" Episode")?.trim() 
-                ?: "Unknown Title"
+        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
+        val title = this.select(".bsuxtt, .tt > h4").text().trim()
+        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image]")?.attr("src"))
+        val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
+        val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
+        return newAnimeSearchResponse(title, href, tvType) {
+            this.posterUrl = posterUrl
+            addSub(epNum)
+        }
 
-    val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image], img")?.attr("src"))
-    val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
-    val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
-
-    return newAnimeSearchResponse(title, href, tvType) {
-        this.posterUrl = posterUrl
-        addSub(epNum)
     }
-}
-
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
 
@@ -137,7 +129,7 @@ class KuronimeProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title = document.selectFirst("h1.entry-title, .infodetail h1, .post-title")?.text()?.trim() 
+        val title = document.selectFirst("h1.entry-title")?.text().toString().trim()
         val poster = document.selectFirst("div.l[itemprop=image] > img")?.attr("src")
         val tags = document.select(".infodetail > ul > li:nth-child(2) > a").map { it.text() }
         val type =
