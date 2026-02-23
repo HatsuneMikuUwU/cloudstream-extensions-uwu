@@ -52,10 +52,12 @@ class AnimasuProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val document = app.get("$mainUrl/pencarian/?${request.data}&halaman=$page").document
-        val home = document.select("div.listupd div.bs").map {
+        
+        val homeList = document.select("div.listupd div.bs").mapNotNull {
             it.toSearchResult()
         }
-        return newHomePageResponse(request.name, home)
+        
+        return newHomePageResponse(request.name, homeList, hasNext = homeList.isNotEmpty())
     }
 
     private fun getProperAnimeLink(uri: String): String {
@@ -64,9 +66,7 @@ class AnimasuProvider : MainAPI() {
         } else {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
-                    "-episode"
-                )
+                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
@@ -74,11 +74,13 @@ class AnimasuProvider : MainAPI() {
         }
     }
 
-    private fun Element.toSearchResult(): AnimeSearchResponse {
-        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
+    private fun Element.toSearchResult(): AnimeSearchResponse? {
+        val a = this.selectFirst("a") ?: return null
+        val href = getProperAnimeLink(fixUrlNull(a.attr("href")).toString())
         val title = this.select("div.tt").text().trim()
         val posterUrl = fixUrlNull(this.selectFirst("img")?.getImageAttr())
         val epNum = this.selectFirst("span.epx")?.text()?.filter { it.isDigit() }?.toIntOrNull()
+        
         return newAnimeSearchResponse(title, href, TvType.Anime) {
             this.posterUrl = posterUrl
             addSub(epNum)
@@ -86,25 +88,32 @@ class AnimasuProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        return app.get("$mainUrl/?s=$query").document.select("div.listupd div.bs").map {
-            it.toSearchResult()
+        val document = app.get("$mainUrl/?s=$query").document
+        return document.select("div.listupd div.bs").mapNotNull { 
+            it.toSearchResult() 
         }
     }
 
-    override suspend fun load(url: String): LoadResponse {
+    override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
 
-        val title = document.selectFirst("div.infox h1")?.text().toString().replace("Sub Indo", "").trim()
+        val rawTitle = document.selectFirst("div.infox h1")?.text() ?: return null
+        val title = rawTitle.replace("Sub Indo", "").trim()
         val poster = document.selectFirst("div.bigcontent img")?.getImageAttr()
 
         val table = document.selectFirst("div.infox div.spe")
-        val type = getType(table?.selectFirst("span:contains(Jenis:)")?.ownText())
+        val typeStr = table?.selectFirst("span:contains(Jenis:)")?.ownText()
+        val type = getType(typeStr)
         val year = table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()?.toIntOrNull()
-        val status = table?.selectFirst("span:contains(Status:) font")?.text()
-        val trailer = document.selectFirst("div.trailer iframe")?.attr("src")
+        val statusStr = table?.selectFirst("span:contains(Status:) font")?.text()
+        val status = getStatus(statusStr)
         
-        val episodes = document.select("ul#daftarepisode > li").map {
-            val link = fixUrl(it.selectFirst("a")!!.attr("href"))
+        val trailer = document.selectFirst("div.trailer iframe")?.attr("src")
+        val tags = table?.select("span:contains(Genre:) a")?.map { it.text() }
+        val plotDesc = document.select("div.sinopsis p").text()
+
+        val episodes = document.select("ul#daftarepisode > li").mapNotNull {
+            val link = fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
             val name = it.selectFirst("a")?.text() ?: ""
             val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
@@ -113,13 +122,14 @@ class AnimasuProvider : MainAPI() {
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
 
         return newAnimeLoadResponse(title, url, type) {
+            engName = title
             posterUrl = tracker?.image ?: poster
             backgroundPosterUrl = tracker?.cover
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
-            showStatus = getStatus(status)
-            plot = document.select("div.sinopsis p").text()
-            this.tags = table?.select("span:contains(Genre:) a")?.map { it.text() }
+            showStatus = status
+            plot = plotDesc
+            this.tags = tags
             addTrailer(trailer)
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
@@ -134,7 +144,7 @@ class AnimasuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         
-        document.select(".mobius select.mirror option").forEach { option ->
+        document.select(".mobius select.mirror option").amap { option ->
             val rawValue = option.attr("value")
             if (rawValue.isNotEmpty()) {
                 val decodedHtml = base64Decode(rawValue)
@@ -162,14 +172,9 @@ class AnimasuProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val extractedLinks = mutableListOf<ExtractorLink>()
+        val extractedQuality = qualityName.fixQuality()
+
         loadExtractor(url, referer, subtitleCallback) { link ->
-            extractedLinks.add(link)
-        }
-        
-        val extractedQuality = getIndexQuality(qualityName)
-        
-        extractedLinks.forEach { link ->
             val newLink = newExtractorLink(
                 source = link.source,
                 name = "$qualityName - ${link.name}", 
@@ -180,20 +185,18 @@ class AnimasuProvider : MainAPI() {
                 this.quality = if (link.quality == Qualities.Unknown.value) extractedQuality else link.quality
                 this.headers = link.headers
             }
-            
             callback.invoke(newLink)
         }
     }
 
-    private fun getIndexQuality(str: String?): Int {
-        if (str == null) return Qualities.Unknown.value
-        val lower = str.lowercase()
+    private fun String.fixQuality(): Int {
+        val lower = this.lowercase()
         return when {
-            lower.contains("1080") || lower.contains("fhd") -> 1080
-            lower.contains("720") || lower.contains("hd") -> 720
-            lower.contains("480") || lower.contains("sd") -> 480
-            lower.contains("360") -> 360
-            else -> Regex("(\\d{3,4})").find(str)?.groupValues?.getOrNull(1)?.toIntOrNull() 
+            lower.contains("1080") || lower.contains("fhd") -> Qualities.P1080.value
+            lower.contains("720") || lower.contains("hd") -> Qualities.P720.value
+            lower.contains("480") || lower.contains("sd") -> Qualities.P480.value
+            lower.contains("360") -> Qualities.P360.value
+            else -> Regex("(\\d{3,4})").find(this)?.groupValues?.getOrNull(1)?.toIntOrNull() 
                 ?: Qualities.Unknown.value
         }
     }
