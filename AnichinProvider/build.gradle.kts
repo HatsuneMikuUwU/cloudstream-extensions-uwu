@@ -1,7 +1,7 @@
 version = 1
 
 cloudstream {
-    description = "Anichin — Anime Sub Indo"
+    description = "Anichin — Donghua Sub Indo"
     language = "id"
     authors = listOf("Miku")
 

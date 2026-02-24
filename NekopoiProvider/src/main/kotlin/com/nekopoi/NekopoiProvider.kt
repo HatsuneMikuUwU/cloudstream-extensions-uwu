@@ -239,7 +239,8 @@ class NekopoiProvider : MainAPI() {
 
     private suspend fun bypassOuo(url: String?): String? {
         if (url == null) return null
-        var currentUrl = url
+        
+        var currentUrl: String = url 
         var res = session.get(currentUrl)
 
         run lit@{
@@ -249,11 +250,11 @@ class NekopoiProvider : MainAPI() {
                 val document = res.document
                 val form = document.selectFirst("form") ?: return@lit
                 
-                var nextUrl = form.attr("action")
-                if (nextUrl.isNullOrBlank()) nextUrl = currentUrl
+                var nextUrl = form.attr("action") ?: ""
+                if (nextUrl.isBlank()) nextUrl = currentUrl
 
                 val data = document.select("form input").associate {
-                    it.attr("name") to it.attr("value")
+                    (it.attr("name") ?: "") to (it.attr("value") ?: "")
                 }.toMutableMap()
 
                 val captchaScript = document.selectFirst("script[src*=/recaptcha/api.js?render=]")
@@ -293,7 +294,7 @@ class NekopoiProvider : MainAPI() {
             ?: scriptData.substringAfter("\"GET\", \"").substringBefore("\"").takeIf { it.isNotBlank() }
     }
 
-    private suspend fun bypassMirrored(url: String?): List<String?> {
+    private suspend fun bypassMirrored(url: String?): List<String> { 
         if (url.isNullOrBlank()) return emptyList()
         
         val request = session.get(url)
