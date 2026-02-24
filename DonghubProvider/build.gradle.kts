@@ -1,7 +1,7 @@
 version = 1
 
 cloudstream {
-    description = "Anichin — Donghua Subtitle Indonesia"
+    description = "Donghub — Donghua Subtitle Indonesia"
     language = "id"
     authors = listOf("Miku")
 
@@ -19,5 +19,5 @@ cloudstream {
         "Cartoon",
     )
 
-    iconUrl = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.watch&size=%size%"
+    iconUrl = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://donghub.vip&size=%size%"
 }

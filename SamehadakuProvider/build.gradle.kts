@@ -2,7 +2,7 @@ version = 1
 
 cloudstream {
     language = "id"
-    description = "Samehadaku — Anime Sub Indo"
+    description = "Samehadaku — Anime Subtitle Indonesia"
     authors = listOf("Miku")
 	isCrossPlatform = true
     status = 1

@@ -6,7 +6,7 @@ cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    description = "Otakudesu — Anime Sub Indo"
+    description = "Otakudesu — Anime Subtitle Indonesia"
     authors = listOf("Miku")
 
     /**
