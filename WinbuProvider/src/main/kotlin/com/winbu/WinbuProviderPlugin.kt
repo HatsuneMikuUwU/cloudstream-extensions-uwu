@@ -2,6 +2,7 @@ package com.winbu
 
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import com.lagradost.cloudstream3.extractors.*
 import android.content.Context
 
 @CloudstreamPlugin
@@ -25,5 +26,7 @@ class WinbuProviderPlugin : Plugin() {
         registerExtractorAPI(Peytonepre())
         registerExtractorAPI(VidHidePro())
         registerExtractorAPI(Acefile())
+        registerExtractorAPI(Mp4Upload())
+        registerExtractorAPI(Mediafire())
     }
 }
