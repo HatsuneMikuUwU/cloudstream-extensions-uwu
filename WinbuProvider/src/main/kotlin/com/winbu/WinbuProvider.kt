@@ -54,9 +54,18 @@ class WinbuProvider : MainAPI() {
         }
 
         val document = app.get("$mainUrl/$path").document
-        val items = document.select("#movies .ml-item, .movies-list .ml-item")
-            .mapNotNull { it.toSearchResult(request.name) }
-            .distinctBy { it.url }
+        
+        val items = when (request.name) {
+            "New Episodes" -> document.select("#movies .ml-item, .movies-list .ml-item") 
+            "Movie", "Film" -> document.select("#movies .ml-item, .movies-list .ml-item")
+            else -> document.select("#movies .ml-item, .movies-list .ml-item")
+        }
+        
+        val homeList = items.mapNotNull { 
+            it.toSearchResult(request.name) 
+        }.distinctBy { it.url }
+
+        val isLandscape = request.name == "New Episodes"
 
         val hasNext = document.select(".pagination a.next, a.next.page-numbers").isNotEmpty() || 
                 document.select(".pagination a[href], #pagination a[href]").any {
@@ -64,7 +73,10 @@ class WinbuProvider : MainAPI() {
                     it.text().contains("Next", ignoreCase = true)
                 }
 
-        return newHomePageResponse(HomePageList(request.name, items), hasNext = hasNext)
+        return newHomePageResponse(
+            listOf(HomePageList(request.name, homeList, isHorizontalImages = isLandscape)),
+            hasNext = hasNext || homeList.isNotEmpty()
+        )
     }
 
     private fun parseEpisode(text: String?): Int? {
@@ -89,7 +101,7 @@ class WinbuProvider : MainAPI() {
         val poster = selectFirst("img.mli-thumb, img")?.getImageAttr()?.let { fixUrlNull(it) }
         val episode = parseEpisode(selectFirst("span.mli-episode")?.text())
 
-        val isMovie = sectionName.contains("Film", true) || href.contains("/film/", true)
+        val isMovie = sectionName.contains("Film", true) || sectionName.contains("Movie", true) || href.contains("/film/", true)
 
         return if (isMovie) {
             newMovieSearchResponse(title, href, TvType.Movie) {
