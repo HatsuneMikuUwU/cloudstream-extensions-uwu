@@ -46,7 +46,7 @@ class SamehadakuProvider : MainAPI() {
         
         val items = when (request.name) {
             "New Episodes" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
-            "Ongoing Anime", "Complete Anime", "Most Popular" -> document.select("div.animepost")
+            "Ongoing Anime", "Complete Anime", "Most Popular", "Movies" -> document.select("div.animepost")
             else -> document.select("article.animpost")
         }
 
