@@ -38,6 +38,7 @@ class SamehadakuProvider : MainAPI() {
         "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing Anime",
         "daftar-anime-2/page/%d/?status=Finished+Airing&order=latest" to "Complete Anime",
         "daftar-anime-2/page/%d/?order=popular" to "Most Popular",
+        "daftar-anime-2/page/%d/?type=Movie&order=latest" to "Movies",
     )
     
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
