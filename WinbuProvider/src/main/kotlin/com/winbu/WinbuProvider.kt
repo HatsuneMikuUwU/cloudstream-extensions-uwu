@@ -44,6 +44,7 @@ class WinbuProvider : MainAPI() {
         "daftar-anime-2/page/%d/?order=popular" to "Most Popular",
         "daftar-anime-2/page/%d/?type=Movie&order=latest" to "Movie",
         "daftar-anime-2/page/%d/?type=Film&order=latest" to "Film",
+        "tvshow/page/%d/" to "TV Show",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -56,8 +57,9 @@ class WinbuProvider : MainAPI() {
         val document = app.get("$mainUrl/$path").document
         
         val items = when (request.name) {
-            "New Episodes" -> document.select("#movies .ml-item, .movies-list .ml-item") 
-            "Movie", "Film" -> document.select("#movies .ml-item, .movies-list .ml-item")
+            "New Episodes" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
+            "Ongoing Anime", "Complete Anime", "Most Popular", "Movie"-> document.select("div.animepost")
+            "Film" -> document.select("#movies .ml-item, .movies-list .ml-item")
             else -> document.select("#movies .ml-item, .movies-list .ml-item")
         }
         
@@ -65,7 +67,7 @@ class WinbuProvider : MainAPI() {
             it.toSearchResult(request.name) 
         }.distinctBy { it.url }
 
-        val isLandscape = request.name == "New Episodes"
+        val isLandscape = request.name == "Movie"
 
         val hasNext = document.select(".pagination a.next, a.next.page-numbers").isNotEmpty() || 
                 document.select(".pagination a[href], #pagination a[href]").any {
