@@ -5,7 +5,7 @@ import com.lagradost.cloudstream3.plugins.Plugin
 import android.content.Context
 
 @CloudstreamPlugin
-class WinbuPlugin : Plugin() {
+class WinbuProviderPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(WinbuProvider())
         registerExtractorAPI(PixelDrainDev())
@@ -24,5 +24,6 @@ class WinbuPlugin : Plugin() {
         registerExtractorAPI(Dhtpre())
         registerExtractorAPI(Peytonepre())
         registerExtractorAPI(VidHidePro())
+        registerExtractorAPI(Acefile())
     }
 }
