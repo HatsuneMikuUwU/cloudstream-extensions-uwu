@@ -57,8 +57,8 @@ class WinbuProvider : MainAPI() {
         val document = app.get("$mainUrl/$path").document
         
         val items = when (request.name) {
-            "New Episodes" -> document.select("li[itemtype='http://schema.org/CreativeWork']")
-            "Ongoing Anime", "Complete Anime", "Most Popular", "Movie"-> document.select("div.animepost")
+            "New Episodes" -> document.select("#movies .ml-item, .movies-list .ml-item")
+            "Ongoing Anime", "Complete Anime", "Most Popular", "Movie"-> document.select("#anime .ml-item, .movies-list .ml-item")
             "Film" -> document.select("#movies .ml-item, .movies-list .ml-item")
             else -> document.select("#movies .ml-item, .movies-list .ml-item")
         }
