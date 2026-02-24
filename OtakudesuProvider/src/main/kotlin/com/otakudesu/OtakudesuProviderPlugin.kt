@@ -9,7 +9,6 @@ import android.content.Context
 class OtakudesuProviderPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(OtakudesuProvider())
-        registerExtractorAPI(PixelDrainDev())
         registerExtractorAPI(PixelDrain())
         registerExtractorAPI(Gofile())
         registerExtractorAPI(Krakenfiles())

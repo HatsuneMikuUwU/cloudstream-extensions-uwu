@@ -9,7 +9,6 @@ import android.content.Context
 class KuronimeProviderPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(KuronimeProvider())
-        registerExtractorAPI(PixelDrainDev())
         registerExtractorAPI(PixelDrain())
         registerExtractorAPI(Gofile())
         registerExtractorAPI(Krakenfiles())

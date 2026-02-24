@@ -9,7 +9,6 @@ import android.content.Context
 class SamehadakuProviderPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(SamehadakuProvider())
-        registerExtractorAPI(PixelDrainDev())
         registerExtractorAPI(PixelDrain())
         registerExtractorAPI(Gofile())
         registerExtractorAPI(Krakenfiles())

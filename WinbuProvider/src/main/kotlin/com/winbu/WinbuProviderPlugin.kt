@@ -9,7 +9,6 @@ import android.content.Context
 class WinbuProviderPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(WinbuProvider())
-        registerExtractorAPI(PixelDrainDev())
         registerExtractorAPI(PixelDrain())
         registerExtractorAPI(Gofile())
         registerExtractorAPI(Krakenfiles())
