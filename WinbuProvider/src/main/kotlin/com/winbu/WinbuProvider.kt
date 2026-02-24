@@ -47,13 +47,22 @@ class WinbuProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("$mainUrl/${request.data.format(page)}").document
+        val path = if (page == 1) {
+            request.data.replace("/page/%d/", "/").replace("page/%d/", "")
+        } else {
+            request.data.format(page)
+        }
+
+        val document = app.get("$mainUrl/$path").document
         val items = document.select("#movies .ml-item, .movies-list .ml-item")
             .mapNotNull { it.toSearchResult(request.name) }
             .distinctBy { it.url }
 
-        val hasNext = document.select("#pagination .pagination a[href]")
-            .any { it.selectFirst("i.fa-caret-right") != null }
+        val hasNext = document.select(".pagination a.next, a.next.page-numbers").isNotEmpty() || 
+                document.select(".pagination a[href], #pagination a[href]").any {
+                    it.selectFirst("i.fa-caret-right, i.fa-angle-right, i.fa-chevron-right") != null || 
+                    it.text().contains("Next", ignoreCase = true)
+                }
 
         return newHomePageResponse(HomePageList(request.name, items), hasNext = hasNext)
     }
@@ -280,7 +289,6 @@ class WinbuProvider : MainAPI() {
             }
         }
 
-        // 3) Link download (fallback jika server list tidak menghasilkan link playable)
         for (a in document.select(".download-eps a[href], #downloadb a[href], .boxdownload a[href], .dlbox a[href]")) {
             loadUrl(a.attr("href"))
         }
