@@ -1,7 +1,6 @@
 package com.nekopoi
 
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.nicehttp.Requests
@@ -20,7 +19,8 @@ class NekopoiProvider : MainAPI() {
     override val supportedTypes = setOf(
         TvType.Anime,
         TvType.AnimeMovie,
-        TvType.OVA
+        TvType.OVA,
+        TvType.NSFW,
     )
 
     companion object {
@@ -57,10 +57,12 @@ class NekopoiProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val url = if (page == 1) request.data else "${request.data}/page/$page"
+        val baseUrl = request.data.removeSuffix("/") 
+        val url = if (page == 1) "$baseUrl/" else "$baseUrl/page/$page/"
+        
         val document = fetch.get(url).document
         
-        val home = document.select("div.result ul li").mapNotNull {
+        val home = document.select("div.result ul li, div.eropost").mapNotNull {
             it.toSearchResult()
         }
         
@@ -68,7 +70,7 @@ class NekopoiProvider : MainAPI() {
             list = HomePageList(
                 name = request.name,
                 list = home,
-                isHorizontalImages = true
+                isHorizontalImages = true 
             ),
             hasNext = home.isNotEmpty()
         )
@@ -84,18 +86,17 @@ class NekopoiProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val title = this.selectFirst("h2 a")?.text()?.trim() ?: return null
+        val title = this.selectFirst("h2 a, h2, h3 a, div.info h2")?.text()?.trim() ?: return null
         val href = getProperAnimeLink(this.selectFirst("a")?.attr("href") ?: return null)
         
+        val img = this.selectFirst("img")
         val posterUrl = fixUrlNull(
-            this.selectFirst("img")?.let { img ->
-                img.attr("data-src").takeIf { it.isNotBlank() }
-                    ?: img.attr("data-lazy-src").takeIf { it.isNotBlank() }
-                    ?: img.attr("src")
-            }
+            img?.attr("data-src").takeIf { !it.isNullOrBlank() }
+                ?: img?.attr("data-lazy-src").takeIf { !it.isNullOrBlank() }
+                ?: img?.attr("src")
         )
         
-        val epNum = this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }?.toIntOrNull()
+        val epNum = this.selectFirst("i.dot, div.ep, span.ep")?.text()?.filter { it.isDigit() }?.toIntOrNull()
         
         return newAnimeSearchResponse(title, href, TvType.NSFW) {
             this.posterUrl = posterUrl
@@ -185,15 +186,27 @@ class NekopoiProvider : MainAPI() {
                 }
             },
             {
-                res.select("div.boxdownload div.liner").map { ele ->
-                    getIndexQuality(
-                        ele.select("div.name").text()
-                    ) to (ele.selectFirst("a[href*=ouo]")?.attr("href") ?: ele.selectFirst("a[href*=mirrored]")?.attr("href"))
-                }.filter { it.first != Qualities.P360.value }.map {
-                    val bypassedAds = bypassMirrored(bypassOuo(it.second))
-                    bypassedAds.amap(ads@{ adsLink ->
+                res.select("div.boxdownload div.liner").mapNotNull { ele ->
+                    val url = ele.selectFirst("a[href*=ouo]")?.attr("href") 
+                        ?: ele.selectFirst("a[href*=mirrored]")?.attr("href")
+                    
+                    if (url != null) {
+                        getIndexQuality(ele.select("div.name").text()) to url
+                    } else null
+                }.filter { it.first != Qualities.P360.value }.amap { (quality, rawUrl) ->
+                    
+                    val targetUrl = if (rawUrl.contains("ouo", ignoreCase = true)) {
+                        bypassOuo(rawUrl)
+                    } else {
+                        rawUrl
+                    }
+
+                    val bypassedAds = bypassMirrored(targetUrl)
+                    
+                    bypassedAds.forEach { adsLink ->
+                        val embedUrl = fixEmbed(adsLink) ?: return@forEach
                         loadExtractor(
-                            fixEmbed(adsLink) ?: return@ads,
+                            embedUrl,
                             "$mainUrl/",
                             subtitleCallback,
                         ) { link ->
@@ -336,21 +349,13 @@ class NekopoiProvider : MainAPI() {
     }
 
     private fun fixUrl(url: String, domain: String): String {
-        if (url.startsWith("http")) {
-            return url
-        }
-        if (url.isEmpty()) {
-            return ""
-        }
+        if (url.startsWith("http")) return url
+        if (url.isEmpty()) return ""
 
-        val startsWithNoHttp = url.startsWith("//")
-        if (startsWithNoHttp) {
-            return "https:$url"
+        return if (url.startsWith("//")) {
+            "https:$url"
         } else {
-            if (url.startsWith('/')) {
-                return domain + url
-            }
-            return "$domain/$url"
+            if (url.startsWith('/')) domain + url else "$domain/$url"
         }
     }
 
