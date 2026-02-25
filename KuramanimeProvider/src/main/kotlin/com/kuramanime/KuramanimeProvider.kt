@@ -187,9 +187,63 @@ class KuramanimeProvider : MainAPI() {
         document.select("video#player > source, video source").forEach {
             val link = fixUrl(it.attr("src"))
             if (link.isBlank()) return@forEach
-            
-            val quality = it.attr("size").toIntOrNull() ?: it.attr("res").toIntOrNull()
+
+            val quality = it.attr("size").toIntOrNull() ?: it.attr("res").toIntOrNull() ?: Qualities.Unknown.value
             val serverName = server.replaceFirstChar { c -> c.uppercase() }
+
+            if (link.contains("pid=") && link.contains("sid=")) {
+                try {
+                    val queryParams = link.substringAfter("?").split("&").associate {
+                        val parts = it.split("=")
+                        parts[0] to (parts.getOrNull(1) ?: "")
+                    }
+                    val pid = queryParams["pid"] ?: return@forEach
+                    val sid = queryParams["sid"] ?: return@forEach
+                    val lud = queryParams["lud"] ?: ""
+
+                    val host = URI(mainUrl).let { "${it.scheme}://${it.host}" }
+                    val tokenUrl = "$host/misc/token/drive-token"
+
+                    val tokenRes = app.post(
+                        tokenUrl,
+                        headers = mapOf(
+                            "Accept" to "application/json",
+                            "Referer" to url,
+                            "Origin" to host
+                        ),
+                        json = mapOf("pid" to pid, "sid" to sid), // Service Worker mengirim via JSON body
+                        cookies = cookies
+                    ).text
+
+                    val tokenJson = tryParseJson<Map<String, String>>(tokenRes)
+                    val accessToken = tokenJson?.get("access_token")
+                    val gid = tokenJson?.get("gid")
+
+                    if (accessToken != null && gid != null) {
+                        val driveUrl = "https://www.googleapis.com/drive/v3/files/$gid?alt=media&lud=$lud&pid=$pid&sid=$sid"
+
+                        callback.invoke(
+                            newExtractorLink(
+                                name = "$serverName (G-Drive)",
+                                source = "$serverName (G-Drive)",
+                                url = driveUrl,
+                                type = INFER_TYPE
+                            ) {
+                                this.headers = mapOf(
+                                    "Authorization" to "Bearer $accessToken",
+                                    "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
+                                    "Range" to "bytes=0-",
+                                    "Referer" to url
+                                )
+                                this.quality = quality
+                            }
+                        )
+                        return@forEach
+                    }
+                } catch (e: Exception) {
+                    println("Gagal bypass KuramaDrive: ${e.message}")
+                }
+            }
 
             callback.invoke(
                 newExtractorLink(
@@ -205,12 +259,12 @@ class KuramanimeProvider : MainAPI() {
                         "Sec-Fetch-Mode" to "no-cors",
                         "Referer" to url
                     )
-                    this.quality = quality ?: Qualities.Unknown.value
+                    this.quality = quality
                 }
             )
         }
         
-        if (server.contains("kDrive", true)) {
+        if (server.contains("kuramadrive", true)) {
             document.select("div#animeDownloadLink a, .download-links a").amap {
                 loadExtractor(it.attr("href"), url, subtitleCallback, callback)
             }
@@ -227,11 +281,16 @@ class KuramanimeProvider : MainAPI() {
         val res = req.document
         cookies = req.cookies
 
+        res.select("div.iframe-container iframe, iframe").attr("src").takeIf { it.isNotBlank() }?.let { videoUrl ->
+            loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
+        }
+
         val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
         
         val dataKps = res.selectFirst("[data-kps]")?.attr("data-kps")
             ?: res.selectFirst("[data-kk]")?.attr("data-kk")
-            ?: res.selectFirst("div.col-lg-12.mt-3")?.attr("data-kk") 
+            ?: res.selectFirst("[data-pj]")?.attr("data-pj")
+            ?: res.selectFirst(".col-lg-12.mt-3")?.attributes()?.firstOrNull { it.key.startsWith("data-") }?.value
             ?: return false
 
         val assets = getAssets(dataKps) ?: return false
@@ -242,17 +301,15 @@ class KuramanimeProvider : MainAPI() {
             "X-Request-ID" to randomId(),
             "X-Request-Index" to "0",
             "X-Requested-With" to "XMLHttpRequest",
-            "Referer" to data
+            "Referer" to data,
+            "Accept" to "application/json, text/javascript, */*; q=0.01"
         )
 
-        val tokenKeyRaw = app.get(
-            "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}",
-            headers = headers,
-            cookies = cookies
-        ).text
+        val tokenUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
+        val tokenKeyRaw = app.get(tokenUrl, headers = headers, cookies = cookies).text
 
         val tokenKey = if (tokenKeyRaw.contains("{")) {
-            tryParseJson<Map<String, String>>(tokenKeyRaw)?.get("token") ?: tokenKeyRaw
+            tryParseJson<Map<String, String>>(tokenKeyRaw)?.get("token") ?: return false
         } else {
             tokenKeyRaw.trim()
         }
@@ -290,21 +347,29 @@ class KuramanimeProvider : MainAPI() {
         return true
     }
 
-    private suspend fun getAssets(bpjs: String?): Assets? {
-        val env = app.get("$mainUrl/assets/js/$bpjs.js").text
+    private suspend fun getAssets(bpjs: String): Assets? {
+        val scriptUrl = "$mainUrl/assets/js/$bpjs.js"
+        val env = app.get(scriptUrl).text
         
         fun extract(key: String): String {
-            return Regex("""$key\s*:\s*['"]([^'"]+)['"]""").find(env)?.groupValues?.getOrNull(1) ?: ""
+            val regex = Regex("""$key['"]?\s*[:=]\s*['"]([^'"]+)['"]""")
+            return regex.find(env)?.groupValues?.getOrNull(1) ?: ""
         }
 
-        return Assets(
+        val assets = Assets(
             MIX_PREFIX_AUTH_ROUTE_PARAM = extract("MIX_PREFIX_AUTH_ROUTE_PARAM"),
             MIX_AUTH_ROUTE_PARAM = extract("MIX_AUTH_ROUTE_PARAM"),
             MIX_AUTH_KEY = extract("MIX_AUTH_KEY"),
             MIX_AUTH_TOKEN = extract("MIX_AUTH_TOKEN"),
             MIX_PAGE_TOKEN_KEY = extract("MIX_PAGE_TOKEN_KEY"),
             MIX_STREAM_SERVER_KEY = extract("MIX_STREAM_SERVER_KEY")
-        ).takeIf { it.MIX_AUTH_KEY.isNotBlank() }
+        )
+
+        return if (assets.MIX_AUTH_KEY.isNotBlank() && assets.MIX_PAGE_TOKEN_KEY.isNotBlank()) {
+            assets
+        } else {
+            null
+        }
     }
 
     private fun randomId(length: Int = 6): String {
