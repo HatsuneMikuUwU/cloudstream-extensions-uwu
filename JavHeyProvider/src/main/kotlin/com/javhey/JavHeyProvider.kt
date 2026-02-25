@@ -36,6 +36,8 @@ class JavHeyProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/videos/paling-baru/page=" to "Latest Update",
+        "$mainUrl/category/2/censored/page=" to "Category Censored",
+        "$mainUrl/category/31/decensored/page=" to "Category Uncensored",
         "$mainUrl/videos/paling-dilihat/page=" to "Most Viewed",
         "$mainUrl/videos/top-rating/page=" to "Top Rating"
     )
