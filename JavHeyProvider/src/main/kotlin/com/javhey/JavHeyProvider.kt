@@ -3,7 +3,6 @@ package com.javhey
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
-import android.util.Base64
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -35,98 +35,9 @@ class JavHeyProvider : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/category/192/abuse/page=" to "Abuse",
-        "$mainUrl/category/113/acme-orgasm/page=" to "Acme Orgasm",
-        "$mainUrl/category/118/amateur/page=" to "Amateur",
-        "$mainUrl/category/188/anal/page=" to "Anal",
-        "$mainUrl/category/41/ass-fetish/page=" to "Ass Fetish",
-        "$mainUrl/category/24/aunt/page=" to "Aunt",
-        "$mainUrl/category/162/bath/page=" to "Bath",
-        "$mainUrl/category/67/bdsm/page=" to "Bdsm",
-        "$mainUrl/category/50/beautiful-breasts/page=" to "Beautiful Breasts",
-        "$mainUrl/category/19/beautiful-girl/page=" to "Beautiful Girl",
-        "$mainUrl/category/80/beauty-treatment/page=" to "Beauty Treatment",
-        "$mainUrl/category/20/big-butt/page=" to "Big Butt",
-        "$mainUrl/category/34/big-cock-or-big-cock/page=" to "Big Cock",
-        "$mainUrl/category/1/big-tits/page=" to "Big Tits",
-        "$mainUrl/category/51/black-actor/page=" to "Black Actor",
-        "$mainUrl/category/33/blowjob/page=" to "Blowjob",
-        "$mainUrl/category/186/bondage/page=" to "Bondage",
-        "$mainUrl/category/155/breast-milk/page=" to "Breast Milk",
-        "$mainUrl/category/167/bride/page=" to "Bride",
-        "$mainUrl/category/103/bukkake/page=" to "Bukkake",
-        "$mainUrl/category/180/business-attire/page=" to "Business Attire",
-        "$mainUrl/category/48/busty-fetish/page=" to "Busty Fetish",
-        "$mainUrl/category/2/censored/page=" to "Censored",
-        "$mainUrl/category/3/creampie/page=" to "Creampie",
-        "$mainUrl/category/12/cuckold-or-ntr/page=" to "Cuckold/NTR",
-        "$mainUrl/category/95/cunnilingus/page=" to "Cunnilingus",
-        "$mainUrl/category/93/childhood-friend/page=" to "Childhood Friend",
-        "$mainUrl/category/28/chubby/page=" to "Chubby",
-        "$mainUrl/category/119/club-activity-manager/page=" to "Club Activity Manager",
-        "$mainUrl/category/194/collaboration-work/page=" to "Collaboration Work",
-        "$mainUrl/category/70/confinement/page=" to "Confinement",
-        "$mainUrl/category/45/confuse/page=" to "Confuse",
-        "$mainUrl/category/127/cosplay/page=" to "Cosplay",
-        "$mainUrl/category/146/couple/page=" to "Couple",
-        "$mainUrl/category/107/dating/page=" to "Dating",
-        "$mainUrl/category/74/debut-work/page=" to "Debut Work",
-        "$mainUrl/category/31/decensored/page=" to "Decensored",
-        "$mainUrl/category/92/deepthroat/page=" to "Deepthroat",
-        "$mainUrl/category/176/delusion/page=" to "Delusion",
-        "$mainUrl/category/56/delusion-group/page=" to "Delusion Group",
-        "$mainUrl/category/68/devil/page=" to "Devil",
-        "$mainUrl/category/239/digimo/page=" to "Digimo",
-        "$mainUrl/category/4/digital-mosaic/page=" to "Digital Mosaic",
-        "$mainUrl/category/89/dirty/page=" to "Dirty",
-        "$mainUrl/category/216/dirty-talk/page=" to "Dirty Talk",
-        "$mainUrl/category/73/documentary/page=" to "Documentary",
-        "$mainUrl/category/174/doll/page=" to "Doll",
-        "$mainUrl/category/81/drag/page=" to "Drag",
-        "$mainUrl/category/21/drama/page=" to "Drama",
-        "$mainUrl/category/197/drunk/page=" to "Drunk",
-        "$mainUrl/category/150/electric-machine/page=" to "Electric Machine",
-        "$mainUrl/category/163/emmanuel/page=" to "Emmanuel",
-        "$mainUrl/category/8/exclusive/page=" to "Exclusive",
-        "$mainUrl/category/168/face-sitting/page=" to "Face Sitting",
-        "$mainUrl/category/96/facial-cumshot/page=" to "Facials Cumshot",
-        "$mainUrl/category/130/facials/page=" to "Facials",
-        "$mainUrl/category/184/fan-appreciation-and-visit/page=" to "Fan Appreciation And Visit",
-        "$mainUrl/category/145/fantasy/page=" to "Fantasy",
-        "$mainUrl/category/75/female-college-student/page=" to "Female College Student",
-        "$mainUrl/category/29/female-boss/page=" to "Female Boss",
-        "$mainUrl/category/139/female-doctor/page=" to "Female Doctor",
-        "$mainUrl/category/114/female-investigator/page=" to "Female Investigator",
-        "$mainUrl/category/59/female-teacher/page=" to "Female Teacher",
-        "$mainUrl/category/138/finger-fuck/page=" to "Finger Fuck",
-        "$mainUrl/category/189/footjob/page=" to "Footjob",
-        "$mainUrl/category/90/gal/page=" to "Gal",
-        "$mainUrl/category/104/gangbang/page=" to "Gangbang",
-        "$mainUrl/category/179/gender-change/page=" to "Gender Change",
-        "$mainUrl/category/124/glasses/page=" to "Glasses",
-        "$mainUrl/category/63/grandfather/page=" to "Grandfather",
-        "$mainUrl/category/16/grimosa/page=" to "Grimosa",
-        "$mainUrl/category/165/gulp/page=" to "Gulp",
-        "$mainUrl/category/142/gym-wear-or-bloomers/page=" to "Gym Wear Or Bloomers",
-        "$mainUrl/category/131/handjob/page=" to "Handjob",
-        "$mainUrl/category/100/harem/page=" to "Harem",
-        "$mainUrl/category/98/health-soap/page=" to "Health Soap",
-        "$mainUrl/category/144/hhh-group/page=" to "Hhh Group",
-        "$mainUrl/category/5/high-vision/page=" to "High Vision",
-        "$mainUrl/category/214/hospital-clinic/page=" to "Hospital Clinic",
-        "$mainUrl/category/154/hotel/page=" to "Hotel",
-        "$mainUrl/category/54/humiliation/page=" to "Humiliation",
-        "$mainUrl/category/87/hot-spring/page=" to "Hot Spring",
-        "$mainUrl/category/82/hypnosis-or-brainwashing/page=" to "Hypnosis Or Brainwashing",
-        "$mainUrl/category/9/housewife/page=" to "Housewife",
-        "$mainUrl/category/35/idol-or-celebrity/page=" to "Idol Or Celebrity",
-        "$mainUrl/category/148/immediately-saddle/page=" to "Immediately Saddle",
-        "$mainUrl/category/10/incest/page=" to "Incest",
-        "$mainUrl/category/47/infidelity/page=" to "Infidelity",
-        "$mainUrl/category/153/instructor/page=" to "Instructor",
-        "$mainUrl/category/225/karya-tunggal/page=" to "Single",
-        "$mainUrl/category/64/kimono-or-yukata/page=" to "Kimono Or Yukata",
-        "$mainUrl/category/11/mature-woman/page=" to "Mature Woman"
+        "$mainUrl/videos/paling-baru/page=" to "Latest Update",
+        "$mainUrl/videos/paling-dilihat/page=" to "Most Viewed",
+        "$mainUrl/videos/top-rating/page=" to "Top Rating"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
@@ -140,7 +51,10 @@ class JavHeyProvider : MainAPI() {
         val titleElement = element.selectFirst("div.item_content > h3 > a") ?: return null
         val title = titleElement.text().replace("JAV Subtitle Indonesia - ", "").trim()
         val href = fixUrl(titleElement.attr("href"))
-        val posterUrl = element.selectFirst("div.item_header > a > img")?.attr("src")
+        
+        val imgElement = element.selectFirst("div.item_header > a > img")
+        val posterUrl = imgElement?.attr("data-src")?.ifEmpty { imgElement.attr("src") }
+        
         return newMovieSearchResponse(title, href, TvType.NSFW) { this.posterUrl = posterUrl }
     }
 
@@ -157,7 +71,8 @@ class JavHeyProvider : MainAPI() {
         val rawTitle = document.selectFirst("article.post header.post_header h1")?.text()?.trim()
         val title = rawTitle?.replace("JAV Subtitle Indonesia - ", "") ?: "Unknown Title"
 
-        val poster = document.selectFirst("div.product div.images img")?.attr("src")
+        val imgElement = document.selectFirst("div.product div.images img")
+        val poster = imgElement?.attr("data-src")?.ifEmpty { imgElement.attr("src") }
             ?: document.selectFirst("meta[property=og:image]")?.attr("content")
 
         val description = document.selectFirst("p.video-description")?.text()?.replace("Description: ", "")?.trim()
@@ -176,7 +91,7 @@ class JavHeyProvider : MainAPI() {
             this.posterUrl = poster
             this.plot = description
             this.tags = tags
-            this.actors = actorNames.map { ActorData(Actor(it, null)) }
+            this.actors = actorNames.map { Actor(it, null) }
             this.year = year
             this.recommendations = recommendations
         }
@@ -193,7 +108,8 @@ class JavHeyProvider : MainAPI() {
 
         Regex("""id=["']links["'][^>]*value=["']([^"']+)["']""").findAll(html).forEach { match ->
             try {
-                val decoded = String(Base64.decode(match.groupValues[1], Base64.DEFAULT))
+                val decodedBytes = Base64.getDecoder().decode(match.groupValues[1])
+                val decoded = String(decodedBytes)
                 decoded.split(",,,").forEach { 
                     if (it.startsWith("http")) rawLinks.add(it.trim()) 
                 }
@@ -233,7 +149,7 @@ open class ByseSXLocal : ExtractorApi() {
                 3 -> "="
                 else -> ""
             }
-            Base64.decode(fixed + pad, Base64.DEFAULT)
+            Base64.getDecoder().decode(fixed + pad)
         } catch (e: Exception) { ByteArray(0) }
     }
 
