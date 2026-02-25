@@ -3,6 +3,7 @@ package com.javhey
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.nodes.Element
+import android.util.Base64
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -10,7 +11,6 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -51,10 +51,7 @@ class JavHeyProvider : MainAPI() {
         val titleElement = element.selectFirst("div.item_content > h3 > a") ?: return null
         val title = titleElement.text().replace("JAV Subtitle Indonesia - ", "").trim()
         val href = fixUrl(titleElement.attr("href"))
-        
-        val imgElement = element.selectFirst("div.item_header > a > img")
-        val posterUrl = imgElement?.attr("data-src")?.ifEmpty { imgElement.attr("src") }
-        
+        val posterUrl = element.selectFirst("div.item_header > a > img")?.attr("src")
         return newMovieSearchResponse(title, href, TvType.NSFW) { this.posterUrl = posterUrl }
     }
 
@@ -71,8 +68,7 @@ class JavHeyProvider : MainAPI() {
         val rawTitle = document.selectFirst("article.post header.post_header h1")?.text()?.trim()
         val title = rawTitle?.replace("JAV Subtitle Indonesia - ", "") ?: "Unknown Title"
 
-        val imgElement = document.selectFirst("div.product div.images img")
-        val poster = imgElement?.attr("data-src")?.ifEmpty { imgElement.attr("src") }
+        val poster = document.selectFirst("div.product div.images img")?.attr("src")
             ?: document.selectFirst("meta[property=og:image]")?.attr("content")
 
         val description = document.selectFirst("p.video-description")?.text()?.replace("Description: ", "")?.trim()
@@ -91,7 +87,7 @@ class JavHeyProvider : MainAPI() {
             this.posterUrl = poster
             this.plot = description
             this.tags = tags
-            this.actors = actorNames.map { Actor(it, null) }
+            this.actors = actorNames.map { ActorData(Actor(it, null)) }
             this.year = year
             this.recommendations = recommendations
         }
@@ -108,8 +104,7 @@ class JavHeyProvider : MainAPI() {
 
         Regex("""id=["']links["'][^>]*value=["']([^"']+)["']""").findAll(html).forEach { match ->
             try {
-                val decodedBytes = Base64.getDecoder().decode(match.groupValues[1])
-                val decoded = String(decodedBytes)
+                val decoded = String(Base64.decode(match.groupValues[1], Base64.DEFAULT))
                 decoded.split(",,,").forEach { 
                     if (it.startsWith("http")) rawLinks.add(it.trim()) 
                 }
@@ -149,7 +144,7 @@ open class ByseSXLocal : ExtractorApi() {
                 3 -> "="
                 else -> ""
             }
-            Base64.getDecoder().decode(fixed + pad)
+            Base64.decode(fixed + pad, Base64.DEFAULT)
         } catch (e: Exception) { ByteArray(0) }
     }
 
