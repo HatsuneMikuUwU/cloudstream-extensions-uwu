@@ -18,7 +18,7 @@ import org.jsoup.nodes.Element
 
 class OtakudesuProvider : MainAPI() {
     override var mainUrl = "https://otakudesu.best"
-    override var name = "Otakudesu"
+    override var name = "OtakuDesu"
     override val hasMainPage = true
     override var lang = "id"
     override val hasDownloadSupport = true

@@ -6,7 +6,7 @@ cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    description = "OtakuDesu — Anime Subtitle Indonesia"
+    description = "IndoMax21 — Streaming Anime, Donghua, Hentai, Porn, Movie and TV Series"
     authors = listOf("Miku")
 
     /**
@@ -18,10 +18,14 @@ cloudstream {
      * */
     status = 1 // will be 3 if unspecified
     tvTypes = listOf(
-        "AnimeMovie",
+        "Movie",
         "Anime",
-        "OVA",
+        "AnimeMovie",
+        "TvSeries",
+         "NSFW",
     )
 
-    iconUrl = "https://www.google.com/s2/favicons?domain=otakudesu.watch&sz=%size%"
+
+    iconUrl = "https://homecookingrocks.com/wp-content/uploads/2024/10/cropped-indomax21-favicon-color-1.png"
+
 }

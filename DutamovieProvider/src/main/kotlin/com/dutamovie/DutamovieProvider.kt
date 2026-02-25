@@ -11,7 +11,7 @@ import java.net.URI
 class DutamovieProvider : MainAPI() {
     override var mainUrl = "https://offshorebankservices.com"
 	private var directUrl: String? = null
-    override var name = "Dutamovie"
+    override var name = "DutaMovie"
     override val hasMainPage = true
     override var lang = "id"
     override val supportedTypes = setOf(
