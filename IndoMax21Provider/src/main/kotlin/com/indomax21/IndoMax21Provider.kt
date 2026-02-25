@@ -1,4 +1,4 @@
-package com.homecookingrocks
+package com.indomax21
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
@@ -9,19 +9,13 @@ import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-class HomecookingrocksProvider : MainAPI() {
+class IndoMax21Provider : MainAPI() {
     
     override var name = "IndoMax21"
     override var mainUrl = "https://homecookingrocks.com"
     override var lang = "id"
     override val hasMainPage = true
-    override val supportedTypes = setOf(
-        TvType.Anime,
-        TvType.AnimeMovie,
-        TvType.Movie,
-        TvType.TvSeries,
-        TvType.NSFW
-    )
+    override val supportedTypes = setOf(TvType.NSFW)
     
     override val mainPage = mainPageOf(
         "$mainUrl/category/anime/" to "Anime",
