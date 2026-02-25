@@ -12,8 +12,12 @@ import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.httpsify
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import java.util.Collections
 
 class WinbuProvider : MainAPI() {
     override var mainUrl = "https://winbu.net"
@@ -206,7 +210,9 @@ class WinbuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         var found = false
-        val seen = hashSetOf<String>()
+        
+        val seen = Collections.synchronizedSet(hashSetOf<String>())
+        
         val subtitleCb: (SubtitleFile) -> Unit = { subtitleCallback.invoke(it) }
         val linkCb: (ExtractorLink) -> Unit = {
             found = true
@@ -245,8 +251,6 @@ class WinbuProvider : MainAPI() {
             val fixed = httpsify(raw)
             if (!seen.add(fixed)) return
 
-            throwToExtractors(fixed, data)
-
             if (fixed.contains("filedon.co/embed/", true)) {
                 val (direct, fileName) = resolveFiledon(fixed)
                 if (!direct.isNullOrBlank()) {
@@ -259,52 +263,69 @@ class WinbuProvider : MainAPI() {
                 }
             }
 
-            throwToExtractors(fixed, "$mainUrl/")
+            throwToExtractors(fixed, data)
         }
 
-        for (frame in document.select(".movieplay .pframe iframe, .player-embed iframe, .movieplay iframe, #embed_holder iframe")) {
-            loadUrl(frame.getIframeAttr())
-        }
+        coroutineScope {
+            val mainIframes = document.select(".movieplay .pframe iframe, .player-embed iframe, .movieplay iframe, #embed_holder iframe")
+            mainIframes.map { frame -> 
+                async { loadUrl(frame.getIframeAttr()) } 
+            }.awaitAll()
 
-        val ajaxUrl = "$mainUrl/wp-admin/admin-ajax.php"
-        for (option in document.select(".east_player_option[data-post][data-nume][data-type]")) {
-            val post = option.attr("data-post").trim()
-            val nume = option.attr("data-nume").trim()
-            val type = option.attr("data-type").trim()
-            val server = option.text().trim().ifBlank { "Server $nume" }
-            if (post.isBlank() || nume.isBlank() || type.isBlank()) continue
+            val ajaxUrl = "$mainUrl/wp-admin/admin-ajax.php"
+            val options = document.select(".east_player_option[data-post][data-nume][data-type]")
+            
+            options.map { option ->
+                async {
+                    val post = option.attr("data-post").trim()
+                    val nume = option.attr("data-nume").trim()
+                    val type = option.attr("data-type").trim()
+                    val server = option.text().trim().ifBlank { "Server $nume" }
+                    if (post.isNotBlank() && nume.isNotBlank() && type.isNotBlank()) {
+                        runCatching {
+                            app.post(
+                                ajaxUrl,
+                                data = mapOf(
+                                    "action" to "player_ajax",
+                                    "post" to post,
+                                    "nume" to nume,
+                                    "type" to type
+                                ),
+                                headers = mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to data)
+                            ).text
+                        }.getOrNull()?.let { body ->
+                            val ajaxDoc = Jsoup.parse(body)
 
-            runCatching {
-                app.post(
-                    ajaxUrl,
-                    data = mapOf(
-                        "action" to "player_ajax",
-                        "post" to post,
-                        "nume" to nume,
-                        "type" to type
-                    ),
-                    headers = mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to data)
-                ).text
-            }.getOrNull()?.let { body ->
-                val ajaxDoc = Jsoup.parse(body)
-
-                for (frame in ajaxDoc.select("iframe")) {
-                    loadUrl(frame.getIframeAttr())
+                            coroutineScope {
+                                val iframesAjax = ajaxDoc.select("iframe")
+                                val sourcesAjax = ajaxDoc.select("video source[src]")
+                                val anchorsAjax = ajaxDoc.select("a[href]")
+                                
+                                val job1 = async {
+                                    iframesAjax.forEach { frame -> loadUrl(frame.getIframeAttr()) }
+                                }
+                                val job2 = async {
+                                    sourcesAjax.forEach { source -> 
+                                        addDirect(source.attr("src"), "$name $server", source.attr("size")) 
+                                    }
+                                }
+                                val job3 = async {
+                                    anchorsAjax.forEach { a ->
+                                        val href = a.attr("href")
+                                        if (href.startsWith("http", true)) loadUrl(href)
+                                    }
+                                }
+                                awaitAll(job1, job2, job3)
+                            }
+                        }
+                    }
                 }
+            }.awaitAll()
 
-                for (source in ajaxDoc.select("video source[src]")) {
-                    addDirect(source.attr("src"), "$name $server", source.attr("size"))
-                }
-
-                for (a in ajaxDoc.select("a[href]")) {
-                    val href = a.attr("href")
-                    if (href.startsWith("http", true)) loadUrl(href)
-                }
-            }
-        }
-
-        for (a in document.select(".download-eps a[href], #downloadb a[href], .boxdownload a[href], .dlbox a[href]")) {
-            loadUrl(a.attr("href"))
+            val downloadLinks = document.select(".download-eps a[href], #downloadb a[href], .boxdownload a[href], .dlbox a[href]")
+            downloadLinks.map { a -> 
+                async { loadUrl(a.attr("href")) } 
+            }.awaitAll()
         }
 
         return found
