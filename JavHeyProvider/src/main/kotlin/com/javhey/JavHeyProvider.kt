@@ -35,27 +35,10 @@ class JavHeyProvider : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/category/3/creampie/page=" to "Creampie",
-        "$mainUrl/category/50/beautiful-breasts/page=" to "Beautiful Breasts",
-        "$mainUrl/category/113/acme-orgasm/page=" to "Acme Orgasm",
-        "$mainUrl/category/192/abuse/page=" to "Abuse",
-        "$mainUrl/category/19/beautiful-girl/page=" to "Beautiful Girl",
-        "$mainUrl/category/80/beauty-treatment/page=" to "Beauty Treatment",
-        "$mainUrl/category/20/big-butt/page=" to "Big Butt",
-        "$mainUrl/category/34/big-cock-or-big-cock/page=" to "Big Cock",
-        "$mainUrl/category/1/big-tits/page=" to "Big Tits",
-        "$mainUrl/category/51/black-actor/page=" to "Black Actor",
-        "$mainUrl/category/33/blowjob/page=" to "Blowjob",
-        "$mainUrl/category/12/cuckold-or-ntr/page=" to "Cuckold/NTR",
-        "$mainUrl/category/95/cunnilingus/page=" to "Cunnilingus",
-        "$mainUrl/category/31/decensored/page=" to "Decensored",
-        "$mainUrl/category/21/drama/page=" to "Drama",
-        "$mainUrl/category/29/female-boss/page=" to "Female Boss",
-        "$mainUrl/category/87/hot-spring/page=" to "Hot Spring",
-        "$mainUrl/category/9/housewife/page=" to "Housewife",
-        "$mainUrl/category/223/ibu-rumah-tangga/page=" to "Housewife",
-        "$mainUrl/category/225/karya-tunggal/page=" to "Single Work",
-        "$mainUrl/category/11/mature-woman/page=" to "Mature Woman"
+        "$mainUrl/videos/paling-baru/page=" to "Latest Update",
+        "$mainUrl/videos/paling-dilihat/page=" to "Most Viewed",
+        "$mainUrl/videos/top-rating/page=" to "Top Rating",
+        "$mainUrl/videos/jav-sub-indo/page=" to "JAV Subtitle Indonesia",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {

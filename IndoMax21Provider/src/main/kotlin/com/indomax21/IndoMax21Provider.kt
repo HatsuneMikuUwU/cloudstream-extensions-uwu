@@ -27,8 +27,8 @@ class IndoMax21Provider : MainAPI() {
         "$mainUrl/category/jav/" to "JAV",
         "$mainUrl/category/kelas-bintang/" to "Porn Start",
         "$mainUrl/category/semi-barat/" to "Western",
-        "$mainUrl/category/bokep-indo/" to "Indonesian",
-        "$mainUrl/category/bokep-vietnam/" to "Vietnamese"
+        "$mainUrl/category/bokep-indo/" to "Indonesia",
+        "$mainUrl/category/bokep-vietnam/" to "Vietnam"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
