@@ -55,14 +55,14 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/category/hentai/" to "Hentai",
-        "$mainUrl/category/jav/" to "Jav",
-        "$mainUrl/category/3d-hentai/" to "3D Hentai",
-        "$mainUrl/category/jav-cosplay/" to "Jav Cosplay",
+        "$mainUrl/category/hentai/page/" to "Hentai",
+        "$mainUrl/category/jav/page/" to "Jav",
+        "$mainUrl/category/3d-hentai/page/" to "3D Hentai",
+        "$mainUrl/category/jav-cosplay/page/" to "Jav Cosplay",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = safeGet("${request.data}/page/$page").document
+        val document = safeGet(request.data + page).document
         val home = document.select("div.result ul li").mapNotNull { it.toSearchResult() }
         
         return newHomePageResponse(
