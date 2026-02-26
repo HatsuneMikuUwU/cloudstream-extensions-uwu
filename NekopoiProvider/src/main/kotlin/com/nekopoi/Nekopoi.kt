@@ -1,11 +1,9 @@
 package com.nekopoi
 
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.nicehttp.NiceResponse
-import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.Session
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -17,44 +15,18 @@ class Nekopoi : MainAPI() {
     override var name = "NekoPoi"
     override val hasMainPage = true
     override var lang = "id"
-    private val fetch by lazy { Session(app.baseClient) }
     override val vpnStatus = VPNStatus.MightBeNeeded
-    override val supportedTypes = setOf(
-        TvType.NSFW,
-    )
+    override val supportedTypes = setOf(TvType.NSFW)
 
-    companion object {
-        val session = Session(Requests().baseClient)
-        val mirrorBlackList = arrayOf(
-            "MegaupNet",
-            "DropApk",
-            "Racaty",
-            "VideobinCo",
-            "DropApk",
-            "SendCm",
-            "GoogleDrive",
-        )
-        const val mirroredHost = "https://www.mirrored.to"
-
-        fun getStatus(t: String?): ShowStatus {
-            return when (t) {
-                "Completed" -> ShowStatus.Completed
-                "Ongoing" -> ShowStatus.Ongoing
-                else -> ShowStatus.Completed
-            }
-        }
-
-    }
-    
     private val cfKiller = CloudflareKiller()
-    
-    private suspend fun request(url: String, ref: String? = null): NiceResponse {
+
+    private suspend fun safeGet(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Referer" to "$mainUrl/",
+                "Referer" to (ref ?: "$mainUrl/"),
                 "Connection" to "keep-alive",
                 "Sec-Ch-Ua" to "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
                 "Sec-Ch-Ua-Mobile" to "?1",
@@ -65,11 +37,22 @@ class Nekopoi : MainAPI() {
             cookies = mapOf(
                 "sl-challenge-server" to "cloud",
                 "sl-session" to "AQc7Fk4Lomm4LP/ZOhGYAQ==",
-                "sl_jwt_session" to "0jemItSR5f80tPddXCS80Ymv8q3t1oSG+MB4aEp7azV1ZEFQG8mHwfToox2bjmda"
+                "sl_jwt_session" to "0jemItSR5f80tPddXCS80Ymv8q3t1oSG+MB4aEp7azV1ZEFQG8mHwfToox2bjmda",
+                "sl_jwt_sign" to ""
             ),
-            referer = ref,
             interceptor = cfKiller
         )
+    }
+
+    companion object {
+        val mirrorBlackList = arrayOf("MegaupNet", "DropApk", "Racaty", "VideobinCo", "SendCm", "GoogleDrive")
+        const val mirroredHost = "https://www.mirrored.to"
+
+        fun getStatus(t: String?): ShowStatus = when (t) {
+            "Completed" -> ShowStatus.Completed
+            "Ongoing" -> ShowStatus.Ongoing
+            else -> ShowStatus.Completed
+        }
     }
 
     override val mainPage = mainPageOf(
@@ -79,87 +62,63 @@ class Nekopoi : MainAPI() {
         "$mainUrl/category/jav-cosplay/" to "Jav Cosplay",
     )
 
-    override suspend fun getMainPage(
-        page: Int,
-        request: MainPageRequest
-    ): HomePageResponse {
-        val document = fetch.get("${request.data}/page/$page").document
-        val home = document.select("div.result ul li").mapNotNull {
-            it.toSearchResult()
-        }
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val document = safeGet("${request.data}/page/$page").document
+        val home = document.select("div.result ul li").mapNotNull { it.toSearchResult() }
+        
         return newHomePageResponse(
-            list = HomePageList(
-                name = request.name,
-                list = home,
-                isHorizontalImages = true
-            ),
+            list = HomePageList(name = request.name, list = home, isHorizontalImages = true),
             hasNext = true
         )
     }
 
-    private fun getProperAnimeLink(uri: String): String {
-        return if (uri.contains("-episode-")) {
-            val title = uri.substringAfter("$mainUrl/").substringBefore("-episode-")
-                .removePrefix("new-release-").removePrefix("uncensored-")
-            "$mainUrl/hentai/$title"
-        } else {
-            uri
-        }
-    }
-
     private fun Element.toSearchResult(): AnimeSearchResponse? {
         val title = this.selectFirst("h2 a")?.text()?.trim() ?: return null
-        val href = getProperAnimeLink(this.selectFirst("a")?.attr("href") ?: return null)
+        val rawHref = this.selectFirst("a")?.attr("href") ?: return null
+        val href = if (rawHref.contains("-episode-")) {
+            val slug = rawHref.substringAfter("$mainUrl/").substringBefore("-episode-")
+                .removePrefix("new-release-").removePrefix("uncensored-")
+            "$mainUrl/hentai/$slug"
+        } else rawHref
+
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
         val epNum = this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }?.toIntOrNull()
+
         return newAnimeSearchResponse(title, href, TvType.NSFW) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        return fetch.get("$mainUrl/search/$query").document.select("div.result ul li")
-            .mapNotNull {
-                it.toSearchResult()
-            }
+        return safeGet("$mainUrl/search/$query").document.select("div.result ul li")
+            .mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = fetch.get(url).document
+        val document = safeGet(url).document
 
         val title = document.selectFirst("span.desc b, div.eroinfo h1")?.text()?.trim() ?: ""
         val poster = fixUrlNull(document.selectFirst("div.imgdesc img, div.thm img")?.attr("src"))
-        val table = document.select("div.listinfo ul, div.konten")
-        val tags =
-            table.select("li:contains(Genres) a").map { it.text() }.takeIf { it.isNotEmpty() }
-                ?: table.select("p:contains(Genre)").text().substringAfter(":").split(",")
-                    .map { it.trim() }
-        val year =
-            document.selectFirst("li:contains(Tayang)")?.text()?.substringAfterLast(",")
-                ?.filter { it.isDigit() }?.toIntOrNull()
-        val status = getStatus(
-            document.selectFirst("li:contains(Status)")?.text()?.substringAfter(":")?.trim()
-        )
-        val duration = document.selectFirst("li:contains(Durasi)")?.text()?.substringAfterLast(":")
-            ?.filter { it.isDigit() }?.toIntOrNull()
-        val description = document.selectFirst("span.desc p")?.text()
+        val tags = document.select("div.listinfo ul li:contains(Genres) a").map { it.text() }
+            .takeIf { it.isNotEmpty() } ?: document.select("p:contains(Genre)").text()
+            .substringAfter(":").split(",").map { it.trim() }
 
+        val year = document.selectFirst("li:contains(Tayang)")?.text()?.substringAfterLast(",")
+            ?.filter { it.isDigit() }?.toIntOrNull()
+        
         val episodes = document.select("div.episodelist ul li").mapNotNull {
             val name = it.selectFirst("a")?.text()
             val link = fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
             newEpisode(link) { this.name = name }
-        }.takeIf { it.isNotEmpty() } ?: listOf(newEpisode(url) { this.name = title })
+        }.reversed().takeIf { it.isNotEmpty() } ?: listOf(newEpisode(url) { this.name = title })
 
         return newAnimeLoadResponse(title, url, TvType.NSFW) {
-            engName = title
             posterUrl = poster
             this.year = year
-            this.duration = duration
             addEpisodes(DubStatus.Subbed, episodes)
-            showStatus = status
-            plot = description
+            showStatus = getStatus(document.selectFirst("li:contains(Status)")?.text()?.substringAfter(":"))
+            plot = document.selectFirst("span.desc p")?.text()
             this.tags = tags
         }
     }
@@ -170,156 +129,91 @@ class Nekopoi : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        val res = safeGet(data).document
 
-        val res = fetch.get(data).document
+        res.select("div#show-stream iframe, div.embed-player iframe").forEach { iframe ->
+            loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
+        }
 
-        runAllAsync(
-            {
-                res.select("div#show-stream iframe").amap { iframe ->
-                    loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
-                }
-            },
-            {
-                res.select("div.boxdownload div.liner").map { ele ->
-                    getIndexQuality(
-                        ele.select("div.name").text()
-                    ) to ele.selectFirst("a:contains(ouo)")
-                        ?.attr("href")
-                }.filter { it.first != Qualities.P360.value }.map {
-                    val bypassedAds = bypassMirrored(bypassOuo(it.second))
-                    bypassedAds.amap(ads@{ adsLink ->
-                                        loadExtractor(
-                                            fixEmbed(adsLink) ?: return@ads,
-                                            "$mainUrl/",
-                                            subtitleCallback,
-                                        ) { link ->
-                                            runBlocking {
-                                                callback.invoke(
-                                                    newExtractorLink(
-                                                        link.name,
-                                                        link.name,
-                                                        link.url,
-                                                        link.type
-                                                    ) {
-                                                        referer = link.referer
-                                                        quality =
-                                                            if (link.type == ExtractorLinkType.M3U8) link.quality else it.first
-                                                        headers = link.headers
-                                                        extractorData = link.extractorData
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    })
+        res.select("div.boxdownload div.liner").forEach { ele ->
+            val quality = getIndexQuality(ele.select("div.name").text())
+            val downloadUrl = ele.selectFirst("a[href*=/ouo/], a[href*=ouo.io]")?.attr("href") 
+                ?: ele.selectFirst("a")?.attr("href")
+
+            if (downloadUrl != null) {
+                val bypassedOuo = bypassOuo(downloadUrl)
+                if (bypassedOuo != null) {
+                    bypassMirrored(bypassedOuo).forEach { link ->
+                        if (!link.isNullOrBlank()) {
+                            loadExtractor(link, "$mainUrl/", subtitleCallback) { extracted ->
+                                runBlocking {
+                                    callback.invoke(
+                                        newExtractorLink(
+                                            extracted.name,
+                                            extracted.name,
+                                            extracted.url,
+                                            extracted.referer,
+                                            if (extracted.type == ExtractorLinkType.M3U8) extracted.quality else quality,
+                                            extracted.type,
+                                            extracted.headers,
+                                            extracted.extractorData
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        )
-
+        }
         return true
     }
 
-    private fun fixEmbed(url: String?): String? {
-        if (url == null) return null
-        val host = getBaseUrl(url)
-        return when {
-            url.contains("streamsb", true) -> url.replace("$host/", "$host/e/")
-            else -> url
-        }
-    }
-
-    private fun getBaseUrl(url: String): String {
-        return URI(url).let {
-            "${it.scheme}://${it.host}"
-        }
-    }
-
     private suspend fun bypassOuo(url: String?): String? {
-        var res = session.get(url ?: return null)
-        run lit@{
-            (1..2).forEach { _ ->
-                if (res.headers["location"] != null) return@lit
-                val document = res.document
-                val nextUrl = document.select("form").attr("action")
-                val data = document.select("form input").mapNotNull {
-                    it.attr("name") to it.attr("value")
-                }.toMap().toMutableMap()
-                val captchaKey =
-                    document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
-                        .attr("src").substringAfter("render=")
-                val token = APIHolder.getCaptchaToken(url, captchaKey)
-                data["x-token"] = token ?: ""
-                res = session.post(
-                    nextUrl,
-                    data = data,
-                    headers = mapOf("content-type" to "application/x-www-form-urlencoded"),
-                    allowRedirects = false
-                )
-            }
-        }
+        if (url == null) return null
+        val res = app.get(url, interceptor = cfKiller)
+        val doc = res.document
+        val nextUrl = doc.select("form").attr("action")
+        if (nextUrl.isNullOrBlank()) return url
 
-        return res.headers["location"]
-    }
-
-    private fun NiceResponse.selectMirror(): String? {
-        return this.document.selectFirst("script:containsData(#passcheck)")?.data()
-            ?.substringAfter("\"GET\", \"")?.substringBefore("\"")
+        val data = doc.select("form input").associate { 
+            it.attr("name") to it.attr("value") 
+        }.toMutableMap()
+        
+        delay(2500)
+        
+        val postRes = app.post(
+            nextUrl,
+            data = data,
+            headers = mapOf("Content-Type" to "application/x-www-form-urlencoded"),
+            allowRedirects = false,
+            interceptor = cfKiller
+        )
+        return postRes.headers["location"] ?: url
     }
 
     private suspend fun bypassMirrored(url: String?): List<String?> {
-        val request = session.get(url ?: return emptyList())
-        delay(2000)
-        val mirrorUrl = request.selectMirror() ?: run {
-            val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
-            app.get(nextUrl).selectMirror()
-        }
-        return session.get(
-                fixUrl(
-                    mirrorUrl ?: return emptyList(),
-                    mirroredHost
-                )
-            ).document.select("table.hoverable tbody tr")
-                .filter { mirror ->
-                    !mirrorIsBlackList(mirror.selectFirst("img")?.attr("alt"))
-                }.amap {
-                val fileLink = it.selectFirst("a")?.attr("href")
-                session.get(
-                    fixUrl(
-                        fileLink ?: return@amap null,
-                        mirroredHost
-                    )
-                ).document.selectFirst("div.code_wrap code")?.text()
+        if (url == null || !url.contains("mirrored.to")) return listOf(url)
+        
+        val request = app.get(url, interceptor = cfKiller)
+        val mirrorPath = request.document.selectFirst("script:containsData(#passcheck)")?.data()
+            ?.substringAfter("\"GET\", \"")?.substringBefore("\"") ?: return emptyList()
+        
+        val apiRes = app.get(fixUrl(mirrorPath, mirroredHost), interceptor = cfKiller).document
+        
+        return apiRes.select("table.hoverable tbody tr")
+            .filter { !mirrorIsBlackList(it.selectFirst("img")?.attr("alt")) }
+            .map {
+                val directId = it.selectFirst("a")?.attr("href") ?: ""
+                app.get(fixUrl(directId, mirroredHost), interceptor = cfKiller)
+                    .document.selectFirst("div.code_wrap code")?.text()
             }
     }
 
-    private fun mirrorIsBlackList(host: String?): Boolean {
-        return mirrorBlackList.any { it.equals(host, true) }
-    }
-
-    private fun fixUrl(url: String, domain: String): String {
-        if (url.startsWith("http")) {
-            return url
-        }
-        if (url.isEmpty()) {
-            return ""
-        }
-
-        val startsWithNoHttp = url.startsWith("//")
-        if (startsWithNoHttp) {
-            return "https:$url"
-        } else {
-            if (url.startsWith('/')) {
-                return domain + url
-            }
-            return "$domain/$url"
-        }
-    }
+    private fun mirrorIsBlackList(host: String?): Boolean = mirrorBlackList.any { it.equals(host, true) }
 
     private fun getIndexQuality(str: String?): Int {
-        return when (val quality =
-            Regex("""(?i)\[(\d+[pk])]""").find(str ?: "")?.groupValues?.getOrNull(1)?.lowercase()) {
-            "2k" -> Qualities.P1440.value
-            else -> getQualityFromName(quality)
-        }
+        val qual = Regex("""(\d{3,4})p""").find(str ?: "")?.groupValues?.getOrNull(1)
+        return getQualityFromName(qual)
     }
-
 }
