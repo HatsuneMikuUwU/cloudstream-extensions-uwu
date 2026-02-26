@@ -4,10 +4,9 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.nicehttp.NiceResponse
-import com.lagradost.nicehttp.Session
+import org.jsoup.nodes.Element
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import org.jsoup.nodes.Element
 import java.net.URI
 
 class Nekopoi : MainAPI() {
@@ -149,15 +148,16 @@ class Nekopoi : MainAPI() {
                                 runBlocking {
                                     callback.invoke(
                                         newExtractorLink(
-                                            extracted.name,
-                                            extracted.name,
-                                            extracted.url,
-                                            extracted.referer,
-                                            if (extracted.type == ExtractorLinkType.M3U8) extracted.quality else quality,
-                                            extracted.type,
-                                            extracted.headers,
-                                            extracted.extractorData
-                                        )
+                                            source = extracted.name,
+                                            name = extracted.name,
+                                            url = extracted.url,
+                                            type = extracted.type
+                                        ) {
+                                            this.referer = extracted.referer
+                                            this.quality = if (extracted.type == ExtractorLinkType.M3U8) extracted.quality else quality
+                                            this.headers = extracted.headers
+                                            this.extractorData = extracted.extractorData
+                                        }
                                     )
                                 }
                             }
@@ -199,13 +199,17 @@ class Nekopoi : MainAPI() {
         val mirrorPath = request.document.selectFirst("script:containsData(#passcheck)")?.data()
             ?.substringAfter("\"GET\", \"")?.substringBefore("\"") ?: return emptyList()
         
-        val apiRes = app.get(fixUrl(mirrorPath, mirroredHost), interceptor = cfKiller).document
+        val resolvedMirrorPath = URI(mirroredHost).resolve(mirrorPath).toString()
+        val apiRes = app.get(resolvedMirrorPath, interceptor = cfKiller).document
         
         return apiRes.select("table.hoverable tbody tr")
             .filter { !mirrorIsBlackList(it.selectFirst("img")?.attr("alt")) }
             .map {
                 val directId = it.selectFirst("a")?.attr("href") ?: ""
-                app.get(fixUrl(directId, mirroredHost), interceptor = cfKiller)
+                
+                val resolvedDirectId = URI(mirroredHost).resolve(directId).toString()
+                
+                app.get(resolvedDirectId, interceptor = cfKiller)
                     .document.selectFirst("div.code_wrap code")?.text()
             }
     }
