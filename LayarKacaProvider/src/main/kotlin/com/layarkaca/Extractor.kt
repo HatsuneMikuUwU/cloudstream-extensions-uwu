@@ -57,7 +57,7 @@ open class EmturbovidExtractor : ExtractorApi() {
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.referer = finalReferer
-                    this.quality = Qualities.P1080.value // Memaksa ke HD jika manifest mendukung multi-kualitas
+                    this.quality = Qualities.P1080.value
                     this.headers = headers
                 })
             }
@@ -101,7 +101,7 @@ open class P2PExtractor : ExtractorApi() {
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.referer = mainUrl
-                    this.quality = getHighQuality(json.label)
+                    this.quality = getHighQuality(json?.label)
                 })
             }
         } catch (e: Exception) { e.printStackTrace() }
@@ -162,7 +162,7 @@ open class F16Extractor : ExtractorApi() {
             val json = tryParseJson<F16Playback>(responseText)
             val pb = json?.playback
 
-            if (pb?.payload != null && pb.iv != null && pb.key_parts?.size == 2) {
+            if (pb != null && pb.payload != null && pb.iv != null && pb.key_parts != null && pb.key_parts.size == 2) {
                 val part1 = Base64.decode(pb.key_parts[0].fixBase64(), Base64.URL_SAFE)
                 val part2 = Base64.decode(pb.key_parts[1].fixBase64(), Base64.URL_SAFE)
                 val combinedKey = part1 + part2 
