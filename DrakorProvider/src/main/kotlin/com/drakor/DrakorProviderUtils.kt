@@ -1,7 +1,7 @@
 package com.drakor
 
 import android.util.Base64
-import com.AdiDrakor.AdiDrakor.Companion.anilistAPI
+import com.drakor.DrakorProvider.Companion.anilistAPI
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.APIHolder.unixTimeMS
 import com.lagradost.cloudstream3.mvvm.logError

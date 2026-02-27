@@ -24,6 +24,6 @@ cloudstream {
     )
 
 
-    iconUrl = "https://i0.wp.com/blokmsquare.co.id/wp-content/uploads/2020/01/Cinema-21-Blok-M-Square.png?fit=626%2C626&ssl=1"
+    iconUrl = "https://klikxxi.me/wp-content/uploads/2024/02/cropped-site-icon.png"
 
 }
