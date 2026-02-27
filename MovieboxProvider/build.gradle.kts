@@ -2,7 +2,7 @@ version = 1
 
 cloudstream {
     language = "id"
-    description = "MovieBox — Movie Subtitle Indonesia"
+    description = "MovieBox — Streaming Movie Subtitle Indonesia"
     authors = listOf("Miku")
 	isCrossPlatform = true
     status = 1
