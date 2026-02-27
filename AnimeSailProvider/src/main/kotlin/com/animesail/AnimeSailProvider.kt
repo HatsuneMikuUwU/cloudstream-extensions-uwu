@@ -13,9 +13,7 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
-import com.lagradost.nicehttp.Requests
 import kotlinx.coroutines.runBlocking
-import okhttp3.Interceptor
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -48,58 +46,31 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    private val cfKiller = CloudflareKiller()
-
-    private val animeSailInterceptor = Interceptor { chain ->
-        val request = chain.request()
-        val response = chain.proceed(request)
-
-        if (response.isSuccessful) {
-            val bodyString = response.peekBody(5000).string()
-            
-            val isChallenge = bodyString.contains("challenges.cloudflare.com") ||
-                    bodyString.contains("cf-turnstile") ||
-                    bodyString.contains("_as_turnstile") ||
-                    bodyString.contains("Just a moment...")
-
-            if (isChallenge) {
-                return@Interceptor response.newBuilder()
-                    .code(403)
-                    .message("Forced 403 - Turnstile Detected")
-                    .build()
-            }
-        }
-        response
-    }
-
-    private val customClient by lazy {
-        app.baseClient.newBuilder()
-            .addInterceptor(cfKiller)
-            .addInterceptor(animeSailInterceptor)
-            .build()
-    }
-
-    private val customApp by lazy {
-        Requests(customClient)
-    }
-
-    private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        return customApp.get(
+    private suspend fun cfKiller(url: String, ref: String? = null): NiceResponse {
+        var response = app.get(
             url,
             headers = mapOf(
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer" to (ref ?: "$mainUrl/"),
                 "Upgrade-Insecure-Requests" to "1"
-            ),
-            cookies = mapOf(
-                "_as_ipin_ct" to "ID",
-                "_as_ipin_lc" to "id",
-                "_as_ipin_tz" to "Asia/Jakarta",
-                "_popprepop" to "1",
-                "usertype" to "guest"
-            ),
-            referer = ref ?: "$mainUrl/"
+            )
         )
+        
+        val title = response.document.select("title").text()
+        if (title.contains("Just a moment", true) || title.contains("Cloudflare", true)) {
+            response = app.get(
+                url,
+                headers = mapOf(
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Referer" to (ref ?: "$mainUrl/"),
+                    "Upgrade-Insecure-Requests" to "1"
+                ),
+                interceptor = CloudflareKiller()
+            )
+        }
+        return response
     }
 
     override val mainPage = mainPageOf(
@@ -109,7 +80,7 @@ class AnimeSailProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = this.request(request.data + page).document
+        val document = cfKiller(request.data + page).document
         val home = document.select("article").map {
             it.toSearchResult()
         }
@@ -145,11 +116,12 @@ class AnimeSailProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
+
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val link = "$mainUrl/?s=$query"
-        val document = request(link).document
+        val document = cfKiller(link).document
 
         return document.select("div.listupd article").map {
             it.toSearchResult()
@@ -157,7 +129,7 @@ class AnimeSailProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = request(url).document
+        val document = cfKiller(url).document
 
         val title = document.selectFirst("h1.entry-title")?.text().toString()
             .replace("Subtitle Indonesia", "").trim()
@@ -196,8 +168,7 @@ class AnimeSailProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-
-        val document = request(data).document
+        val document = cfKiller(data).document
 
         document.select(".mobius > .mirror > option").amap {
             safeApiCall {
@@ -206,7 +177,7 @@ class AnimeSailProvider : MainAPI() {
                 )
                 val quality = getIndexQuality(it.text())
                 when {
-                    iframe.startsWith("$mainUrl/utils/player/kodir2") -> request(
+                    iframe.startsWith("$mainUrl/utils/player/kodir2") -> cfKiller(
                         iframe,
                         ref = data
                     ).text.substringAfter("= `").substringBefore("`;")
@@ -228,7 +199,7 @@ class AnimeSailProvider : MainAPI() {
                     iframe.startsWith("$mainUrl/utils/player/arch/") || iframe.startsWith("$mainUrl/utils/player/race/") || iframe.startsWith(
                         "$mainUrl/utils/player/hexupload/"
                     ) || iframe.startsWith("$mainUrl/utils/player/pomf/")
-                    -> request(iframe, ref = data).document.select("source").attr("src")
+                    -> cfKiller(iframe, ref = data).document.select("source").attr("src")
                         .let { link ->
                             val source =
                                 when {
@@ -250,7 +221,6 @@ class AnimeSailProvider : MainAPI() {
                                 }
                             )
                         }
-
                     iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
                         val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
                             iframe.substringAfter("id=").substringBefore("&token")
@@ -259,7 +229,7 @@ class AnimeSailProvider : MainAPI() {
                     }
 
                     iframe.startsWith("$mainUrl/utils/player/framezilla/") || iframe.startsWith("https://uservideo.xyz") -> {
-                        request(iframe, ref = data).document.select("iframe").attr("src")
+                        cfKiller(iframe, ref = data).document.select("iframe").attr("src")
                             .let { link ->
                                 loadFixedExtractor(
                                     fixUrl(link),
