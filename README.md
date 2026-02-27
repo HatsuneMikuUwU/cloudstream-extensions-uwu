@@ -33,7 +33,7 @@ If you don't have it, download it [HERE](https://github.com/recloudstream/clouds
 3. Tap on **"Add Repository"**.
 4. Enter the Hatsune repository URL:
 ```text
-[https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/repo.json](https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/repo.json)
+https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/repo.json
 ```
 5. Tap **"Add"**.
 6. The available extensions will appear in the list.  
