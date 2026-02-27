@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import com.lagradost.nicehttp.Requests
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import org.jsoup.Jsoup
@@ -55,8 +56,10 @@ class AnimeSailProvider : MainAPI() {
 
         if (response.isSuccessful) {
             val bodyString = response.peekBody(5000).string()
+            
             val isChallenge = bodyString.contains("challenges.cloudflare.com") ||
                     bodyString.contains("cf-turnstile") ||
+                    bodyString.contains("_as_turnstile") ||
                     bodyString.contains("Just a moment...")
 
             if (isChallenge) {
@@ -76,8 +79,12 @@ class AnimeSailProvider : MainAPI() {
             .build()
     }
 
+    private val customApp by lazy {
+        Requests(customClient)
+    }
+
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        return app.clone(customClient).get(
+        return customApp.get(
             url,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -102,7 +109,7 @@ class AnimeSailProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = request(request.data + page).document
+        val document = this.request(request.data + page).document
         val home = document.select("article").map {
             it.toSearchResult()
         }
