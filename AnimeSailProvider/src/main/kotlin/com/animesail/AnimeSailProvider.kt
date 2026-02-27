@@ -46,39 +46,26 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    private suspend fun cfKiller(url: String, ref: String? = null): NiceResponse {
-        var response = app.get(
+    private val cfKiller = CloudflareKiller()
+    
+    private val cookieStore = mutableMapOf<String, String>()
+
+    private suspend fun request(url: String, ref: String? = null): NiceResponse {
+        val res = app.get(
             url,
             headers = mapOf(
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept" to "*/*",
+                "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8",
                 "Referer" to (ref ?: "$mainUrl/"),
-                "Upgrade-Insecure-Requests" to "1"
-            )
+                "User-Agent" to USER_AGENT
+            ),
+            cookies = cookieStore,
+            referer = ref,
+            interceptor = cfKiller
         )
-        
-        val document = response.document
-        val title = document.select("title").text()
-        
-        val isBlocked = response.code != 200 || 
-                        title.contains("Just a moment", true) || 
-                        title.contains("Cloudflare", true) ||
-                        response.text.contains("turnstile", true)
 
-        if (isBlocked) {
-            response = app.get(
-                url,
-                headers = mapOf(
-                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                    "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Referer" to (ref ?: "$mainUrl/"),
-                    "Upgrade-Insecure-Requests" to "1"
-                ),
-                interceptor = CloudflareKiller()
-            )
-        }
-        
-        return response
+        cookieStore.putAll(res.cookies)
+        return res
     }
 
     override val mainPage = mainPageOf(
@@ -88,7 +75,7 @@ class AnimeSailProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = cfKiller(request.data + page).document
+        val document = request(request.data + page).document
         val home = document.select("article").map {
             it.toSearchResult()
         }
@@ -124,11 +111,12 @@ class AnimeSailProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
+
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val link = "$mainUrl/?s=$query"
-        val document = cfKiller(link).document
+        val document = request(link).document
 
         return document.select("div.listupd article").map {
             it.toSearchResult()
@@ -136,7 +124,7 @@ class AnimeSailProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = cfKiller(url).document
+        val document = request(url).document
 
         val title = document.selectFirst("h1.entry-title")?.text().toString()
             .replace("Subtitle Indonesia", "").trim()
@@ -176,7 +164,7 @@ class AnimeSailProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
 
-        val document = cfKiller(data).document
+        val document = request(data).document
 
         document.select(".mobius > .mirror > option").amap {
             safeApiCall {
@@ -185,7 +173,7 @@ class AnimeSailProvider : MainAPI() {
                 )
                 val quality = getIndexQuality(it.text())
                 when {
-                    iframe.startsWith("$mainUrl/utils/player/kodir2") -> cfKiller(
+                    iframe.startsWith("$mainUrl/utils/player/kodir2") -> request(
                         iframe,
                         ref = data
                     ).text.substringAfter("= `").substringBefore("`;")
@@ -207,7 +195,7 @@ class AnimeSailProvider : MainAPI() {
                     iframe.startsWith("$mainUrl/utils/player/arch/") || iframe.startsWith("$mainUrl/utils/player/race/") || iframe.startsWith(
                         "$mainUrl/utils/player/hexupload/"
                     ) || iframe.startsWith("$mainUrl/utils/player/pomf/")
-                    -> cfKiller(iframe, ref = data).document.select("source").attr("src")
+                    -> request(iframe, ref = data).document.select("source").attr("src")
                         .let { link ->
                             val source =
                                 when {
@@ -229,6 +217,9 @@ class AnimeSailProvider : MainAPI() {
                                 }
                             )
                         }
+                    //                    skip for now
+                    //                    iframe.startsWith("$mainUrl/utils/player/fichan/") -> ""
+                    //                    iframe.startsWith("$mainUrl/utils/player/blogger/") -> ""
                     iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
                         val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
                             iframe.substringAfter("id=").substringBefore("&token")
@@ -237,7 +228,7 @@ class AnimeSailProvider : MainAPI() {
                     }
 
                     iframe.startsWith("$mainUrl/utils/player/framezilla/") || iframe.startsWith("https://uservideo.xyz") -> {
-                        cfKiller(iframe, ref = data).document.select("iframe").attr("src")
+                        request(iframe, ref = data).document.select("iframe").attr("src")
                             .let { link ->
                                 loadFixedExtractor(
                                     fixUrl(link),
