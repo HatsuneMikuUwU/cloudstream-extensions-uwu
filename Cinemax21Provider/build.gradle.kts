@@ -6,7 +6,7 @@ cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    // description = "Lorem Ipsum"
+    description = "CineMax21 — Streaming Movie and TV Series"
     authors = listOf("Miku")
 
     /**
@@ -24,6 +24,6 @@ cloudstream {
     )
 
 
-    // iconUrl = ""
+    iconUrl = "https://i0.wp.com/blokmsquare.co.id/wp-content/uploads/2020/01/Cinema-21-Blok-M-Square.png?fit=626%2C626&ssl=1"
 
 }

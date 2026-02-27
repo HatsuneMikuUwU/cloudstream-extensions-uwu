@@ -1,7 +1,7 @@
 package com.cinemax21
 
 import android.util.Base64
-import com.cinemax21.Cinemax21.Companion.anilistAPI
+import com.cinemax21.Cinemax21Provider.Companion.anilistAPI
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.APIHolder.unixTimeMS
 import com.lagradost.cloudstream3.mvvm.logError

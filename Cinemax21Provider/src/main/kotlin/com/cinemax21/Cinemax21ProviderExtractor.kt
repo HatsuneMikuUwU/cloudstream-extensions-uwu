@@ -21,16 +21,16 @@ import org.jsoup.nodes.Document
 import java.net.URLEncoder
 import org.json.JSONObject 
 import java.net.URLDecoder
-import com.cinemax21.Cinemax21.Companion.cinemaOSApi
-import com.cinemax21.Cinemax21.Companion.Player4uApi
-import com.cinemax21.Cinemax21.Companion.idlixAPI
-import com.cinemax21.Cinemax21.Companion.RiveStreamAPI
+import com.cinemax21.Cinemax21Provider.Companion.cinemaOSApi
+import com.cinemax21.Cinemax21Provider.Companion.Player4uApi
+import com.cinemax21.Cinemax21Provider.Companion.idlixAPI
+import com.cinemax21.Cinemax21Provider.Companion.RiveStreamAPI
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import java.security.MessageDigest
 import android.net.Uri
 
-object Cinemax21Extractor : Cinemax21() {
+object Cinemax21ProviderExtractor : Cinemax21Provider() {
 
     suspend fun invokeIdlix(
         title: String? = null,
@@ -255,7 +255,7 @@ object Cinemax21Extractor : Cinemax21() {
     suspend fun invokeGomovies(
         title: String? = null, year: Int? = null, season: Int? = null, episode: Int? = null, callback: (ExtractorLink) -> Unit,
     ) {
-        invokeGpress(title, year, season, episode, callback, Cinemax21.gomoviesAPI, "Gomovies", base64Decode("X3NtUWFtQlFzRVRi"), base64Decode("X3NCV2NxYlRCTWFU"))
+        invokeGpress(title, year, season, episode, callback, Cinemax21Provider.gomoviesAPI, "Gomovies", base64Decode("X3NtUWFtQlFzRVRi"), base64Decode("X3NCV2NxYlRCTWFU"))
     }
     private suspend fun invokeGpress(
         title: String? = null, year: Int? = null, season: Int? = null, episode: Int? = null,
@@ -294,27 +294,27 @@ object Cinemax21Extractor : Cinemax21() {
         tmdbId: Int?, imdbId: String?, season: Int?, episode: Int?,
         subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit,
     ) {
-        val url = if (season == null) "${Cinemax21.vidsrcccAPI}/v2/embed/movie/$tmdbId" else "${Cinemax21.vidsrcccAPI}/v2/embed/tv/$tmdbId/$season/$episode"
+        val url = if (season == null) "${Cinemax21Provider.vidsrcccAPI}/v2/embed/movie/$tmdbId" else "${Cinemax21Provider.vidsrcccAPI}/v2/embed/tv/$tmdbId/$season/$episode"
         val script = app.get(url).document.selectFirst("script:containsData(userId)")?.data() ?: return
         val userId = script.substringAfter("userId = \"").substringBefore("\";")
         val v = script.substringAfter("v = \"").substringBefore("\";")
         val vrf = VidsrcHelper.encryptAesCbc("$tmdbId", "secret_$userId")
-        val serverUrl = if (season == null) "${Cinemax21.vidsrcccAPI}/api/$tmdbId/servers?id=$tmdbId&type=movie&v=$v&vrf=$vrf&imdbId=$imdbId" else "${Cinemax21.vidsrcccAPI}/api/$tmdbId/servers?id=$tmdbId&type=tv&v=$v&vrf=$vrf&imdbId=$imdbId&season=$season&episode=$episode"
+        val serverUrl = if (season == null) "${Cinemax21Provider.vidsrcccAPI}/api/$tmdbId/servers?id=$tmdbId&type=movie&v=$v&vrf=$vrf&imdbId=$imdbId" else "${Cinemax21Provider.vidsrcccAPI}/api/$tmdbId/servers?id=$tmdbId&type=tv&v=$v&vrf=$vrf&imdbId=$imdbId&season=$season&episode=$episode"
         app.get(serverUrl).parsedSafe<VidsrcccResponse>()?.data?.amap {
-            val sources = app.get("${Cinemax21.vidsrcccAPI}/api/source/${it.hash}").parsedSafe<VidsrcccResult>()?.data ?: return@amap
+            val sources = app.get("${Cinemax21Provider.vidsrcccAPI}/api/source/${it.hash}").parsedSafe<VidsrcccResult>()?.data ?: return@amap
             when {
                 it.name.equals("VidPlay") -> {
-                    callback.invoke(newExtractorLink("VidPlay", "VidPlay", sources.source ?: return@amap, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21.vidsrcccAPI}/" })
+                    callback.invoke(newExtractorLink("VidPlay", "VidPlay", sources.source ?: return@amap, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21Provider.vidsrcccAPI}/" })
                     sources.subtitles?.map { subtitleCallback.invoke(newSubtitleFile(it.label ?: return@map, it.file ?: return@map)) }
                 }
                 it.name.equals("UpCloud") -> {
-                    val scriptData = app.get(sources.source ?: return@amap, referer = "${Cinemax21.vidsrcccAPI}/").document.selectFirst("script:containsData(source =)")?.data()
+                    val scriptData = app.get(sources.source ?: return@amap, referer = "${Cinemax21Provider.vidsrcccAPI}/").document.selectFirst("script:containsData(source =)")?.data()
                     val iframe = Regex("source\\s*=\\s*\"([^\"]+)").find(scriptData ?: return@amap)?.groupValues?.get(1)?.fixUrlBloat()
                     val iframeRes = app.get(iframe ?: return@amap, referer = "https://lucky.vidbox.site/").text
                     val id = iframe.substringAfterLast("/").substringBefore("?")
                     val key = Regex("\\w{48}").find(iframeRes)?.groupValues?.get(0) ?: return@amap
                     app.get("${iframe.substringBeforeLast("/")}/getSources?id=$id&_k=$key", headers = mapOf("X-Requested-With" to "XMLHttpRequest"), referer = iframe).parsedSafe<UpcloudResult>()?.sources?.amap file@{ source ->
-                        callback.invoke(newExtractorLink("UpCloud", "UpCloud", source.file ?: return@file, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21.vidsrcccAPI}/" })
+                        callback.invoke(newExtractorLink("UpCloud", "UpCloud", source.file ?: return@file, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21Provider.vidsrcccAPI}/" })
                     }
                 }
             }
@@ -325,7 +325,7 @@ object Cinemax21Extractor : Cinemax21() {
         imdbId: String?, season: Int?, episode: Int?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit,
     ) {
         val api = "https://cloudnestra.com"
-        val url = if (season == null) "${Cinemax21.vidSrcAPI}/embed/movie?imdb=$imdbId" else "${Cinemax21.vidSrcAPI}/embed/tv?imdb=$imdbId&season=$season&episode=$episode"
+        val url = if (season == null) "${Cinemax21Provider.vidSrcAPI}/embed/movie?imdb=$imdbId" else "${Cinemax21Provider.vidSrcAPI}/embed/tv?imdb=$imdbId&season=$season&episode=$episode"
         app.get(url).document.select(".serversList .server").amap { server ->
             if (server.text().equals("CloudStream", ignoreCase = true)) {
                 val hash = app.get("$api/rcp/${server.attr("data-hash")}").text.substringAfter("/prorcp/").substringBefore("'")
@@ -343,12 +343,12 @@ object Cinemax21Extractor : Cinemax21() {
         val referer = "https://xprime.tv/"
         runAllAsync(
             {
-                val url = if (season == null) "${Cinemax21.xprimeAPI}/${servers.first()}?id=$tmdbId" else "${Cinemax21.xprimeAPI}/${servers.first()}?id=$tmdbId&season=$season&episode=$episode"
+                val url = if (season == null) "${Cinemax21Provider.xprimeAPI}/${servers.first()}?id=$tmdbId" else "${Cinemax21Provider.xprimeAPI}/${servers.first()}?id=$tmdbId&season=$season&episode=$episode"
                 val source = app.get(url).parsedSafe<RageSources>()?.url
                 callback.invoke(newExtractorLink("Rage", "Rage", source ?: return@runAllAsync, ExtractorLinkType.M3U8) { this.referer = referer })
             },
             {
-                val url = if (season == null) "${Cinemax21.xprimeAPI}/${servers.last()}?name=$title&fallback_year=$year" else "${Cinemax21.xprimeAPI}/${servers.last()}?name=$title&fallback_year=$year&season=$season&episode=$episode"
+                val url = if (season == null) "${Cinemax21Provider.xprimeAPI}/${servers.last()}?name=$title&fallback_year=$year" else "${Cinemax21Provider.xprimeAPI}/${servers.last()}?name=$title&fallback_year=$year&season=$season&episode=$episode"
                 val sources = app.get(url).parsedSafe<PrimeboxSources>()
                 sources?.streams?.map { source -> callback.invoke(newExtractorLink("Primebox", "Primebox", source.value, ExtractorLinkType.M3U8) { this.referer = referer; this.quality = getQualityFromName(source.key) }) }
                 sources?.subtitles?.map { subtitle -> subtitleCallback.invoke(newSubtitleFile(subtitle.label ?: "", subtitle.file ?: return@map)) }
@@ -360,31 +360,31 @@ object Cinemax21Extractor : Cinemax21() {
         imdbId: String? = null, season: Int? = null, episode: Int? = null, subtitleCallback: (SubtitleFile) -> Unit,
     ) {
         val id = imdbId?.removePrefix("tt")
-        val epsId = app.post("${Cinemax21.watchSomuchAPI}/Watch/ajMovieTorrents.aspx", data = mapOf("index" to "0", "mid" to "$id", "wsk" to "30fb68aa-1c71-4b8c-b5d4-4ca9222cfb45", "lid" to "", "liu" to ""), headers = mapOf("X-Requested-With" to "XMLHttpRequest")).parsedSafe<WatchsomuchResponses>()?.movie?.torrents?.let { eps -> if (season == null) eps.firstOrNull()?.id else eps.find { it.episode == episode && it.season == season }?.id } ?: return
+        val epsId = app.post("${Cinemax21Provider.watchSomuchAPI}/Watch/ajMovieTorrents.aspx", data = mapOf("index" to "0", "mid" to "$id", "wsk" to "30fb68aa-1c71-4b8c-b5d4-4ca9222cfb45", "lid" to "", "liu" to ""), headers = mapOf("X-Requested-With" to "XMLHttpRequest")).parsedSafe<WatchsomuchResponses>()?.movie?.torrents?.let { eps -> if (season == null) eps.firstOrNull()?.id else eps.find { it.episode == episode && it.season == season }?.id } ?: return
         val (seasonSlug, episodeSlug) = getEpisodeSlug(season, episode)
-        val subUrl = if (season == null) "${Cinemax21.watchSomuchAPI}/Watch/ajMovieSubtitles.aspx?mid=$id&tid=$epsId&part=" else "${Cinemax21.watchSomuchAPI}/Watch/ajMovieSubtitles.aspx?mid=$id&tid=$epsId&part=S${seasonSlug}E${episodeSlug}"
-        app.get(subUrl).parsedSafe<WatchsomuchSubResponses>()?.subtitles?.map { sub -> subtitleCallback.invoke(newSubtitleFile(sub.label?.substringBefore("&nbsp")?.trim() ?: "", fixUrl(sub.url ?: return@map null, Cinemax21.watchSomuchAPI))) }
+        val subUrl = if (season == null) "${Cinemax21Provider.watchSomuchAPI}/Watch/ajMovieSubtitles.aspx?mid=$id&tid=$epsId&part=" else "${Cinemax21Provider.watchSomuchAPI}/Watch/ajMovieSubtitles.aspx?mid=$id&tid=$epsId&part=S${seasonSlug}E${episodeSlug}"
+        app.get(subUrl).parsedSafe<WatchsomuchSubResponses>()?.subtitles?.map { sub -> subtitleCallback.invoke(newSubtitleFile(sub.label?.substringBefore("&nbsp")?.trim() ?: "", fixUrl(sub.url ?: return@map null, Cinemax21Provider.watchSomuchAPI))) }
     }
 
     suspend fun invokeMapple(
         tmdbId: Int?, season: Int?, episode: Int?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit,
     ) {
         val mediaType = if (season == null) "movie" else "tv"
-        val url = if (season == null) "${Cinemax21.mappleAPI}/watch/$mediaType/$tmdbId" else "${Cinemax21.mappleAPI}/watch/$mediaType/$season-$episode/$tmdbId"
+        val url = if (season == null) "${Cinemax21Provider.mappleAPI}/watch/$mediaType/$tmdbId" else "${Cinemax21Provider.mappleAPI}/watch/$mediaType/$season-$episode/$tmdbId"
         val data = if (season == null) """[{"mediaId":$tmdbId,"mediaType":"$mediaType","tv_slug":"","source":"mapple","sessionId":"session_1760391974726_qym92bfxu"}]""" else """[{"mediaId":$tmdbId,"mediaType":"$mediaType","tv_slug":"$season-$episode","source":"mapple","sessionId":"session_1760391974726_qym92bfxu"}]"""
         val res = app.post(url, requestBody = data.toRequestBody(RequestBodyTypes.TEXT.toMediaTypeOrNull()), headers = mapOf("Next-Action" to "403f7ef15810cd565978d2ac5b7815bb0ff20258a5")).text
         val videoLink = tryParseJson<MappleSources>(res.substringAfter("1:").trim())?.data?.stream_url
-        callback.invoke(newExtractorLink("Mapple", "Mapple", videoLink ?: return, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21.mappleAPI}/"; this.headers = mapOf("Accept" to "*/*") })
-        val subRes = app.get("${Cinemax21.mappleAPI}/api/subtitles?id=$tmdbId&mediaType=$mediaType${if (season == null) "" else "&season=1&episode=1"}", referer = "${Cinemax21.mappleAPI}/").text
-        tryParseJson<ArrayList<MappleSubtitle>>(subRes)?.map { subtitle -> subtitleCallback.invoke(newSubtitleFile(subtitle.display ?: "", fixUrl(subtitle.url ?: return@map, Cinemax21.mappleAPI))) }
+        callback.invoke(newExtractorLink("Mapple", "Mapple", videoLink ?: return, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21Provider.mappleAPI}/"; this.headers = mapOf("Accept" to "*/*") })
+        val subRes = app.get("${Cinemax21Provider.mappleAPI}/api/subtitles?id=$tmdbId&mediaType=$mediaType${if (season == null) "" else "&season=1&episode=1"}", referer = "${Cinemax21Provider.mappleAPI}/").text
+        tryParseJson<ArrayList<MappleSubtitle>>(subRes)?.map { subtitle -> subtitleCallback.invoke(newSubtitleFile(subtitle.display ?: "", fixUrl(subtitle.url ?: return@map, Cinemax21Provider.mappleAPI))) }
     }
     suspend fun invokeVidlink(
         tmdbId: Int?, season: Int?, episode: Int?, callback: (ExtractorLink) -> Unit,
     ) {
         val type = if (season == null) "movie" else "tv"
-        val url = if (season == null) "${Cinemax21.vidlinkAPI}/$type/$tmdbId" else "${Cinemax21.vidlinkAPI}/$type/$tmdbId/$season/$episode"
-        val videoLink = app.get(url, interceptor = WebViewResolver(Regex("""${Cinemax21.vidlinkAPI}/api/b/$type/A{32}"""), timeout = 15_000L)).parsedSafe<VidlinkSources>()?.stream?.playlist
-        callback.invoke(newExtractorLink("Vidlink", "Vidlink", videoLink ?: return, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21.vidlinkAPI}/" })
+        val url = if (season == null) "${Cinemax21Provider.vidlinkAPI}/$type/$tmdbId" else "${Cinemax21Provider.vidlinkAPI}/$type/$tmdbId/$season/$episode"
+        val videoLink = app.get(url, interceptor = WebViewResolver(Regex("""${Cinemax21Provider.vidlinkAPI}/api/b/$type/A{32}"""), timeout = 15_000L)).parsedSafe<VidlinkSources>()?.stream?.playlist
+        callback.invoke(newExtractorLink("Vidlink", "Vidlink", videoLink ?: return, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21Provider.vidlinkAPI}/" })
     }
 
     suspend fun invokeVidfast(
@@ -392,20 +392,19 @@ object Cinemax21Extractor : Cinemax21() {
     ) {
         val module = "hezushon/1000076901076321/0b0ce221/cfe60245-021f-5d4d-bacb-0d469f83378f/uva/jeditawev/b0535941d898ebdb81f575b2cfd123f5d18c6464/y/APA91zAOxU2psY2_BvBqEmmjG6QvCoLjgoaI-xuoLxBYghvzgKAu-HtHNeQmwxNbHNpoVnCuX10eEes1lnTcI2l_lQApUiwfx2pza36CZB34X7VY0OCyNXtlq-bGVCkLslfNksi1k3B667BJycQ67wxc1OnfCc5PDPrF0BA8aZRyMXZ3-2yxVGp"
         val type = if (season == null) "movie" else "tv"
-        val url = if (season == null) "${Cinemax21.vidfastAPI}/$type/$tmdbId" else "${Cinemax21.vidfastAPI}/$type/$tmdbId/$season/$episode"
-        val res = app.get(url, interceptor = WebViewResolver(Regex("""${Cinemax21.vidfastAPI}/$module/JEwECseLZdY"""), timeout = 15_000L)).text
+        val url = if (season == null) "${Cinemax21Provider.vidfastAPI}/$type/$tmdbId" else "${Cinemax21Provider.vidfastAPI}/$type/$tmdbId/$season/$episode"
+        val res = app.get(url, interceptor = WebViewResolver(Regex("""${Cinemax21Provider.vidfastAPI}/$module/JEwECseLZdY"""), timeout = 15_000L)).text
         tryParseJson<ArrayList<VidFastServers>>(res)?.filter { it.description?.contains("Original audio") == true }?.amapIndexed { index, server ->
-                val source = app.get("${Cinemax21.vidfastAPI}/$module/Sdoi/${server.data}", referer = "${Cinemax21.vidfastAPI}/").parsedSafe<VidFastSources>()
+                val source = app.get("${Cinemax21Provider.vidfastAPI}/$module/Sdoi/${server.data}", referer = "${Cinemax21Provider.vidfastAPI}/").parsedSafe<VidFastSources>()
                 callback.invoke(newExtractorLink("Vidfast", "Vidfast [${server.name}]", source?.url ?: return@amapIndexed, INFER_TYPE))
                 if (index == 1) source.tracks?.map { subtitle -> subtitleCallback.invoke(newSubtitleFile(subtitle.label ?: return@map, subtitle.file ?: return@map)) }
             }
     }
 
-    // ================== WYZIE SOURCE ==================
     suspend fun invokeWyzie(
         tmdbId: Int?, season: Int?, episode: Int?, subtitleCallback: (SubtitleFile) -> Unit,
     ) {
-        val url = if (season == null) "${Cinemax21.wyzieAPI}/search?id=$tmdbId" else "${Cinemax21.wyzieAPI}/search?id=$tmdbId&season=$season&episode=$episode"
+        val url = if (season == null) "${Cinemax21Provider.wyzieAPI}/search?id=$tmdbId" else "${Cinemax21Provider.wyzieAPI}/search?id=$tmdbId&season=$season&episode=$episode"
         val res = app.get(url).text
         tryParseJson<ArrayList<WyzieSubtitle>>(res)?.map { subtitle -> subtitleCallback.invoke(newSubtitleFile(subtitle.display ?: return@map, subtitle.url ?: return@map)) }
     }
@@ -415,14 +414,14 @@ object Cinemax21Extractor : Cinemax21() {
     ) {
         val proxy = "https://proxy.heistotron.uk"
         val type = if (season == null) "movie" else "tv"
-        val url = if (season == null) "${Cinemax21.vixsrcAPI}/$type/$tmdbId" else "${Cinemax21.vixsrcAPI}/$type/$tmdbId/$season/$episode"
+        val url = if (season == null) "${Cinemax21Provider.vixsrcAPI}/$type/$tmdbId" else "${Cinemax21Provider.vixsrcAPI}/$type/$tmdbId/$season/$episode"
         val res = app.get(url).document.selectFirst("script:containsData(window.masterPlaylist)")?.data() ?: return
         val video1 = Regex("""'token':\s*'(\w+)'[\S\s]+'expires':\s*'(\w+)'[\S\s]+url:\s*'(\S+)'""").find(res)?.let {
                     val (token, expires, path) = it.destructured
                     "$path?token=$token&expires=$expires&h=1&lang=en"
                 } ?: return
         val video2 = "$proxy/p/${base64Encode("$proxy/api/proxy/m3u8?url=${encode(video1)}&source=sakura|ananananananananaBatman!".toByteArray())}"
-        listOf(VixsrcSource("Vixsrc [Alpha]", video1, url), VixsrcSource("Vixsrc [Beta]", video2, "${Cinemax21.mappleAPI}/")).map {
+        listOf(VixsrcSource("Vixsrc [Alpha]", video1, url), VixsrcSource("Vixsrc [Beta]", video2, "${Cinemax21Provider.mappleAPI}/")).map {
             callback.invoke(newExtractorLink(it.name, it.name, it.url, ExtractorLinkType.M3U8) { this.referer = it.referer; this.headers = mapOf("Accept" to "*/*") })
         }
     }
@@ -431,7 +430,7 @@ object Cinemax21Extractor : Cinemax21() {
         tmdbId: Int?, season: Int?, episode: Int?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit, api: String = "https://streamingnow.mov"
     ) {
         val path = if (season == null) "" else "&s=$season&e=$episode"
-        val token = app.get("${Cinemax21.superembedAPI}/directstream.php?video_id=$tmdbId&tmdb=1$path").url.substringAfter("?play=")
+        val token = app.get("${Cinemax21Provider.superembedAPI}/directstream.php?video_id=$tmdbId&tmdb=1$path").url.substringAfter("?play=")
         val (server, id) = app.post("$api/response.php", data = mapOf("token" to token), headers = mapOf("X-Requested-With" to "XMLHttpRequest")).document.select("ul.sources-list li:contains(vipstream-S)").let { it.attr("data-server") to it.attr("data-id") }
         val playUrl = "$api/playvideo.php?video_id=$id&server_id=$server&token=$token&init=1"
         val playRes = app.get(playUrl).document
@@ -452,16 +451,16 @@ object Cinemax21Extractor : Cinemax21() {
         tmdbId: Int?, season: Int?, episode: Int?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit, subAPI: String = "https://sub.vdrk.site"
     ) {
         val type = if (season == null) "movie" else "tv"
-        val url = "${Cinemax21.vidrockAPI}/$type/$tmdbId${if (type == "movie") "" else "/$season/$episode"}"
+        val url = "${Cinemax21Provider.vidrockAPI}/$type/$tmdbId${if (type == "movie") "" else "/$season/$episode"}"
         val encryptData = VidrockHelper.encrypt(tmdbId, type, season, episode)
-        app.get("${Cinemax21.vidrockAPI}/api/$type/$encryptData", referer = url).parsedSafe<LinkedHashMap<String, HashMap<String, String>>>()?.map { source ->
+        app.get("${Cinemax21Provider.vidrockAPI}/api/$type/$encryptData", referer = url).parsedSafe<LinkedHashMap<String, HashMap<String, String>>>()?.map { source ->
                 if (source.key == "source2") {
-                    val json = app.get(source.value["url"] ?: return@map, referer = "${Cinemax21.vidrockAPI}/").text
+                    val json = app.get(source.value["url"] ?: return@map, referer = "${Cinemax21Provider.vidrockAPI}/").text
                     tryParseJson<ArrayList<VidrockSource>>(json)?.reversed()?.map mirror@{ it ->
-                        callback.invoke(newExtractorLink("Vidrock", "Vidrock [Source2]", it.url ?: return@mirror, INFER_TYPE) { this.quality = it.resolution ?: Qualities.Unknown.value; this.headers = mapOf("Range" to "bytes=0-", "Referer" to "${Cinemax21.vidrockAPI}/") })
+                        callback.invoke(newExtractorLink("Vidrock", "Vidrock [Source2]", it.url ?: return@mirror, INFER_TYPE) { this.quality = it.resolution ?: Qualities.Unknown.value; this.headers = mapOf("Range" to "bytes=0-", "Referer" to "${Cinemax21Provider.vidrockAPI}/") })
                     }
                 } else {
-                    callback.invoke(newExtractorLink("Vidrock", "Vidrock [${source.key.capitalize()}]", source.value["url"] ?: return@map, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21.vidrockAPI}/"; this.headers = mapOf("Origin" to Cinemax21.vidrockAPI) })
+                    callback.invoke(newExtractorLink("Vidrock", "Vidrock [${source.key.capitalize()}]", source.value["url"] ?: return@map, ExtractorLinkType.M3U8) { this.referer = "${Cinemax21Provider.vidrockAPI}/"; this.headers = mapOf("Origin" to Cinemax21Provider.vidrockAPI) })
                 }
             }
         val subUrl = "$subAPI/$type/$tmdbId${if (type == "movie") "" else "/$season/$episode"}"

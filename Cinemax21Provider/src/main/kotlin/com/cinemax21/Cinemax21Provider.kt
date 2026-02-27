@@ -1,25 +1,25 @@
 package com.cinemax21
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.cinemax21.Cinemax21Extractor.invokeDrama
-import com.cinemax21.Cinemax21Extractor.invokeKisskh 
-import com.cinemax21.Cinemax21Extractor.invokeMoviebox
-import com.cinemax21.Cinemax21Extractor.invokeMoviebox2 
-import com.cinemax21.Cinemax21Extractor.invokeGomovies
-import com.cinemax21.Cinemax21Extractor.invokeIdlix
-import com.cinemax21.Cinemax21Extractor.invokeMapple
-import com.cinemax21.Cinemax21Extractor.invokeSuperembed
-import com.cinemax21.Cinemax21Extractor.invokeVidfast
-import com.cinemax21.Cinemax21Extractor.invokeVidlink
-import com.cinemax21.Cinemax21Extractor.invokeVidsrc
-import com.cinemax21.Cinemax21Extractor.invokeVidsrccc
-import com.cinemax21.Cinemax21Extractor.invokeVixsrc
-import com.cinemax21.Cinemax21Extractor.invokeWatchsomuch
-import com.cinemax21.Cinemax21Extractor.invokeWyzie
-import com.cinemax21.Cinemax21Extractor.invokeXprime
-import com.cinemax21.Cinemax21Extractor.invokeCinemaOS
-import com.cinemax21.Cinemax21Extractor.invokePlayer4U
-import com.cinemax21.Cinemax21Extractor.invokeRiveStream
+import com.cinemax21.Cinemax21ProviderExtractor.invokeDrama
+import com.cinemax21.Cinemax21ProviderExtractor.invokeKisskh 
+import com.cinemax21.Cinemax21ProviderExtractor.invokeMoviebox
+import com.cinemax21.Cinemax21ProviderExtractor.invokeMoviebox2 
+import com.cinemax21.Cinemax21ProviderExtractor.invokeGomovies
+import com.cinemax21.Cinemax21ProviderExtractor.invokeIdlix
+import com.cinemax21.Cinemax21ProviderExtractor.invokeMapple
+import com.cinemax21.Cinemax21ProviderExtractor.invokeSuperembed
+import com.cinemax21.Cinemax21ProviderExtractor.invokeVidfast
+import com.cinemax21.Cinemax21ProviderExtractor.invokeVidlink
+import com.cinemax21.Cinemax21ProviderExtractor.invokeVidsrc
+import com.cinemax21.Cinemax21ProviderExtractor.invokeVidsrccc
+import com.cinemax21.Cinemax21ProviderExtractor.invokeVixsrc
+import com.cinemax21.Cinemax21ProviderExtractor.invokeWatchsomuch
+import com.cinemax21.Cinemax21ProviderExtractor.invokeWyzie
+import com.cinemax21.Cinemax21ProviderExtractor.invokeXprime
+import com.cinemax21.Cinemax21ProviderExtractor.invokeCinemaOS
+import com.cinemax21.Cinemax21ProviderExtractor.invokePlayer4U
+import com.cinemax21.Cinemax21ProviderExtractor.invokeRiveStream
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
@@ -30,8 +30,8 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 
-open class Cinemax21 : TmdbProvider() {
-    override var name = "cinemax21"
+open class Cinemax21Provider : TmdbProvider() {
+    override var name = "CineMax21"
     override val hasMainPage = true
     override var lang = "id"
     override val instantLinkLoading = true
