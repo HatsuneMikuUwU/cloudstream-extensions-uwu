@@ -5,7 +5,8 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.safeApiCall
-import com.lagradost.cloudstream3.network.CloudflareKiller
+import com.animesail.CloudflareKiller
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -47,25 +48,27 @@ class AnimeSailProvider : MainAPI() {
     }
 
     private val cfKiller = CloudflareKiller()
-    
-    private val cookieStore = mutableMapOf<String, String>()
 
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        val res = app.get(
+        val wmUserAgent = WebViewResolver.getWebViewUserAgent() ?: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
+
+        return app.get(
             url,
             headers = mapOf(
-                "Accept" to "*/*",
-                "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8",
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Referer" to (ref ?: "$mainUrl/"),
-                "User-Agent" to USER_AGENT
+                "User-Agent" to wmUserAgent,
             ),
-            cookies = cookieStore,
-            referer = ref,
+            cookies = mapOf(
+                "_as_ipin_ct" to "ID",
+                "_as_ipin_lc" to "id",
+                "_as_ipin_tz" to "Asia/Jakarta",
+                "_popprepop" to "1",
+                "usertype" to "guest"
+            ),
             interceptor = cfKiller
         )
-
-        cookieStore.putAll(res.cookies)
-        return res
     }
 
     override val mainPage = mainPageOf(
