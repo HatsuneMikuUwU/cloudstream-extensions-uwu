@@ -29,6 +29,8 @@ class AnimeSailProvider : MainAPI() {
         TvType.AnimeMovie,
         TvType.OVA
     )
+    
+    val wpRedisInterceptor by lazy { CloudflareKiller() }
 
     companion object {
         fun getType(t: String): TvType {
@@ -66,7 +68,7 @@ class AnimeSailProvider : MainAPI() {
                 "_as_ipin_ct" to "ID",
                 "_as_ipin_lc" to "id",
                 "_as_ipin_tz" to "Asia/Jakarta",
-                "_as_turnstile" to "7ee5f3aeffe5b3813ab4623de935a1992abd447e5ff43e3e7d1e1e705ce0fe55",
+                "_as_turnstile" to "f783ac8658c26f481aa3220815a400250465c0ddfd6c4a8c6ce12402f04420a5",
                 "_popprepop" to "1",
                 "usertype" to "guest"
             ),
