@@ -12,6 +12,7 @@
 | AnimeSail | Indonesia | Anime & Donghua | ✅ Active |
 | CineMax21 | Indonesia | Movies & TV Series | ✅ Active |
 | Donghub | Indonesia | Donghua | ✅ Active |
+| Drakor | Indonesia | Drama Korean, Movies & TV Series | ✅ Active |
 | Dutamovie | Indonesia | Movies & TV Series | ✅ Active |
 | Idlix | Indonesia | Movies & TV Series | ✅ Active |
 | IndoMax21 | Indonesia | NSFW, Movies & TV Series | ✅ Active |
