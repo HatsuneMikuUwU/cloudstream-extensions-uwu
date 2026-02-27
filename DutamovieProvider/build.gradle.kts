@@ -12,5 +12,5 @@ cloudstream {
         "AsianDrama",
     )
     
-    iconUrl = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSV8GBrVa1i9rZ_2g5i1cXz3DeJF_zL2bQUM8uTBIZ0nQ&s"
+    iconUrl = "https://offshorebankservices.com/wp-content/uploads/2022/07/cropped-dutamovie21-512x512-1-60x60.png"
 }
