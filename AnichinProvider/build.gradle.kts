@@ -1,7 +1,7 @@
 version = 1
 
 cloudstream {
-    description = "Anichin — Donghua Subtitle Indonesia"
+    description = "Anichin — Streaming Donghua Subtitle Indonesia"
     language = "id"
     authors = listOf("Miku")
 
