@@ -1,7 +1,5 @@
 # CloudStream Extensions
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 **Hatsune Repo** is a collection of CloudStream repositories for watching anime, donghua, and movies with Indonesian subtitles 🇮🇩  
 
 ---
@@ -18,6 +16,7 @@
 | IndoMax21 | Indonesia | NSFW, Movies & TV Series | ✅ Active |
 | JavHey | Indonesia | NSFW | ✅ Active |
 | Kuronime | Indonesia | Anime | ✅ Active |
+| LayarKaca | Indonesia | Movies & TV Series | ✅ Active |
 | MovieBox | Indonesia | Movies & TV Series | ✅ Active |
 | OtakuDesu | Indonesia | Anime | ✅ Active |
 | Samehadaku | Indonesia | Anime | ✅ Active |
