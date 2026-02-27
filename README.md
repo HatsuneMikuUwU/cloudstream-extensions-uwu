@@ -10,6 +10,7 @@
 | ------------- | ------- | -------------- | ------- |
 | Anichin | Indonesia | Donghua | ✅ Active |
 | AnimeSail | Indonesia | Anime & Donghua | ✅ Active |
+| CineMax21 | Indonesia | Movies & TV Series | ✅ Active |
 | Donghub | Indonesia | Donghua | ✅ Active |
 | Dutamovie | Indonesia | Movies & TV Series | ✅ Active |
 | Idlix | Indonesia | Movies & TV Series | ✅ Active |
