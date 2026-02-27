@@ -57,8 +57,15 @@ class AnimeSailProvider : MainAPI() {
             )
         )
         
-        val title = response.document.select("title").text()
-        if (title.contains("Just a moment", true) || title.contains("Cloudflare", true)) {
+        val document = response.document
+        val title = document.select("title").text()
+        
+        val isBlocked = response.code != 200 || 
+                        title.contains("Just a moment", true) || 
+                        title.contains("Cloudflare", true) ||
+                        response.text.contains("turnstile", true)
+
+        if (isBlocked) {
             response = app.get(
                 url,
                 headers = mapOf(
@@ -70,6 +77,7 @@ class AnimeSailProvider : MainAPI() {
                 interceptor = CloudflareKiller()
             )
         }
+        
         return response
     }
 
@@ -116,7 +124,6 @@ class AnimeSailProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -168,6 +175,7 @@ class AnimeSailProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+
         val document = cfKiller(data).document
 
         document.select(".mobius > .mirror > option").amap {
