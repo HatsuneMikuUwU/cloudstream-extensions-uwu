@@ -63,6 +63,7 @@ subprojects {
                     "-Xno-call-assertions",
                     "-Xno-param-assertions",
                     "-Xno-receiver-assertions"
+                    "-Xannotation-default-target=param-property"
                 )
             }
         }
