@@ -54,9 +54,23 @@ class AnimeSailProvider : MainAPI() {
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Upgrade-Insecure-Requests" to "1"
+                "Referer" to "$mainUrl/",
+                "Connection" to "keep-alive",
+                "Sec-Ch-Ua" to "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+                "Sec-Ch-Ua-Mobile" to "?1",
+                "Sec-Ch-Ua-Platform" to "\"Android\"",
+                "Upgrade-Insecure-Requests" to "1",
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
             ),
-            referer = ref ?: "$mainUrl/",
+            cookies = mapOf(
+                "_as_ipin_ct" to "ID",
+                "_as_ipin_lc" to "id",
+                "_as_ipin_tz" to "Asia/Jakarta",
+              //  "_as_turnstile" to "f783ac8658c26f481aa3220815a400250465c0ddfd6c4a8c6ce12402f04420a5",
+                "_popprepop" to "1",
+                "usertype" to "guest"
+            ),
+            referer = ref,
             interceptor = cfKiller
         )
     }
@@ -104,6 +118,7 @@ class AnimeSailProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
+
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -116,7 +131,7 @@ class AnimeSailProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = request(url).document
+        val document = request(url, interceptor = CloudflareKiller()).document
 
         val title = document.selectFirst("h1.entry-title")?.text().toString()
             .replace("Subtitle Indonesia", "").trim()
@@ -209,6 +224,9 @@ class AnimeSailProvider : MainAPI() {
                                 }
                             )
                         }
+                    //                    skip for now
+                    //                    iframe.startsWith("$mainUrl/utils/player/fichan/") -> ""
+                    //                    iframe.startsWith("$mainUrl/utils/player/blogger/") -> ""
                     iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
                         val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
                             iframe.substringAfter("id=").substringBefore("&token")
