@@ -126,7 +126,7 @@ object Cinemax21Extractor : Cinemax21() {
         val searchUrl = "$baseUrl/api/live-search/$encodedQuery"
 
         try {
-            val searchRes = app.get(searchUrl, headers = DramaHelper.headers).parsedSafe<SearchResponse>()
+            val searchRes = app.get(searchUrl, headers = DramaHelper.headers).parsedSafe<DramaSearchResponse>()
             val matchedItem = searchRes?.data?.find { item ->
                 val itemTitle = item.title ?: item.name ?: ""
                 DramaHelper.isFuzzyMatch(title, itemTitle)

@@ -460,7 +460,7 @@ data class Player4uLinkData(
     val url: String,
 )
 
-data class SearchResponse(
+data class DramaSearchResponse(
     @JsonProperty("data") val data: ArrayList<SearchItem>? = arrayListOf(),
     @JsonProperty("success") val success: Boolean? = null
 )

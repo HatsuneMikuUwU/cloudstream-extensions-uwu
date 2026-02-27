@@ -492,8 +492,6 @@ object VidsrcHelper {
 
 }
 
-// ================== CINEMAOS HELPER ==================
-
 fun generateHashedString(): String {
     val s = "a8f7e9c2d4b6a1f3e8c9d2t4a7f6e9c2d4z6a1f3e8c9d2b4a7f5e9c2d4b6a1f3"
     val a = "2"
@@ -605,8 +603,6 @@ fun parseCinemaOSSources(jsonString: String): List<Map<String, String>> {
     return sourcesList
 }
 
-// ================== PLAYER4U HELPERS ==================
-
 suspend fun getPlayer4uUrl(
     name: String,
     selectedQuality: Int,
@@ -655,8 +651,7 @@ fun getPlayer4UQuality(quality: String): Int {
     }
 }
 
-// ================= ADIDEWASA HELPER (NEW) =================
-object AdiDewasaHelper {
+object DramaHelper {
     val headers = mapOf(
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
         "Accept" to "application/json, text/plain, */*",

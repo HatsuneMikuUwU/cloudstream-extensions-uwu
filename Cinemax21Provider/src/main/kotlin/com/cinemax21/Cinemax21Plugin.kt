@@ -7,7 +7,7 @@ import android.content.Context
 @CloudstreamPlugin
 class Cinemax21Plugin : Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(Vinemax21())
+        registerMainAPI(Cinemax21())
         registerExtractorAPI(Jeniusplay())
     }
 }
