@@ -12,10 +12,7 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
-import com.lagradost.nicehttp.Requests
 import kotlinx.coroutines.runBlocking
-import okhttp3.Interceptor
-import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -32,7 +29,7 @@ class AnimeSailProvider : MainAPI() {
         TvType.OVA
     )
 
-    private var dynamicCookies: Map<String, String> = mapOf(
+    private var dynamicCookies = mutableMapOf(
         "_as_ipin_ct" to "ID",
         "_as_ipin_lc" to "id",
         "_as_ipin_tz" to "Asia/Jakarta",
@@ -56,6 +53,13 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
+    override suspend fun onInitialize() {
+        val response = app.get(mainUrl)
+        if (response.isSuccessful) {
+            dynamicCookies.putAll(response.cookies)
+        }
+    }
+
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         val response = app.get(
             url,
@@ -70,11 +74,11 @@ class AnimeSailProvider : MainAPI() {
                 "Upgrade-Insecure-Requests" to "1",
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
             ),
-            cookies = dynamicCookies 
+            cookies = dynamicCookies
         )
 
         if (response.cookies.isNotEmpty()) {
-            dynamicCookies = dynamicCookies + response.cookies
+            dynamicCookies.putAll(response.cookies)
         }
 
         return response
