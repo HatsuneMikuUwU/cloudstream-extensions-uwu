@@ -2,7 +2,12 @@
 
 **Hatsune Repo** is a collection of CloudStream repositories for watching anime, donghua, and movies with Indonesian subtitles 🇮🇩  
 
+[![Platform](https://img.shields.io/badge/android-platform?style=flat&label=platform&labelColor=21262d&color=6e7681)](https://www.android.com) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-orange.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/HatsuneMikuUwU/cloudstream-extensions-uwu?style=flat&logo=Github)](https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu/commits/main) [![Telegram](https://img.shields.io/badge/Group-2CA5E0?style=flat&logo=telegram&logoColor=white)](https://t.me/+qNcWx0po4a0wNjE1)
+
 ---
+
+[![Banner](https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/banner.png)]()
 
 ## 🎬 Extensions
 
