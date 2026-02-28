@@ -2,22 +2,12 @@ package com.winbu
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
-import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.base64Decode
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.INFER_TYPE
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
-import com.lagradost.cloudstream3.utils.getQualityFromName
-import com.lagradost.cloudstream3.utils.httpsify
-import com.lagradost.cloudstream3.utils.loadExtractor
-import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import java.util.Collections
+import java.util.*
 
 class WinbuProvider : MainAPI() {
     override var mainUrl = "https://winbu.net"
@@ -26,20 +16,12 @@ class WinbuProvider : MainAPI() {
     override var lang = "id"
     override val hasQuickSearch = true
     override val hasDownloadSupport = true
-    override val supportedTypes = setOf(TvType.Movie, TvType.Anime, TvType.TvSeries)
+    override val hasChromecastSupport = true
+    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Anime)
 
-    data class FiledonPage(
-        val props: FiledonProps? = null,
-    )
-
-    data class FiledonProps(
-        val url: String? = null,
-        val files: FiledonFile? = null,
-    )
-
-    data class FiledonFile(
-        val name: String? = null,
-    )
+    data class FiledonPage(val props: FiledonProps? = null)
+    data class FiledonProps(val url: String? = null, val files: FiledonFile? = null)
+    data class FiledonFile(val name: String? = null)
 
     override val mainPage = mainPageOf(
         "anime-terbaru-animasu/page/%d/" to "New Episodes",
@@ -52,51 +34,36 @@ class WinbuProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val path = if (page == 1) {
-            request.data.replace("/page/%d/", "/").replace("page/%d/", "")
-        } else {
-            request.data.format(page)
-        }
+        val path = if (page == 1) request.data.replace("/page/%d/", "/").replace("page/%d/", "")
+        else request.data.format(page)
 
         val document = app.get("$mainUrl/$path").document
-        
-        val items = when (request.name) {
-            "New Episodes" -> document.select("#movies .ml-item, .movies-list .ml-item")
-            "Ongoing Anime", "Complete Anime", "Most Popular", "Movie"-> document.select("#anime .ml-item, .movies-list .ml-item")
-            "Film" -> document.select("#movies .ml-item, .movies-list .ml-item")
-            else -> document.select("#movies .ml-item, .movies-list .ml-item")
-        }
-        
-        val homeList = items.mapNotNull { 
-            it.toSearchResult(request.name) 
-        }.distinctBy { it.url }
+        val items = document.select("#movies .ml-item, .movies-list .ml-item, #anime .ml-item")
 
-        val isLandscape = request.name == "Movie"
+        val homeList = items.mapNotNull { it.toSearchResult() }.distinctBy { it.url }
 
-        val hasNext = document.select(".pagination a.next, a.next.page-numbers").isNotEmpty() || 
-                document.select(".pagination a[href], #pagination a[href]").any {
-                    it.selectFirst("i.fa-caret-right, i.fa-angle-right, i.fa-chevron-right") != null || 
-                    it.text().contains("Next", ignoreCase = true)
-                }
+        val hasNext = document.select(".pagination .next, .pagination a.next, .pagination a:contains(Next)").isNotEmpty()
+                || document.select(".pagination a[href]").any { it.text().contains("Next", true) || it.select("i.fa-caret-right, i.fa-angle-right").isNotEmpty() }
+
+        val isHorizontal = request.name.contains("Movie", true) || request.name.contains("Film", true)
 
         return newHomePageResponse(
-            listOf(HomePageList(request.name, homeList, isHorizontalImages = isLandscape)),
-            hasNext = hasNext || homeList.isNotEmpty()
+            listOf(HomePageList(request.name, homeList, isHorizontalImages = isHorizontal)),
+            hasNext = hasNext
         )
     }
 
     private fun parseEpisode(text: String?): Int? {
         if (text.isNullOrBlank()) return null
-        return Regex("(\\d+[\\.,]?\\d*)").find(text)?.groupValues?.getOrNull(1)
+        return Regex("""(\d+(?:[.,]\d+)?)""").find(text)?.groupValues?.getOrNull(1)
             ?.replace(',', '.')
             ?.toFloatOrNull()
             ?.toInt()
     }
 
-    private fun Element.toSearchResult(sectionName: String): SearchResponse? {
-        val anchor = selectFirst("a.ml-mask") ?: selectFirst("a[href]") ?: return null
+    private fun Element.toSearchResult(): SearchResponse? {
+        val anchor = selectFirst("a.ml-mask, a[href]") ?: return null
         val href = fixUrl(anchor.attr("href"))
-
         val title = anchor.attr("title").ifBlank {
             selectFirst(".judul")?.text().orEmpty()
         }.ifBlank {
@@ -106,13 +73,10 @@ class WinbuProvider : MainAPI() {
 
         val poster = selectFirst("img.mli-thumb, img")?.getImageAttr()?.let { fixUrlNull(it) }
         val episode = parseEpisode(selectFirst("span.mli-episode")?.text())
-
-        val isMovie = sectionName.contains("Film", true) || sectionName.contains("Movie", true) || href.contains("/film/", true)
+        val isMovie = href.contains("/film/", true) || href.contains("/movie/", true)
 
         return if (isMovie) {
-            newMovieSearchResponse(title, href, TvType.Movie) {
-                this.posterUrl = poster
-            }
+            newMovieSearchResponse(title, href, TvType.Movie) { this.posterUrl = poster }
         } else {
             newAnimeSearchResponse(title, href, TvType.Anime) {
                 this.posterUrl = poster
@@ -123,15 +87,14 @@ class WinbuProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
-        return document.select("#movies .ml-item, .movies-list .ml-item")
-            .mapNotNull { it.toSearchResult("Series") }
+        return document.select("#movies .ml-item, .movies-list .ml-item, #anime .ml-item")
+            .mapNotNull { it.toSearchResult() }
             .distinctBy { it.url }
     }
 
-    private fun cleanupTitle(rawTitle: String): String {
-        return rawTitle
-            .replace(Regex("^Nonton\\s+", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\s+Sub\\s+Indo.*$", RegexOption.IGNORE_CASE), "")
+    private fun cleanupTitle(raw: String): String {
+        return raw.replace(Regex("""^Nonton\s+""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s+Sub\s+Indo.*$""", RegexOption.IGNORE_CASE), "")
             .replace(" - Winbu", "", ignoreCase = true)
             .trim()
     }
@@ -153,19 +116,17 @@ class WinbuProvider : MainAPI() {
         val description = infoRoot.selectFirst(".mli-desc")?.text()?.trim()
             ?: document.selectFirst("meta[name=\"description\"]")?.attr("content")
 
-        val tags = infoRoot.select(".mli-mvi a[rel=tag], a[rel=tag]")
-            .map { it.text().trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
+        val tags = infoRoot.select(".mli-mvi a[rel=tag], a[rel=tag]").map { it.text().trim() }.filter { it.isNotBlank() }.distinct()
         val score = infoRoot.selectFirst("span[itemprop=ratingValue]")?.text()?.toIntOrNull()
+        val year = infoRoot.selectFirst(".mli-year")?.text()?.toIntOrNull()
+        val duration = infoRoot.selectFirst(".mli-duration")?.text()?.trim()
 
-        val recommendations = document.select("#movies .ml-item")
-            .mapNotNull { it.toSearchResult("Series") }
+        val recommendations = document.select("#movies .ml-item, #anime .ml-item, .movies-list .ml-item")
+            .mapNotNull { it.toSearchResult() }
             .filterNot { fixUrl(it.url) == fixUrl(url) }
             .distinctBy { it.url }
 
-        val episodes = document.select(".tvseason .les-content a[href]")
+        val episodes = document.select(".tvseason .les-content a[href], .episodelist a[href], .episodes a[href]")
             .mapNotNull { a ->
                 val epText = a.text().trim()
                 val epNum = parseEpisode(epText)
@@ -176,8 +137,8 @@ class WinbuProvider : MainAPI() {
             .sortedBy { it.first }
             .map { (num, link) ->
                 newEpisode(link) {
-                    this.name = "Episode $num"
-                    this.episode = num
+                    name = "Episode $num"
+                    episode = num
                 }
             }
 
@@ -188,6 +149,8 @@ class WinbuProvider : MainAPI() {
                 this.posterUrl = poster
                 this.plot = description
                 this.tags = tags
+                this.year = year
+                this.duration = duration
                 this.recommendations = recommendations
                 if (score != null) addScore(score.toString(), 10)
             }
@@ -196,6 +159,8 @@ class WinbuProvider : MainAPI() {
                 this.posterUrl = poster
                 this.plot = description
                 this.tags = tags
+                this.year = year
+                this.duration = duration
                 this.recommendations = recommendations
                 if (score != null) addScore(score.toString(), 10)
             }
@@ -210,30 +175,26 @@ class WinbuProvider : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
         var found = false
-        
         val seen = Collections.synchronizedSet(hashSetOf<String>())
-        
-        val subtitleCb: (SubtitleFile) -> Unit = { subtitleCallback.invoke(it) }
+
         val linkCb: (ExtractorLink) -> Unit = {
             found = true
-            callback.invoke(it)
+            callback(it)
         }
 
-        suspend fun throwToExtractors(url: String, referer: String = data) {
-            runCatching {
-                loadExtractor(url, referer, subtitleCb, linkCb)
-            }
+        suspend fun loadExtractorSafely(url: String, referer: String = data) {
+            runCatching { loadExtractor(url, referer, subtitleCallback, linkCb) }
         }
 
-        suspend fun resolveFiledon(url: String): Pair<String?, String?> {
-            val page = runCatching { app.get(url, referer = data).document }.getOrNull() ?: return null to null
+        suspend fun resolveFiledon(embedUrl: String): Pair<String?, String?> {
+            val page = runCatching { app.get(embedUrl, referer = data).document }.getOrNull() ?: return null to null
             val json = page.selectFirst("#app")?.attr("data-page") ?: return null to null
             val parsed = tryParseJson<FiledonPage>(json) ?: return null to null
             return parsed.props?.url to parsed.props?.files?.name
         }
 
-        suspend fun addDirect(url: String?, sourceName: String, quality: String? = null) {
-            val raw = url?.trim().orEmpty()
+        suspend fun addDirectLink(url: String?, sourceName: String, quality: String? = null) {
+            val raw = url?.trim() ?: return
             if (raw.isBlank()) return
             val fixed = fixUrl(raw)
             if (!seen.add(fixed)) return
@@ -245,36 +206,31 @@ class WinbuProvider : MainAPI() {
             )
         }
 
-        suspend fun loadUrl(url: String?) {
-            val raw = url?.trim().orEmpty()
+        suspend fun processUrl(url: String?) {
+            val raw = url?.trim() ?: return
             if (raw.isBlank()) return
             val fixed = httpsify(raw)
             if (!seen.add(fixed)) return
 
-            if (fixed.contains("filedon.co/embed/", true)) {
-                val (direct, fileName) = resolveFiledon(fixed)
-                if (!direct.isNullOrBlank()) {
-                    addDirect(
-                        url = direct,
-                        sourceName = "$name Filedon",
-                        quality = fileName
-                    )
-                    return
+            when {
+                "filedon.co/embed/" in fixed -> {
+                    val (direct, fileName) = resolveFiledon(fixed)
+                    if (!direct.isNullOrBlank()) {
+                        addDirectLink(direct, "$name Filedon", fileName)
+                        return
+                    }
                 }
+                else -> loadExtractorSafely(fixed, data)
             }
-
-            throwToExtractors(fixed, data)
         }
 
         coroutineScope {
             val mainIframes = document.select(".movieplay .pframe iframe, .player-embed iframe, .movieplay iframe, #embed_holder iframe")
-            mainIframes.map { frame -> 
-                async { loadUrl(frame.getIframeAttr()) } 
-            }.awaitAll()
+            mainIframes.map { async { processUrl(it.getIframeAttr()) } }.awaitAll()
 
             val ajaxUrl = "$mainUrl/wp-admin/admin-ajax.php"
             val options = document.select(".east_player_option[data-post][data-nume][data-type]")
-            
+
             options.map { option ->
                 async {
                     val post = option.attr("data-post").trim()
@@ -295,37 +251,25 @@ class WinbuProvider : MainAPI() {
                             ).text
                         }.getOrNull()?.let { body ->
                             val ajaxDoc = Jsoup.parse(body)
-
                             coroutineScope {
-                                val iframesAjax = ajaxDoc.select("iframe")
-                                val sourcesAjax = ajaxDoc.select("video source[src]")
-                                val anchorsAjax = ajaxDoc.select("a[href]")
-                                
-                                val job1 = async {
-                                    iframesAjax.forEach { frame -> loadUrl(frame.getIframeAttr()) }
+                                val iframes = ajaxDoc.select("iframe").mapNotNull { it.getIframeAttr() }
+                                val sources = ajaxDoc.select("video source[src]")
+                                val anchors = ajaxDoc.select("a[href]").map { it.attr("href") }
+
+                                iframes.forEach { processUrl(it) }
+                                sources.forEach { src ->
+                                    addDirectLink(src.attr("src"), "$name $server", src.attr("size"))
                                 }
-                                val job2 = async {
-                                    sourcesAjax.forEach { source -> 
-                                        addDirect(source.attr("src"), "$name $server", source.attr("size")) 
-                                    }
-                                }
-                                val job3 = async {
-                                    anchorsAjax.forEach { a ->
-                                        val href = a.attr("href")
-                                        if (href.startsWith("http", true)) loadUrl(href)
-                                    }
-                                }
-                                awaitAll(job1, job2, job3)
+                                anchors.forEach { processUrl(it) }
                             }
                         }
                     }
                 }
             }.awaitAll()
 
-            val downloadLinks = document.select(".download-eps a[href], #downloadb a[href], .boxdownload a[href], .dlbox a[href]")
-            downloadLinks.map { a -> 
-                async { loadUrl(a.attr("href")) } 
-            }.awaitAll()
+            document.select(".download-eps a[href], #downloadb a[href], .boxdownload a[href], .dlbox a[href]")
+                .map { async { processUrl(it.attr("href")) } }
+                .awaitAll()
         }
 
         return found
