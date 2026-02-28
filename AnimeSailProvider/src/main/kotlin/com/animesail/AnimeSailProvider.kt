@@ -53,7 +53,7 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    override suspend fun onInitialize() {
+    override suspend fun initialize() {
         val response = app.get(mainUrl)
         if (response.isSuccessful) {
             dynamicCookies.putAll(response.cookies)
