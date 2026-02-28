@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Anichin — Streaming Donghua Subtitle Indonesia"
@@ -19,5 +19,5 @@ cloudstream {
         "Cartoon",
     )
 
-    iconUrl = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.watch&size=%size%"
+    iconUrl = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.club&size=%size%"
 }
