@@ -50,7 +50,6 @@ class KlikxxiProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-    context?.let { StarPopupHelper.showStarPopupIfNeeded(it) }
     val url = if (page == 1) {
         "$mainUrl/${request.data.replace("page/%d/", "")}"
     } else {
