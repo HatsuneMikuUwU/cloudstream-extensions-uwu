@@ -53,14 +53,14 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    override suspend fun initialize() {
-        val response = app.get(mainUrl)
-        if (response.isSuccessful) {
-            dynamicCookies.putAll(response.cookies)
-        }
-    }
-
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
+        if (dynamicCookies.size <= 5) {
+            val initResponse = app.get(mainUrl)
+            if (initResponse.isSuccessful) {
+                dynamicCookies.putAll(initResponse.cookies)
+            }
+        }
+
         val response = app.get(
             url,
             headers = mapOf(
