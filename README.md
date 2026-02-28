@@ -50,8 +50,16 @@
 
 ---
 
-## How to Use
+## 🚀 How to Install
 
+### Option 1: 1-Click Install (Mobile)
+If you are viewing this page on an Android device with CloudStream installed, simply click the button below to add the repository automatically:
+
+<a href="cloudstreamrepo://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/repo.json">
+  <img src="https://img.shields.io/badge/⚡_Direct_Install_Repo-CloudStream-005FFF?style=for-the-badge" alt="Direct Install">
+</a>
+
+### Option 2: Manual Install
 1. **Download CloudStream** If you don't have it installed, get the latest [Pre-release version here](https://github.com/recloudstream/cloudstream/releases/tag/pre-release).
 2. **Open Settings** Navigate to `Settings` > `Extensions` within the app.
 3. **Add Repository** Tap on **Add Repository** and paste the following URL:
