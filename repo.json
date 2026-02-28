@@ -1,7 +1,7 @@
 {
     "name": "Hatsune Repo",
-    "iconUrl": "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/icon.png",
-    "description": "Hatsune Repository",
+    "iconUrl": "https://avatars.githubusercontent.com/u/146099520?v=4&size=512",
+    "description": "A curated collection of CloudStream extensions for anime, donghua, movies, and TV series with Indonesian subtitles",
     "manifestVersion": 1,
     "pluginLists": [
       "https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/builds/plugins.json"
