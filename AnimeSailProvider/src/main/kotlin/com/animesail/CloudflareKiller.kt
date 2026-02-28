@@ -3,6 +3,7 @@ package com.animesail
 import android.util.Log
 import android.webkit.CookieManager
 import androidx.annotation.AnyThread
+import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mvvm.debugWarning
 import com.lagradost.cloudstream3.mvvm.safe
