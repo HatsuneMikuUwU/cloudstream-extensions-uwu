@@ -212,10 +212,11 @@ class WinbuProvider : MainAPI() {
                 val directUrl = parsed.props?.url
                 if (!directUrl.isNullOrBlank() && seen.add(directUrl)) {
                     linkCb(newExtractorLink(
-                        "$name Filedon", "$name Filedon", directUrl, INFER_TYPE, 
-                        parsed.props.files?.name?.let { getQualityFromName(it) } ?: Qualities.Unknown.value,
-                        mapOf("Referer" to data)
-                    ))
+                        "$name Filedon", "$name Filedon", directUrl, INFER_TYPE 
+                    ) {
+                        this.quality = parsed.props.files?.name?.let { getQualityFromName(it) } ?: Qualities.Unknown.value
+                        this.headers = mapOf("Referer" to data)
+                    })
                     return
                 }
             }
@@ -226,7 +227,7 @@ class WinbuProvider : MainAPI() {
             document.select(".movieplay .pframe iframe, .player-embed iframe, .movieplay iframe, #embed_holder iframe")
                 .map { frame -> async { loadUrl(frame.getIframeAttr()) } }
                 .awaitAll()
-                
+
             val options = document.select(".east_player_option[data-post][data-nume][data-type]")
             options.map { option ->
                 async {
@@ -253,9 +254,11 @@ class WinbuProvider : MainAPI() {
                                 
                                 if (src.isNotBlank() && seen.add(src)) {
                                     linkCb(newExtractorLink(
-                                        serverName, serverName, src, INFER_TYPE,
-                                        getQualityFromName(quality), mapOf("Referer" to data)
-                                    ))
+                                        serverName, serverName, src, INFER_TYPE
+                                    ) {
+                                        this.quality = getQualityFromName(quality)
+                                        this.headers = mapOf("Referer" to data)
+                                    })
                                 }
                             }
                             ajaxDoc.select("a[href^=http]").forEach { a -> loadUrl(a.attr("href")) }
