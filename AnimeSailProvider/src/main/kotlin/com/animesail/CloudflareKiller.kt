@@ -17,7 +17,6 @@ import okhttp3.Request
 import okhttp3.Response
 import java.net.URI
 
-
 @AnyThread
 class CloudflareKiller : Interceptor {
     companion object {
@@ -41,6 +40,21 @@ class CloudflareKiller : Interceptor {
     }
 
     val savedCookies: MutableMap<String, Map<String, String>> = mutableMapOf()
+
+    private fun getHeaders(
+        headers: Map<String, String>,
+        cookies: Map<String, String>
+    ): Headers {
+        val builder = Headers.Builder()
+        headers.forEach { (key, value) ->
+            builder.add(key, value)
+        }
+        if (cookies.isNotEmpty()) {
+            val cookieString = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+            builder.add("cookie", cookieString)
+        }
+        return builder.build()
+    }
 
     /**
      * Gets the headers with cookies, webview user agent included!
@@ -98,7 +112,7 @@ class CloudflareKiller : Interceptor {
     }
 
     private suspend fun proceed(request: Request, cookies: Map<String, String>): Response {
-        val userAgentMap = WebViewResolver.getWebViewUserAgent()?.let {
+        val userAgentMap = WebViewResolver.webViewUserAgent?.let {
             mapOf("user-agent" to it)
         } ?: emptyMap()
 
