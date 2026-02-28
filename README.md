@@ -20,6 +20,7 @@
 | Kuronime | Indonesia | Anime | ✅ Active |
 | LayarKaca | Indonesia | Movies & TV Series | ✅ Active |
 | MovieBox | Indonesia | Movies & TV Series | ✅ Active |
+| NgeFilm21 | Indonesia | Movies & TV Series | ✅ Active |
 | OtakuDesu | Indonesia | Anime | ✅ Active |
 | Samehadaku | Indonesia | Anime | ✅ Active |
 | Winbu | Indonesia | Anime, Movies & TV Series | ✅ Active |
