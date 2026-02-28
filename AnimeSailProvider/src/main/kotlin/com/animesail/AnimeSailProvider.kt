@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.safeApiCall
-import com.animesail.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -13,9 +12,50 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import com.lagradost.nicehttp.Requests
 import kotlinx.coroutines.runBlocking
+import okhttp3.Interceptor
+import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+
+class AnimeSailCookieInterceptor : Interceptor {
+    private var dynamicCookies: MutableMap<String, String> = mutableMapOf(
+        "_as_ipin_ct" to "ID",
+        "_as_ipin_lc" to "id",
+        "_as_ipin_tz" to "Asia/Jakarta",
+        "_as_turnstile" to "d2e81c0ded39bece38c475e3e8a4d9b397849ea6a870eff4519a5f9544d36836",
+        "_popprepop" to "1"
+    )
+
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val originalRequest = chain.request()
+
+        val cookieHeader = dynamicCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+
+        val newRequest = originalRequest.newBuilder()
+            .header("Cookie", cookieHeader)
+            .build()
+
+        val response = chain.proceed(newRequest)
+
+        val setCookies = response.headers("Set-Cookie")
+        if (setCookies.isNotEmpty()) {
+            setCookies.forEach { cookieStr ->
+                val parts = cookieStr.substringBefore(";").split("=", limit = 2)
+                if (parts.size == 2) {
+                    val key = parts[0].trim()
+                    val value = parts[1].trim()
+                    if (key.isNotBlank() && value.isNotBlank()) {
+                        dynamicCookies[key] = value
+                    }
+                }
+            }
+        }
+
+        return response
+    }
+}
 
 class AnimeSailProvider : MainAPI() {
     override var mainUrl = "https://154.26.137.28"
@@ -28,6 +68,13 @@ class AnimeSailProvider : MainAPI() {
         TvType.Anime,
         TvType.AnimeMovie,
         TvType.OVA
+    )
+
+    private val client = Requests(
+        app.baseClient.newBuilder()
+            .addInterceptor(AnimeSailCookieInterceptor())
+            .addInterceptor(app.cloudflareInterceptor)
+            .build()
     )
 
     companion object {
@@ -46,25 +93,20 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    private val cfKiller = CloudflareKiller()
-
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        return app.get(
+        return client.get(
             url,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
                 "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Referer" to (ref ?: "$mainUrl/"),
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
-            ),
-            cookies = mapOf(
-                "_as_ipin_ct" to "ID",
-                "_as_ipin_lc" to "id",
-                "_as_ipin_tz" to "Asia/Jakarta",
-                "_popprepop" to "1",
-                "usertype" to "guest"
-            ),
-            interceptor = cfKiller
+                "Connection" to "keep-alive",
+                "Sec-Ch-Ua" to "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+                "Sec-Ch-Ua-Mobile" to "?1",
+                "Sec-Ch-Ua-Platform" to "\"Android\"",
+                "Upgrade-Insecure-Requests" to "1",
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            )
         )
     }
 
@@ -75,7 +117,7 @@ class AnimeSailProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = request(request.data + page).document
+        val document = this.request(request.data + page).document
         val home = document.select("article").map {
             it.toSearchResult()
         }
@@ -111,7 +153,6 @@ class AnimeSailProvider : MainAPI() {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -177,8 +218,8 @@ class AnimeSailProvider : MainAPI() {
                         iframe,
                         ref = data
                     ).text.substringAfter("= `").substringBefore("`;")
-                        .let {
-                            val link = Jsoup.parse(it).select("source").last()?.attr("src")
+                        .let { resText ->
+                            val link = Jsoup.parse(resText).select("source").last()?.attr("src")
                             callback.invoke(
                                 newExtractorLink(
                                     source = name,
@@ -217,9 +258,7 @@ class AnimeSailProvider : MainAPI() {
                                 }
                             )
                         }
-                    //                    skip for now
-                    //                    iframe.startsWith("$mainUrl/utils/player/fichan/") -> ""
-                    //                    iframe.startsWith("$mainUrl/utils/player/blogger/") -> ""
+
                     iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
                         val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
                             iframe.substringAfter("id=").substringBefore("&token")
