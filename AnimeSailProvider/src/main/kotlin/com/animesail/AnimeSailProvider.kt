@@ -19,44 +19,6 @@ import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
-class AnimeSailCookieInterceptor : Interceptor {
-    private var dynamicCookies: MutableMap<String, String> = mutableMapOf(
-        "_as_ipin_ct" to "ID",
-        "_as_ipin_lc" to "id",
-        "_as_ipin_tz" to "Asia/Jakarta",
-        "_as_turnstile" to "d2e81c0ded39bece38c475e3e8a4d9b397849ea6a870eff4519a5f9544d36836",
-        "_popprepop" to "1"
-    )
-
-    override fun intercept(chain: Interceptor.Chain): Response {
-        val originalRequest = chain.request()
-
-        val cookieHeader = dynamicCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
-
-        val newRequest = originalRequest.newBuilder()
-            .header("Cookie", cookieHeader)
-            .build()
-
-        val response = chain.proceed(newRequest)
-
-        val setCookies = response.headers("Set-Cookie")
-        if (setCookies.isNotEmpty()) {
-            setCookies.forEach { cookieStr ->
-                val parts = cookieStr.substringBefore(";").split("=", limit = 2)
-                if (parts.size == 2) {
-                    val key = parts[0].trim()
-                    val value = parts[1].trim()
-                    if (key.isNotBlank() && value.isNotBlank()) {
-                        dynamicCookies[key] = value
-                    }
-                }
-            }
-        }
-
-        return response
-    }
-}
-
 class AnimeSailProvider : MainAPI() {
     override var mainUrl = "https://154.26.137.28"
     override var name = "AnimeSail"
@@ -70,11 +32,12 @@ class AnimeSailProvider : MainAPI() {
         TvType.OVA
     )
 
-    private val client = Requests(
-        app.baseClient.newBuilder()
-            .addInterceptor(AnimeSailCookieInterceptor())
-            .addInterceptor(app.cloudflareInterceptor)
-            .build()
+    private var dynamicCookies: Map<String, String> = mapOf(
+        "_as_ipin_ct" to "ID",
+        "_as_ipin_lc" to "id",
+        "_as_ipin_tz" to "Asia/Jakarta",
+        "_as_turnstile" to "d2e81c0ded39bece38c475e3e8a4d9b397849ea6a870eff4519a5f9544d36836",
+        "_popprepop" to "1"
     )
 
     companion object {
@@ -94,7 +57,7 @@ class AnimeSailProvider : MainAPI() {
     }
 
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        return client.get(
+        val response = app.get(
             url,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -106,8 +69,15 @@ class AnimeSailProvider : MainAPI() {
                 "Sec-Ch-Ua-Platform" to "\"Android\"",
                 "Upgrade-Insecure-Requests" to "1",
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
-            )
+            ),
+            cookies = dynamicCookies 
         )
+
+        if (response.cookies.isNotEmpty()) {
+            dynamicCookies = dynamicCookies + response.cookies
+        }
+
+        return response
     }
 
     override val mainPage = mainPageOf(
