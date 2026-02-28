@@ -17,6 +17,7 @@
 | Idlix | Indonesia | Movies & TV Series | ✅ Active |
 | IndoMax21 | Indonesia | NSFW, Movies & TV Series | ✅ Active |
 | JavHey | Indonesia | NSFW | ✅ Active |
+| KlikXXI | Indonesia | Movies & TV Series | ✅ Active |
 | Kuronime | Indonesia | Anime | ✅ Active |
 | LayarKaca | Indonesia | Movies & TV Series | ✅ Active |
 | MovieBox | Indonesia | Movies & TV Series | ✅ Active |
