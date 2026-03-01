@@ -49,6 +49,7 @@ class NontonAnimeIDProvider : MainAPI() {
         "$mainUrl/anime/?mode=&sort=series_tahun_newest&status=Currently+Airing&type=" to "Ongoing Anime",
         "$mainUrl/anime/?mode=&sort=series_tahun_newest&status=Finished+Airing&type=" to "Complete Anime",
         "$mainUrl/anime/?mode=&sort=series_popularity&status=&type=" to "Most Popular",
+        "$mainUrl/anime/?mode=&sort=series_skor&status=&type=" to "Top Rating",
         "$mainUrl/anime/?mode=&sort=series_tahun_newest&status=&type=Movie" to "Movie",
     )
 
