@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.safeApiCall
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -34,7 +33,7 @@ class AnimeSailProvider : MainAPI() {
         "_as_ipin_ct" to "ID",
         "_as_ipin_lc" to "id",
         "_as_ipin_tz" to "Asia/Jakarta",
-        "_as_turnstile" to "",
+        "_as_turnstile" to "05160a38d13377f13d6f94a80db81ae6e682051f6fb5f538ca4e9deff102374c",
         "_popprepop" to "1"
     )
 
@@ -67,19 +66,24 @@ class AnimeSailProvider : MainAPI() {
             "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
         )
 
-        val cloudflareInterceptor = WebViewResolver(
-            Regex("(?i)(Just a moment|cloudflare|turnstile|Checking your browser|Ray ID|DDoS protection)")
-        )
+        var response = app.get(url, headers = requestHeaders, cookies = dynamicCookies)
 
-        val response = app.get(
-            url,
-            headers = requestHeaders,
-            cookies = dynamicCookies,
-            interceptor = cloudflareInterceptor
-        )
+        val isCloudflareBlocked = !response.isSuccessful && 
+                (response.code in listOf(403, 503) || response.text.contains("Just a moment", ignoreCase = true))
 
-        if (response.cookies.isNotEmpty()) {
-            dynamicCookies.putAll(response.cookies)
+        if (isCloudflareBlocked) {
+            dynamicCookies.remove("_as_turnstile")
+            
+            val initResponse = app.get(mainUrl, headers = requestHeaders)
+            if (initResponse.cookies.isNotEmpty()) {
+                dynamicCookies.putAll(initResponse.cookies)
+            }
+            
+            response = app.get(url, headers = requestHeaders, cookies = dynamicCookies)
+        } else {
+            if (response.cookies.isNotEmpty()) {
+                dynamicCookies.putAll(response.cookies)
+            }
         }
 
         return response
