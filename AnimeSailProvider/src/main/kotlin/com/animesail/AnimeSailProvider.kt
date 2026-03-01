@@ -3,9 +3,7 @@ package com.animesail
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
-import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.safeApiCall
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -13,9 +11,8 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -32,13 +29,15 @@ class AnimeSailProvider : MainAPI() {
         TvType.OVA
     )
 
-    private val cloudflareInterceptor = CloudflareKiller()
+    private var dynamicCookies = mutableMapOf(
+        "_as_ipin_ct" to "ID",
+        "_as_ipin_lc" to "id",
+        "_as_ipin_tz" to "Asia/Jakarta",
+        "_as_turnstile" to "32f97e8f98b770e5f024bb5d4a53661cfac0fa98894cc6923e858fb781112803",
+        "_popprepop" to "1"
+    )
 
     companion object {
-        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-        private val locker = Mutex()
-        private var isInitialized = false
-
         fun getType(t: String): TvType {
             return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
             else if (t.contains("Movie", true)) TvType.AnimeMovie
@@ -54,40 +53,44 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    private var persistedCookies: String? = null
-
-    private val defaultHeaders: Map<String, String>
-        get() = mapOf(
-            "User-Agent" to USER_AGENT,
-            "Referer" to "$mainUrl/",
-            "Cookie" to (persistedCookies ?: "")
+    private suspend fun request(url: String, ref: String? = null): NiceResponse {
+        val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language" to "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer" to (ref ?: mainUrl),
+            "Connection" to "keep-alive",
+            "Upgrade-Insecure-Requests" to "1"
         )
 
-    private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        if (!isInitialized) {
-            locker.withLock {
-                if (!isInitialized) {
-                    try {
-                        val resMain = app.get(mainUrl, headers = mapOf("User-Agent" to USER_AGENT), interceptor = cloudflareInterceptor, timeout = 60)
-                        if (resMain.code == 200) {
-                            val cookieList = mutableListOf<String>()
-                            resMain.okhttpResponse.headers("Set-Cookie").forEach { cookieList.add(it.split(";")[0]) }
-                            resMain.okhttpResponse.request.header("Cookie")?.let { cookieList.add(it) }
-                            persistedCookies = cookieList.distinct().joinToString("; ")
-                            isInitialized = true
-                        }
-                    } catch (_: Exception) {}
+        var response = app.get(url, headers = headers, cookies = dynamicCookies)
+
+        val isChallenge = !response.isSuccessful && (
+            response.code in listOf(403, 503) ||
+            response.text.contains("Just a moment", ignoreCase = true) ||
+            response.text.contains("cf-turnstile", ignoreCase = true) ||
+            response.text.contains("challenge-platform", ignoreCase = true)
+        )
+
+        if (isChallenge) {
+            dynamicCookies.remove("_as_turnstile")
+            dynamicCookies.remove("cf_clearance")
+
+            repeat(3) { attempt ->
+                val mainResponse = app.get(mainUrl, headers = headers)
+                if (mainResponse.isSuccessful && !mainResponse.text.contains("cf-turnstile")) {
+                    dynamicCookies.putAll(mainResponse.cookies)
+                    response = app.get(url, headers = headers, cookies = dynamicCookies)
+                    if (response.isSuccessful) return response
                 }
+                delay(2000L * (attempt + 1))
+            }
+        } else {
+            if (response.cookies.isNotEmpty()) {
+                dynamicCookies.putAll(response.cookies)
             }
         }
-        
-        val headers = if (ref != null) {
-            defaultHeaders.toMutableMap().apply { put("Referer", ref) }
-        } else {
-            defaultHeaders
-        }
-
-        return app.get(url, headers = headers, interceptor = cloudflareInterceptor)
+        return response
     }
 
     override val mainPage = mainPageOf(
@@ -110,14 +113,10 @@ class AnimeSailProvider : MainAPI() {
         } else {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
-                    "-episode"
-                )
-
+                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
-
             "$mainUrl/anime/$title"
         }
     }
@@ -147,17 +146,15 @@ class AnimeSailProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = request(url).document
 
-        val title = document.selectFirst("h1.entry-title")?.text().toString()
-            .replace("Subtitle Indonesia", "").trim()
+        val title = document.selectFirst("h1.entry-title")?.text()?.replace("Subtitle Indonesia", "")?.trim() ?: "Unknown"
         val poster = document.selectFirst("div.entry-content > img")?.attr("src")
         val type = getType(document.select("tbody th:contains(Tipe)").next().text().lowercase())
         val year = document.select("tbody th:contains(Dirilis)").next().text().trim().toIntOrNull()
 
-        val episodes = document.select("ul.daftar > li").map {
-            val link = fixUrl(it.select("a").attr("href"))
+        val episodes = document.select("ul.daftar > li").mapNotNull {
+            val link = fixUrlNull(it.select("a").attr("href")) ?: return@mapNotNull null
             val name = it.select("a").text()
-            val episode =
-                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
+            val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
@@ -168,11 +165,9 @@ class AnimeSailProvider : MainAPI() {
             backgroundPosterUrl = tracker?.cover
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
-            showStatus =
-                getStatus(document.select("tbody th:contains(Status)").next().text().trim())
+            showStatus = getStatus(document.select("tbody th:contains(Status)").next().text().trim())
             plot = document.selectFirst("div.entry-content > p")?.text()
-            this.tags =
-                document.select("tbody th:contains(Genre)").next().select("a").map { it.text() }
+            this.tags = document.select("tbody th:contains(Genre)").next().select("a").map { it.text() }
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
@@ -184,7 +179,6 @@ class AnimeSailProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-
         val document = request(data).document
 
         document.select(".mobius > .mirror > option").amap {
@@ -193,70 +187,51 @@ class AnimeSailProvider : MainAPI() {
                     Jsoup.parse(base64Decode(it.attr("data-em"))).select("iframe").attr("src")
                 )
                 val quality = getIndexQuality(it.text())
+                
                 when {
-                    iframe.startsWith("$mainUrl/utils/player/kodir2") -> request(
-                        iframe,
-                        ref = data
-                    ).text.substringAfter("= `").substringBefore("`;")
-                        .let { resText ->
-                            val link = Jsoup.parse(resText).select("source").last()?.attr("src")
+                    iframe.startsWith("$mainUrl/utils/player/kodir2") -> {
+                        request(iframe, ref = data).text.substringAfter("= `").substringBefore("`;").let { resText ->
+                            val link = Jsoup.parse(resText).select("source").last()?.attr("src") ?: return@let
                             callback.invoke(
-                                newExtractorLink(
-                                    source = name,
-                                    name = name,
-                                    url = link ?: return@let,
-                                    INFER_TYPE
-                                ) {
+                                newExtractorLink(source = name, name = name, url = link, INFER_TYPE) {
                                     referer = mainUrl
                                     this.quality = quality
                                 }
                             )
                         }
-
-                    iframe.startsWith("$mainUrl/utils/player/arch/") || iframe.startsWith("$mainUrl/utils/player/race/") || iframe.startsWith(
-                        "$mainUrl/utils/player/hexupload/"
-                    ) || iframe.startsWith("$mainUrl/utils/player/pomf/")
-                    -> request(iframe, ref = data).document.select("source").attr("src")
-                        .let { link ->
-                            val source =
-                                when {
-                                    iframe.contains("/arch/") -> "Arch"
-                                    iframe.contains("/race/") -> "Race"
-                                    iframe.contains("/hexupload/") -> "Hexupload"
-                                    iframe.contains("/pomf/") -> "Pomf"
-                                    else -> name
-                                }
+                    }
+                    
+                    iframe.startsWith("$mainUrl/utils/player/arch/") || 
+                    iframe.startsWith("$mainUrl/utils/player/race/") || 
+                    iframe.startsWith("$mainUrl/utils/player/hexupload/") || 
+                    iframe.startsWith("$mainUrl/utils/player/pomf/") -> {
+                        request(iframe, ref = data).document.select("source").attr("src").let { link ->
+                            val source = when {
+                                iframe.contains("/arch/") -> "Arch"
+                                iframe.contains("/race/") -> "Race"
+                                iframe.contains("/hexupload/") -> "Hexupload"
+                                iframe.contains("/pomf/") -> "Pomf"
+                                else -> name
+                            }
                             callback.invoke(
-                                newExtractorLink(
-                                    source = source,
-                                    name = source,
-                                    url = link,
-                                    INFER_TYPE
-                                ) {
+                                newExtractorLink(source = source, name = source, url = link, INFER_TYPE) {
                                     referer = mainUrl
                                     this.quality = quality
                                 }
                             )
                         }
+                    }
 
                     iframe.startsWith("https://aghanim.xyz/tools/redirect/") -> {
-                        val link = "https://rasa-cintaku-semakin-berantai.xyz/v/${
-                            iframe.substringAfter("id=").substringBefore("&token")
-                        }"
+                        val id = iframe.substringAfter("id=").substringBefore("&token")
+                        val link = "https://rasa-cintaku-semakin-berantai.xyz/v/$id"
                         loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
                     }
 
                     iframe.startsWith("$mainUrl/utils/player/framezilla/") || iframe.startsWith("https://uservideo.xyz") -> {
-                        request(iframe, ref = data).document.select("iframe").attr("src")
-                            .let { link ->
-                                loadFixedExtractor(
-                                    fixUrl(link),
-                                    quality,
-                                    mainUrl,
-                                    subtitleCallback,
-                                    callback
-                                )
-                            }
+                        request(iframe, ref = data).document.select("iframe").attr("src").let { link ->
+                            loadFixedExtractor(fixUrl(link), quality, mainUrl, subtitleCallback, callback)
+                        }
                     }
 
                     else -> {
@@ -286,8 +261,7 @@ class AnimeSailProvider : MainAPI() {
                         INFER_TYPE
                     ) {
                         this.referer = mainUrl
-                        this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
-                            ?: Qualities.Unknown.value
+                        this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality ?: Qualities.Unknown.value
                         this.type = link.type
                         this.headers = link.headers
                         this.extractorData = link.extractorData
