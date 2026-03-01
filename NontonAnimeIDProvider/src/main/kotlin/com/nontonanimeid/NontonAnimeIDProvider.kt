@@ -56,23 +56,16 @@ class NontonAnimeIDProvider : MainAPI() {
         val pageUrl = if (page == 1) {
             request.data
         } else {
-            if (request.data.contains("?")) {
-                request.data.replace("?", "page/$page/?")
-            } else {
-                if (request.data.endsWith("/")) {
-                    "${request.data}page/$page/"
-                } else {
-                    "${request.data}/page/$page/"
-                }
-            }
+            request.data.replaceFirst("?", "page/$page/?")
         }
 
         val document = app.get(pageUrl).document
+        
         val home = document.select("a.as-anime-card").mapNotNull {
             it.toSearchResult()
         }
         
-        val hasNext = document.select("a.next.page-numbers, a.next, .pagination .next").isNotEmpty()
+        val hasNext = home.isNotEmpty()
         
         return newHomePageResponse(request.name, home, hasNext = hasNext)
     }
