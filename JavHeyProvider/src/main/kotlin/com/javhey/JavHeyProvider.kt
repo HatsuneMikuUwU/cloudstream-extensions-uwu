@@ -1,16 +1,15 @@
 package com.javhey
 
+import android.util.Base64
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
-import org.jsoup.nodes.Element
-import android.util.Base64
+import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import com.fasterxml.jackson.annotation.JsonProperty
-import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import org.jsoup.nodes.Element
 import java.net.URI
-import java.nio.charset.StandardCharsets
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -42,56 +41,62 @@ class JavHeyProvider : MainAPI() {
         "$mainUrl/videos/top-rating/page=" to "Top Rating"
     )
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        val url = if (page == 1) request.data.replace("/page=", "") else request.data + page
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val url = if (page == 1) request.data.removeSuffix("/page=") else "${request.data}$page"
         val document = app.get(url, headers = headers).document
-        val home = document.select("div.article_standard_view > article.item").mapNotNull { toSearchResult(it) }
+        
+        val home = document.select("div.article_standard_view > article.item").mapNotNull { it.toSearchResult() }
         return newHomePageResponse(request.name, home)
-    }
-
-    private fun toSearchResult(element: Element): SearchResponse? {
-        val titleElement = element.selectFirst("div.item_content > h3 > a") ?: return null
-        val title = titleElement.text().replace("JAV Subtitle Indonesia - ", "").trim()
-        val href = fixUrl(titleElement.attr("href"))
-        val posterUrl = element.selectFirst("div.item_header > a > img")?.attr("src")
-        return newMovieSearchResponse(title, href, TvType.NSFW) { this.posterUrl = posterUrl }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/search?s=$query"
         val searchHeaders = headers + mapOf("Referer" to "$mainUrl/")
         val document = app.get(url, headers = searchHeaders).document
-        return document.select("div.article_standard_view > article.item").mapNotNull { toSearchResult(it) }
+        
+        return document.select("div.article_standard_view > article.item").mapNotNull { it.toSearchResult() }
+    }
+
+    private fun Element.toSearchResult(): SearchResponse? {
+        val titleElement = selectFirst("div.item_content > h3 > a") ?: return null
+        val title = titleElement.text().removePrefix("JAV Subtitle Indonesia - ").trim()
+        val href = fixUrl(titleElement.attr("href"))
+        val posterUrl = selectFirst("div.item_header > a > img")?.attr("src")
+        
+        return newMovieSearchResponse(title, href, TvType.NSFW) { 
+            this.posterUrl = posterUrl 
+        }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url, headers = headers).document
 
-        val rawTitle = document.selectFirst("article.post header.post_header h1")?.text()?.trim()
-        val title = rawTitle?.replace("JAV Subtitle Indonesia - ", "") ?: "Unknown Title"
+        val title = document.selectFirst("article.post header.post_header h1")?.text()
+            ?.removePrefix("JAV Subtitle Indonesia - ")?.trim() ?: "Unknown Title"
 
         val poster = document.selectFirst("div.product div.images img")?.attr("src")
             ?: document.selectFirst("meta[property=og:image]")?.attr("content")
 
-        val description = document.selectFirst("p.video-description")?.text()?.replace("Description: ", "")?.trim()
+        val description = document.selectFirst("p.video-description")?.text()
+            ?.removePrefix("Description: ")?.trim()
             ?: document.selectFirst("meta[name=description]")?.attr("content")
 
         val metaDiv = document.select("div.product_meta")
-        val actorNames = metaDiv.select("span:contains(Actor) a").map { it.text() }
         val tags = metaDiv.select("span:contains(Category) a, span:contains(Tag) a").map { it.text() }
+        val actorList = metaDiv.select("span:contains(Actor) a").map { ActorData(Actor(it.text())) }
         
-        val releaseDateText = metaDiv.select("span:contains(Release Day)").text()
-        val year = Regex("""\d{4}""").find(releaseDateText)?.value?.toIntOrNull()
+        val yearStr = metaDiv.select("span:contains(Release Day)").text()
+        val yearInt = Regex("""\d{4}""").find(yearStr)?.value?.toIntOrNull()
 
-        val recommendations = document.select("div.article_standard_view > article.item").mapNotNull { toSearchResult(it) }
+        val recommended = document.select("div.article_standard_view > article.item").mapNotNull { it.toSearchResult() }
 
         return newMovieLoadResponse(title, url, TvType.NSFW, url) {
             this.posterUrl = poster
             this.plot = description
             this.tags = tags
-            this.actors = actorNames.map { ActorData(Actor(it, null)) }
-            this.year = year
-            this.recommendations = recommendations
+            this.actors = actorList
+            this.year = yearInt
+            this.recommendations = recommended
         }
     }
 
@@ -101,32 +106,43 @@ class JavHeyProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean = coroutineScope {
-        val html = app.get(data, headers = headers).text
-        val rawLinks = mutableSetOf<String>()
+        val document = app.get(data, headers = headers).document
 
-        Regex("""id=["']links["'][^>]*value=["']([^"']+)["']""").findAll(html).forEach { match ->
+        val rawLinks = document.select("[id=links]").mapNotNull { 
+            it.attr("value").takeIf { v -> v.isNotBlank() }
+        }.flatMap { encodedValue ->
             try {
-                val decoded = String(Base64.decode(match.groupValues[1], Base64.DEFAULT))
-                decoded.split(",,,").forEach { 
-                    if (it.startsWith("http")) rawLinks.add(it.trim()) 
-                }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
+                String(Base64.decode(encodedValue, Base64.DEFAULT))
+                    .split(",,,")
+                    .map { it.trim() }
+                    .filter { it.startsWith("http") }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }.toSet()
+
+        val streamwishDomains = listOf("minochinos.com", "terbit2.com")
+        val byseDomains = listOf("bysebuho", "bysezejataos", "bysevepoin")
 
         rawLinks.forEach { url ->
             launch(Dispatchers.IO) {
                 try {
-                    var fixedUrl = url
-                    if (url.contains("minochinos.com") || url.contains("terbit2.com")) {
-                        fixedUrl = url.replace("minochinos.com", "streamwish.to")
-                                      .replace("terbit2.com", "streamwish.to")
-                        loadExtractor(fixedUrl, data, subtitleCallback, callback)
-                    } else if (url.contains("bysebuho") || url.contains("bysezejataos") || url.contains("bysevepoin")) {
-                        ByseSXLocal().getUrl(url, data, subtitleCallback, callback)
-                    } else {
-                        loadExtractor(fixedUrl, data, subtitleCallback, callback)
+                    when {
+                        streamwishDomains.any { url.contains(it) } -> {
+                            val fixedUrl = url.replace("minochinos.com", "streamwish.to")
+                                              .replace("terbit2.com", "streamwish.to")
+                            loadExtractor(fixedUrl, data, subtitleCallback, callback)
+                        }
+                        byseDomains.any { url.contains(it) } -> {
+                            ByseSXLocal().getUrl(url, data, subtitleCallback, callback)
+                        }
+                        else -> {
+                            loadExtractor(url, data, subtitleCallback, callback)
+                        }
                     }
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
         return@coroutineScope true
@@ -147,20 +163,23 @@ open class ByseSXLocal : ExtractorApi() {
                 else -> ""
             }
             Base64.decode(fixed + pad, Base64.DEFAULT)
-        } catch (e: Exception) { ByteArray(0) }
+        } catch (e: Exception) { 
+            ByteArray(0) 
+        }
     }
 
     private fun getBaseUrl(url: String): String {
-        return try { URI(url).let { "${it.scheme}://${it.host}" } } catch (e: Exception) { url }
+        return runCatching { URI(url).let { "${it.scheme}://${it.host}" } }.getOrDefault(url)
     }
 
     private fun getCodeFromUrl(url: String): String {
-        return URI(url).path?.trimEnd('/')?.substringAfterLast('/') ?: ""
+        return runCatching { URI(url).path?.trimEnd('/')?.substringAfterLast('/') }.getOrNull() ?: ""
     }
 
     override suspend fun getUrl(url: String, referer: String?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
         val refererUrl = getBaseUrl(url)
         val code = getCodeFromUrl(url)
+        if (code.isEmpty()) return
         
         val detailsUrl = "$refererUrl/api/videos/$code/embed/details"
         val details = app.get(detailsUrl).parsedSafe<DetailsRoot>() ?: return
@@ -170,7 +189,12 @@ open class ByseSXLocal : ExtractorApi() {
         val embedCode = getCodeFromUrl(embedFrameUrl)
         
         val playbackUrl = "$embedBase/api/videos/$embedCode/embed/playback"
-        val playbackHeaders = mapOf("accept" to "*/*", "referer" to embedFrameUrl, "x-embed-parent" to (referer ?: mainUrl))
+        val playbackHeaders = mapOf(
+            "accept" to "*/*", 
+            "referer" to embedFrameUrl, 
+            "x-embed-parent" to (referer ?: mainUrl)
+        )
+        
         val playback = app.get(playbackUrl, headers = playbackHeaders).parsedSafe<PlaybackRoot>()?.playback ?: return
 
         try {
@@ -181,12 +205,14 @@ open class ByseSXLocal : ExtractorApi() {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, ivBytes))
             
-            var jsonStr = String(cipher.doFinal(cipherBytes), StandardCharsets.UTF_8)
-            if (jsonStr.startsWith("\uFEFF")) jsonStr = jsonStr.substring(1)
+            val jsonStr = String(cipher.doFinal(cipherBytes), Charsets.UTF_8).removePrefix("\uFEFF")
             
-            val streamUrl = tryParseJson<PlaybackDecrypt>(jsonStr)?.sources?.firstOrNull()?.url ?: return
-            M3u8Helper.generateM3u8(name, streamUrl, refererUrl, headers = mapOf("Referer" to refererUrl)).forEach(callback)
-        } catch (e: Exception) { e.printStackTrace() }
+            tryParseJson<PlaybackDecrypt>(jsonStr)?.sources?.firstOrNull()?.url?.let { streamUrl ->
+                M3u8Helper.generateM3u8(name, streamUrl, refererUrl, headers = mapOf("Referer" to refererUrl)).forEach(callback)
+            }
+        } catch (e: Exception) { 
+            e.printStackTrace() 
+        }
     }
 }
 
