@@ -34,6 +34,7 @@
 | **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **Winbu** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series | ✅ Active |
