@@ -74,15 +74,21 @@ class TurnstileKiller : Interceptor {
     }
 
     private suspend fun proceedWithCookies(request: Request, cookies: Map<String, String>): Response {
-        val userAgent = WebViewResolver.getWebViewUserAgent()
+        val userAgent = WebViewResolver.webViewUserAgent
         val requestBuilder = request.newBuilder()
         
         userAgent?.let { requestBuilder.header("User-Agent", it) }
 
         val existingCookies = request.header("Cookie") ?: ""
-        val newCookieString = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
         
-        val finalCookie = if (existingCookies.isNotEmpty()) "$existingCookies; $newCookieString" else newCookieString
+        val newCookieString = cookies.map { "${it.key}=${it.value}" }.joinToString("; ")
+        
+        val finalCookie = if (existingCookies.isNotEmpty()) {
+            if (newCookieString.isNotEmpty()) "$existingCookies; $newCookieString" else existingCookies
+        } else {
+            newCookieString
+        }
+
         if (finalCookie.isNotEmpty()) {
             requestBuilder.header("Cookie", finalCookie)
         }
