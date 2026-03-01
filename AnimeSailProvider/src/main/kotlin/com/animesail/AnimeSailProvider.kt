@@ -5,7 +5,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.safeApiCall
-import com.animesail.TurnstileKiller
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -32,7 +32,7 @@ class AnimeSailProvider : MainAPI() {
         TvType.OVA
     )
 
-    private val cloudflareInterceptor = TurnstileKiller()
+    private val cloudflareInterceptor = CloudflareKiller()
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
