@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.utils.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.net.URI
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -25,7 +26,7 @@ class IndoMax21Provider : MainAPI() {
         "$mainUrl/category/asia-m/" to "Asia",
         "$mainUrl/category/vivamax/" to "VivaMax",
         "$mainUrl/category/jav/" to "JAV",
-        "$mainUrl/category/kelas-bintang/" to "Porn Start",
+        "$mainUrl/category/kelas-bintang/" to "Porn Star",
         "$mainUrl/category/semi-barat/" to "Western",
         "$mainUrl/category/bokep-indo/" to "Indonesia",
         "$mainUrl/category/bokep-vietnam/" to "Vietnam"
@@ -88,160 +89,43 @@ class IndoMax21Provider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val html = app.get(data).text
+        val document = app.get(data).document
 
-        val tabsBlockMatch = Regex("""class=["'][^"']*muvipro-player-tabs[^"']*["'][^>]*>(.*?)</ul>""", RegexOption.DOT_MATCHES_ALL).find(html)
-        
-        val rawServerUrls = if (tabsBlockMatch != null) {
-            Regex("""href=["']([^"']+)["']""").findAll(tabsBlockMatch.groupValues[1])
-                .map { fixUrl(it.groupValues[1]) }
-                .distinct()
-                .toList()
-        } else {
-            listOf(data)
+        val rawServerUrls = document.select(".muvipro-player-tabs a")
+            .mapNotNull { it.attr("href").takeIf { href -> href.isNotBlank() }?.let { url -> fixUrl(url) } }
+            .distinct()
+            .toMutableList()
+
+        if (rawServerUrls.isEmpty()) {
+            rawServerUrls.add(data)
         }
 
-        val sortedUrls = rawServerUrls.sortedBy { url ->
-            if (url == data) 0 else 1
-        }
+        val sortedUrls = rawServerUrls.sortedBy { if (it == data) 0 else 1 }
 
         coroutineScope {
             sortedUrls.forEach { serverUrl ->
                 launch(Dispatchers.IO) {
                     try {
-                        val serverHtml = if (serverUrl == data) html else app.get(serverUrl, referer = data).text
+                        val serverDoc = if (serverUrl == data) document else app.get(serverUrl, referer = data).document
                         
-                        val iframeRegex = Regex(
-                            """<iframe[^>]+src=["']([^"']+)["']""", 
-                            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL) 
-                        )
-                        val allIframes = iframeRegex.findAll(serverHtml).map { it.groupValues[1] }.toList()
-
-                        val iframeSrc = allIframes.firstOrNull { src ->
+                        val iframes = serverDoc.select("iframe").map { it.attr("src") }
+                        val iframeSrc = iframes.firstOrNull { src ->
                             src.contains("pyrox", ignoreCase = true) || 
                             src.contains("4meplayer", ignoreCase = true) || 
                             src.contains("imaxstreams", ignoreCase = true)
-                        } ?: allIframes.firstOrNull()
+                        } ?: iframes.firstOrNull() ?: return@launch
 
-                        if (iframeSrc != null) {
-                            if (iframeSrc.contains("embedpyrox") || iframeSrc.contains("pyrox")) {
-                                val iframeId = iframeSrc.substringAfterLast("/")
-                                val host = java.net.URI(iframeSrc).host
-                                val apiUrl = "https://$host/player/index.php?data=$iframeId&do=getVideo"
-
-                                val response = app.post(
-                                    url = apiUrl,
-                                    headers = mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to iframeSrc),
-                                    data = mapOf("hash" to iframeId, "r" to data)
-                                ).text
-
-                                val m3u8Url = Regex("""(https:\\?\/\\?\/[^"]+(?:master\.txt|\.m3u8))""")
-                                    .find(response)?.groupValues?.get(1)?.replace("\\/", "/")
-
-                                if (m3u8Url != null) {
-                                    callback.invoke(
-                                        newExtractorLink(
-                                            source = name,
-                                            name = "Server 1 (Pyrox)",
-                                            url = m3u8Url,
-                                            type = ExtractorLinkType.M3U8
-                                        ) {
-                                            this.referer = iframeSrc
-                                            this.quality = Qualities.Unknown.value
-                                            this.headers = mapOf(
-                                                "Origin" to "https://$host",
-                                                "Accept" to "*/*"
-                                            )
-                                        }
-                                    )
-                                }
-                            } 
-                            else if (iframeSrc.contains("4meplayer")) {
-                                val videoId = iframeSrc.substringAfterLast("#")
-                                if (videoId.isNotEmpty() && videoId != iframeSrc) {
-                                    val host = java.net.URI(iframeSrc).host
-                                    
-                                    val endpoints = listOf(
-                                        "https://$host/api/v1/video?id=$videoId",
-                                        "https://$host/api/v1/info?id=$videoId"
-                                    )
-                                    
-                                    var foundM3u8 = false
-                                    for (apiUrl in endpoints) {
-                                        if (foundM3u8) break 
-                                        
-                                        try {
-                                            val hexResponse = app.get(apiUrl, referer = iframeSrc).text.trim()
-                                            
-                                            if (hexResponse.isNotEmpty() && hexResponse.matches(Regex("^[0-9a-fA-F]+$"))) {
-                                                val secretKey = "kiemtienmua911ca".toByteArray(Charsets.UTF_8)
-                                                val ivBytes = ByteArray(16)
-                                                for (i in 0..8) ivBytes[i] = i.toByte() 
-                                                for (i in 9..15) ivBytes[i] = 32.toByte() 
-                                                
-                                                val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-                                                val secretKeySpec = SecretKeySpec(secretKey, "AES")
-                                                val ivParameterSpec = IvParameterSpec(ivBytes)
-                                                
-                                                cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec)
-                                                
-                                                val decodedHex = hexResponse.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                                                val decryptedBytes = cipher.doFinal(decodedHex)
-                                                val decryptedText = String(decryptedBytes, Charsets.UTF_8)
-                                                
-                                                val m3u8Regex = """"([^"]+\.m3u8[^"]*)"""".toRegex()
-                                                val match = m3u8Regex.find(decryptedText)
-                                                
-                                                if (match != null) {
-                                                    var m3u8Url = match.groupValues[1].replace("\\/", "/")
-                                                    if (m3u8Url.startsWith("/")) {
-                                                        m3u8Url = "https://$host$m3u8Url"
-                                                    }
-                                                    
-                                                    callback.invoke(
-                                                        newExtractorLink(
-                                                            source = name,
-                                                            name = "Server 2 (4MePlayer)",
-                                                            url = m3u8Url,
-                                                            type = ExtractorLinkType.M3U8
-                                                        ) {
-                                                            this.referer = iframeSrc
-                                                            this.quality = Qualities.Unknown.value
-                                                        }
-                                                    )
-                                                    foundM3u8 = true
-                                                }
-                                            }
-                                        } catch (e: Exception) {
-                                        }
-                                    }
-                                }
+                        when {
+                            iframeSrc.contains("pyrox", ignoreCase = true) || iframeSrc.contains("embedpyrox", ignoreCase = true) -> {
+                                extractPyrox(iframeSrc, data, callback)
                             }
-                            else if (iframeSrc.contains("imaxstreams")) {
-                                val iframeHtml = app.get(iframeSrc, referer = serverUrl).text
-                                
-                                val unpackedText = getAndUnpack(iframeHtml)
-                                
-                                val m3u8Regex = """"([^"]+\.m3u8[^"]*)"""".toRegex()
-                                val match = m3u8Regex.find(unpackedText) ?: m3u8Regex.find(iframeHtml)
-                                
-                                if (match != null) {
-                                    val m3u8Url = match.groupValues[1].replace("\\/", "/")
-                                    
-                                    callback.invoke(
-                                        newExtractorLink(
-                                            source = name,
-                                            name = "Server 3/4 (ImaxStreams)",
-                                            url = m3u8Url,
-                                            type = ExtractorLinkType.M3U8
-                                        ) {
-                                            this.referer = iframeSrc
-                                            this.quality = Qualities.Unknown.value
-                                        }
-                                    )
-                                }
+                            iframeSrc.contains("4meplayer", ignoreCase = true) -> {
+                                extract4MePlayer(iframeSrc, callback)
                             }
-                            else {
+                            iframeSrc.contains("imaxstreams", ignoreCase = true) -> {
+                                extractImaxStreams(iframeSrc, serverUrl, callback)
+                            }
+                            else -> {
                                 loadExtractor(iframeSrc, data, subtitleCallback, callback)
                             }
                         }
@@ -252,5 +136,101 @@ class IndoMax21Provider : MainAPI() {
             }
         }
         return true
+    }
+
+    private suspend fun extractPyrox(iframeSrc: String, referer: String, callback: (ExtractorLink) -> Unit) {
+        val iframeId = iframeSrc.substringAfterLast("/")
+        val host = URI(iframeSrc).host
+        val apiUrl = "https://$host/player/index.php?data=$iframeId&do=getVideo"
+
+        val response = app.post(
+            url = apiUrl,
+            headers = mapOf("X-Requested-With" to "XMLHttpRequest", "Referer" to iframeSrc),
+            data = mapOf("hash" to iframeId, "r" to referer)
+        ).text
+
+        Regex("""(https:\\?\/\\?\/[^"]+(?:master\.txt|\.m3u8))""")
+            .find(response)?.groupValues?.get(1)?.replace("\\/", "/")?.let { m3u8Url ->
+                callback.invoke(
+                    newExtractorLink(
+                        source = name,
+                        name = "Server 1 (Pyrox)",
+                        url = m3u8Url,
+                        type = ExtractorLinkType.M3U8
+                    ) {
+                        this.referer = iframeSrc
+                        this.quality = Qualities.Unknown.value
+                        this.headers = mapOf("Origin" to "https://$host", "Accept" to "*/*")
+                    }
+                )
+            }
+    }
+
+    private suspend fun extract4MePlayer(iframeSrc: String, callback: (ExtractorLink) -> Unit) {
+        val videoId = iframeSrc.substringAfterLast("#")
+        if (videoId.isEmpty() || videoId == iframeSrc) return
+
+        val host = URI(iframeSrc).host
+        val endpoints = listOf(
+            "https://$host/api/v1/video?id=$videoId",
+            "https://$host/api/v1/info?id=$videoId"
+        )
+
+        for (apiUrl in endpoints) {
+            try {
+                val hexResponse = app.get(apiUrl, referer = iframeSrc).text.trim()
+                if (hexResponse.isEmpty() || !hexResponse.matches(Regex("^[0-9a-fA-F]+$"))) continue
+
+                val secretKey = "kiemtienmua911ca".toByteArray(Charsets.UTF_8)
+                val ivBytes = ByteArray(16) { i -> if (i < 9) i.toByte() else 32.toByte() }
+
+                val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+                cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(secretKey, "AES"), IvParameterSpec(ivBytes))
+
+                val decodedHex = hexResponse.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                val decryptedText = String(cipher.doFinal(decodedHex), Charsets.UTF_8)
+
+                Regex(""""([^"]+\.m3u8[^"]*)"""").find(decryptedText)?.groupValues?.get(1)?.let { match ->
+                    val m3u8Url = match.replace("\\/", "/").let { 
+                        if (it.startsWith("/")) "https://$host$it" else it 
+                    }
+
+                    callback.invoke(
+                        newExtractorLink(
+                            source = name,
+                            name = "Server 2 (4MePlayer)",
+                            url = m3u8Url,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = iframeSrc
+                            this.quality = Qualities.Unknown.value
+                        }
+                    )
+                    return
+                }
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    private suspend fun extractImaxStreams(iframeSrc: String, serverUrl: String, callback: (ExtractorLink) -> Unit) {
+        val iframeHtml = app.get(iframeSrc, referer = serverUrl).text
+        val unpackedText = getAndUnpack(iframeHtml)
+        val m3u8Regex = """"([^"]+\.m3u8[^"]*)"""".toRegex()
+
+        (m3u8Regex.find(unpackedText) ?: m3u8Regex.find(iframeHtml))?.let { match ->
+            val m3u8Url = match.groupValues[1].replace("\\/", "/")
+            callback.invoke(
+                newExtractorLink(
+                    source = name,
+                    name = "Server 3/4 (ImaxStreams)",
+                    url = m3u8Url,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = iframeSrc
+                    this.quality = Qualities.Unknown.value
+                }
+            )
+        }
     }
 }
