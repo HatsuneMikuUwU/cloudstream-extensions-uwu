@@ -26,6 +26,7 @@
 | **Donghub** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
 | **Drakor** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
 | **Dutamovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| **HidoriStream** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **Idlix** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **IndoMax21** | 🇮🇩 ID | 🔞 NSFW, 🎬 Movies & Series | ✅ Active |
 | **JavHey** | 🇮🇩 ID | 🔞 NSFW | ✅ Active |
