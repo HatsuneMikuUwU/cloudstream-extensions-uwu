@@ -339,7 +339,7 @@ class HidoriStream : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         callback.invoke(
-            ExtractorLink(
+            newExtractorLink(
                 name,
                 name,
                 url,
@@ -384,7 +384,7 @@ class Terabox : ExtractorApi() {
 
         videoUrl?.let { link ->
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     name,
                     name,
                     link,
@@ -426,7 +426,7 @@ class Buzzheavier : ExtractorApi() {
             val finalUrl = if (link.startsWith("/")) "$mainUrl$link" else link
             
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     name,
                     name,
                     finalUrl,
