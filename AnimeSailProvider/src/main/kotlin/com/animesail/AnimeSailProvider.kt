@@ -1,5 +1,6 @@
 package com.animesail
 
+import android.webkit.CookieManager
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
@@ -11,8 +12,9 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import okhttp3.Interceptor
+import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -21,7 +23,9 @@ class AnimeSailProvider : MainAPI() {
     override var name = "AnimeSail"
     override val hasMainPage = true
     override var lang = "id"
+    override val hasChromecastSupport = true
     override val hasDownloadSupport = true
+    override val usesWebView = true
 
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -33,7 +37,6 @@ class AnimeSailProvider : MainAPI() {
         "_as_ipin_ct" to "ID",
         "_as_ipin_lc" to "id",
         "_as_ipin_tz" to "Asia/Jakarta",
-        "_as_turnstile" to "32f97e8f98b770e5f024bb5d4a53661cfac0fa98894cc6923e858fb781112803",
         "_popprepop" to "1"
     )
 
@@ -53,6 +56,43 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
+    private fun syncWebViewCookies(url: String) {
+        val cookieManager = CookieManager.getInstance()
+        val cookiesStr = cookieManager.getCookie(url) ?: return
+
+        val webViewCookies = cookiesStr.split("; ").associate {
+            val parts = it.split("=", limit = 2)
+            if (parts.size == 2) parts[0] to parts[1] else parts[0] to ""
+        }
+        dynamicCookies.putAll(webViewCookies)
+    }
+
+    private val turnstileInterceptor = Interceptor { chain ->
+        val request = chain.request()
+        var response = chain.proceed(request)
+
+        val isChallenge = !response.isSuccessful && (response.code == 403 || response.code == 503)
+
+        if (isChallenge) {
+            val responseBody = response.peekBody(2048).string()
+            if (responseBody.contains("cf-turnstile", ignoreCase = true) ||
+                responseBody.contains("Just a moment", ignoreCase = true) ||
+                responseBody.contains("challenge-platform", ignoreCase = true)) {
+
+                response.close()
+
+                syncWebViewCookies(mainUrl)
+
+                val newRequestBuilder = request.newBuilder()
+                val cookieHeader = dynamicCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                newRequestBuilder.header("Cookie", cookieHeader)
+
+                response = chain.proceed(newRequestBuilder.build())
+            }
+        }
+        response
+    }
+
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
@@ -63,33 +103,19 @@ class AnimeSailProvider : MainAPI() {
             "Upgrade-Insecure-Requests" to "1"
         )
 
-        var response = app.get(url, headers = headers, cookies = dynamicCookies)
+        syncWebViewCookies(mainUrl)
 
-        val isChallenge = !response.isSuccessful && (
-            response.code in listOf(403, 503) ||
-            response.text.contains("Just a moment", ignoreCase = true) ||
-            response.text.contains("cf-turnstile", ignoreCase = true) ||
-            response.text.contains("challenge-platform", ignoreCase = true)
+        val response = app.get(
+            url,
+            headers = headers,
+            cookies = dynamicCookies,
+            interceptor = turnstileInterceptor
         )
-
-        if (isChallenge) {
-            dynamicCookies.remove("_as_turnstile")
-            dynamicCookies.remove("cf_clearance")
-
-            repeat(3) { attempt ->
-                val mainResponse = app.get(mainUrl, headers = headers)
-                if (mainResponse.isSuccessful && !mainResponse.text.contains("cf-turnstile")) {
-                    dynamicCookies.putAll(mainResponse.cookies)
-                    response = app.get(url, headers = headers, cookies = dynamicCookies)
-                    if (response.isSuccessful) return response
-                }
-                delay(2000L * (attempt + 1))
-            }
-        } else {
-            if (response.cookies.isNotEmpty()) {
-                dynamicCookies.putAll(response.cookies)
-            }
+        
+        if (response.isSuccessful && response.cookies.isNotEmpty()) {
+            dynamicCookies.putAll(response.cookies)
         }
+
         return response
     }
 
