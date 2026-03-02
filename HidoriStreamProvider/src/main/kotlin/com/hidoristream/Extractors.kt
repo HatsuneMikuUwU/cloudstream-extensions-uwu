@@ -48,7 +48,7 @@ open class Dingtezuni : ExtractorApi() {
     override val mainUrl = "https://dingtezuni.com"
     override val requiresReferer = true
 
- override suspend fun getUrl(
+    override suspend fun getUrl(
         url: String,
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -59,7 +59,7 @@ open class Dingtezuni : ExtractorApi() {
             "Sec-Fetch-Mode" to "cors",
             "Sec-Fetch-Site" to "cross-site",
             "Origin" to mainUrl,
-	        "User-Agent" to USER_AGENT,
+            "User-Agent" to USER_AGENT,
         )
         
         val response = app.get(getEmbedUrl(url), referer = referer)
@@ -85,17 +85,14 @@ open class Dingtezuni : ExtractorApi() {
     }
 
     private fun getEmbedUrl(url: String): String {
-		return when {
-			url.contains("/d/") -> url.replace("/d/", "/v/")
-			url.contains("/download/") -> url.replace("/download/", "/v/")
-			url.contains("/file/") -> url.replace("/file/", "/v/")
-			else -> url.replace("/f/", "/v/")
-		}
-	}
-
+        return when {
+            url.contains("/d/") -> url.replace("/d/", "/v/")
+            url.contains("/download/") -> url.replace("/download/", "/v/")
+            url.contains("/file/") -> url.replace("/file/", "/v/")
+            else -> url.replace("/f/", "/v/")
+        }
+    }
 }
-
-
 
 class Hglink : StreamWishExtractor() {
     override val name = "Hglink"
@@ -159,7 +156,7 @@ open class Dintezuvio : ExtractorApi() {
     override val mainUrl = "https://dintezuvio.com"
     override val requiresReferer = true
 
- override suspend fun getUrl(
+    override suspend fun getUrl(
         url: String,
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -170,7 +167,7 @@ open class Dintezuvio : ExtractorApi() {
             "Sec-Fetch-Mode" to "cors",
             "Sec-Fetch-Site" to "cross-site",
             "Origin" to mainUrl,
-	        "User-Agent" to USER_AGENT,
+            "User-Agent" to USER_AGENT,
         )
         
         val response = app.get(getEmbedUrl(url), referer = referer)
@@ -196,14 +193,13 @@ open class Dintezuvio : ExtractorApi() {
     }
 
     private fun getEmbedUrl(url: String): String {
-		return when {
-			url.contains("/d/") -> url.replace("/d/", "/v/")
-			url.contains("/download/") -> url.replace("/download/", "/v/")
-			url.contains("/file/") -> url.replace("/file/", "/v/")
-			else -> url.replace("/f/", "/v/")
-		}
-	}
-
+        return when {
+            url.contains("/d/") -> url.replace("/d/", "/v/")
+            url.contains("/download/") -> url.replace("/download/", "/v/")
+            url.contains("/file/") -> url.replace("/file/", "/v/")
+            else -> url.replace("/f/", "/v/")
+        }
+    }
 }
 
 class Veev : ExtractorApi() {
@@ -320,7 +316,6 @@ class Veev : ExtractorApi() {
         return result
     }
 
-
     private fun decodeUrl(encoded: String, rules: List<Int>): String {
         var text = encoded
         for (r in rules) {
@@ -329,5 +324,117 @@ class Veev : ExtractorApi() {
             text = arr.toString(Charsets.UTF_8).replace("dXRmOA==", "")
         }
         return text
+    }
+}
+
+class HidoriStream : ExtractorApi() {
+    override val name = "HidoriStream"
+    override val mainUrl = "https://hidoristream.my.id"
+    override val requiresReferer = false
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        callback.invoke(
+            ExtractorLink(
+                name,
+                name,
+                url,
+                mainUrl,
+                Qualities.Unknown.value,
+                url.contains(".m3u8")
+            )
+        )
+    }
+}
+
+class Terabox : ExtractorApi() {
+    override val name = "Terabox"
+    override val mainUrl = "https://1024terabox.com"
+    override val requiresReferer = true
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val response = app.get(url, referer = referer).text
+
+        val directVideoRegex = Regex("""<source[^>]+src=["'](https?://[^"']+\.mp4[^"']*)["']""")
+        var videoUrl = directVideoRegex.find(response)?.groupValues?.get(1)
+
+        if (videoUrl == null) {
+            val jsonPayloadRegex = Regex("""window\.g_default_page_data\s*=\s*(\{.*?\});""")
+            val jsonString = jsonPayloadRegex.find(response)?.groupValues?.get(1)
+            
+            if (jsonString != null) {
+                val mp4InJsonRegex = Regex("""(https?://[^\s"'\,]+\.mp4[^\s"'\,]*)""")
+                videoUrl = mp4InJsonRegex.find(jsonString)?.groupValues?.get(1)?.replace("\\/", "/")
+            }
+        }
+
+        if (videoUrl == null) {
+            val fallbackRegex = Regex(""""browserDownloadUrl"\s*:\s*"([^"]+)"""")
+            videoUrl = fallbackRegex.find(response)?.groupValues?.get(1)?.replace("\\/", "/")
+        }
+
+        videoUrl?.let { link ->
+            callback.invoke(
+                ExtractorLink(
+                    name,
+                    name,
+                    link,
+                    mainUrl,
+                    Qualities.Unknown.value,
+                    link.contains(".m3u8")
+                )
+            )
+        }
+    }
+}
+
+class Buzzheavier : ExtractorApi() {
+    override val name = "Buzzheavier"
+    override val mainUrl = "https://buzzheavier.com"
+    override val requiresReferer = true
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val document = app.get(url, referer = referer).document
+
+        var videoUrl = document.selectFirst("video source")?.attr("src")
+
+        if (videoUrl.isNullOrEmpty()) {
+            videoUrl = document.selectFirst("a[href$=.mp4], a[href$=.mkv]")?.attr("href")
+        }
+
+        if (videoUrl.isNullOrEmpty()) {
+            val htmlText = document.html()
+            val jsRegex = Regex("""file\s*:\s*["'](https?://[^"']+)["']""")
+            videoUrl = jsRegex.find(htmlText)?.groupValues?.get(1)
+        }
+
+        videoUrl?.let { link ->
+            val finalUrl = if (link.startsWith("/")) "$mainUrl$link" else link
+            
+            callback.invoke(
+                ExtractorLink(
+                    name,
+                    name,
+                    finalUrl,
+                    mainUrl,
+                    Qualities.Unknown.value,
+                    finalUrl.contains(".m3u8")
+                )
+            )
+        }
     }
 }

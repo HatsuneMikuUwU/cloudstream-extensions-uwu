@@ -25,5 +25,8 @@ class HidoristreamProviderPlugin : Plugin() {
         registerExtractorAPI(Veev())
         registerExtractorAPI(Minochinos())
         registerExtractorAPI(Serhmeplayer())
+        registerExtractorAPI(HidoriStream())
+        registerExtractorAPI(Terabox())
+        registerExtractorAPI(Buzzheavier())
     }
 }
