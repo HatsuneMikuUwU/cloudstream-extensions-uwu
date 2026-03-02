@@ -343,10 +343,11 @@ class HidoriStream : ExtractorApi() {
                 name,
                 name,
                 url,
-                mainUrl,
-                Qualities.Unknown.value,
-                url.contains(".m3u8")
-            )
+                if (url.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+            ) {
+                this.referer = mainUrl
+                this.quality = Qualities.Unknown.value
+            }
         )
     }
 }
@@ -388,10 +389,11 @@ class Terabox : ExtractorApi() {
                     name,
                     name,
                     link,
-                    mainUrl,
-                    Qualities.Unknown.value,
-                    link.contains(".m3u8")
-                )
+                    if (link.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                ) {
+                    this.referer = mainUrl
+                    this.quality = Qualities.Unknown.value
+                }
             )
         }
     }
@@ -430,10 +432,11 @@ class Buzzheavier : ExtractorApi() {
                     name,
                     name,
                     finalUrl,
-                    mainUrl,
-                    Qualities.Unknown.value,
-                    finalUrl.contains(".m3u8")
-                )
+                    if (finalUrl.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                ) {
+                    this.referer = mainUrl
+                    this.quality = Qualities.Unknown.value
+                }
             )
         }
     }
