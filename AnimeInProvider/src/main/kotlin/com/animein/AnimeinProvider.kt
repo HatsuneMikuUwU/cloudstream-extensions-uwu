@@ -118,11 +118,10 @@ class AnimeinProvider : MainAPI() {
         getApiUrl("home/popular", "&limit=12&genre_in=") to "Popular Anime"
     )
 
-    // Helper request ala AnimeSail dengan Interceptor
+    // Helper request dengan Interceptor
     private suspend fun requestApi(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            // Catatan: Target cookie disesuaikan, biasanya web anime pakai cf_clearance untuk Cloudflare
             interceptor = TurnstileInterceptor("cf_clearance"), 
             headers = mapOf(
                 "Accept" to "application/json, text/plain, */*",
@@ -207,25 +206,25 @@ class AnimeinProvider : MainAPI() {
             val videoQuality = getIndexQuality(qualityStr)
 
             if (type == "direct" || link.endsWith(".mp4") || link.endsWith(".m3u8")) {
+                val linkType = if (link.contains(".m3u8")) ExtractorLinkType.M3U8 else INFER_TYPE
                 callback.invoke(
                     newExtractorLink(
                         source = serverName,
                         name = serverName,
                         url = link,
-                        referer = "https://animeinweb.com/",
-                        quality = videoQuality,
-                        isM3u8 = link.contains(".m3u8")
-                    )
+                        linkType
+                    ) {
+                        this.referer = "https://animeinweb.com/"
+                        this.quality = videoQuality
+                    }
                 )
             } else {
-                // Gunakan loadFixedExtractor ala AnimeSail untuk link embed (Zoro, Nanimex, dll)
                 loadFixedExtractor(link, videoQuality, "https://animeinweb.com/", subtitleCallback, callback)
             }
         }
         return true
     }
 
-    // Helper Extractor Link ala AnimeSail
     private suspend fun loadFixedExtractor(
         url: String,
         quality: Int?,
