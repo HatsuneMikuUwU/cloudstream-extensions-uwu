@@ -1,27 +1,112 @@
 package com.animein
 
+import android.annotation.SuppressLint
+import android.webkit.CookieManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import okhttp3.Interceptor
+import okhttp3.Response
 
+// 1. Interceptor untuk bypass Turnstile / Cloudflare via WebView
+class TurnstileInterceptor(private val targetCookie: String = "cf_clearance") : Interceptor {
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val originalRequest = chain.request()
+        val url = originalRequest.url.toString()
+        val cookieManager = CookieManager.getInstance()
+
+        var currentCookies = cookieManager.getCookie(url) ?: ""
+        var userAgent = originalRequest.header("User-Agent") ?: ""
+
+        var response: Response? = null
+        var needsRefresh = false
+
+        if (!currentCookies.contains(targetCookie)) {
+            needsRefresh = true
+        } else {
+            val requestBuilder = originalRequest.newBuilder()
+                .header("Cookie", currentCookies)
+            response = chain.proceed(requestBuilder.build())
+
+            if (response.code == 403 || response.code == 503) {
+                needsRefresh = true
+                response.close()
+            }
+        }
+
+        if (needsRefresh) {
+            runBlocking(Dispatchers.Main) {
+                val context = AcraApplication.context
+                if (context != null) {
+                    val webView = WebView(context)
+
+                    webView.settings.javaScriptEnabled = true
+                    webView.settings.domStorageEnabled = true
+                    webView.settings.userAgentString = userAgent.ifBlank { webView.settings.userAgentString }
+                    userAgent = webView.settings.userAgentString
+
+                    webView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                        }
+                    }
+
+                    cookieManager.setCookie(url, "$targetCookie=; Max-Age=0")
+
+                    webView.loadUrl(url)
+
+                    var attempts = 0
+                    val maxAttempts = 15
+                    while (attempts < maxAttempts) {
+                        delay(1000)
+                        val checkCookies = cookieManager.getCookie(url) ?: ""
+                        if (checkCookies.contains(targetCookie)) {
+                            break
+                        }
+                        attempts++
+                    }
+
+                    webView.stopLoading()
+                    webView.destroy()
+                }
+            }
+
+            currentCookies = cookieManager.getCookie(url) ?: ""
+            val newRequestBuilder = originalRequest.newBuilder()
+                .header("User-Agent", userAgent)
+                .header("Cookie", currentCookies)
+
+            response = chain.proceed(newRequestBuilder.build())
+        }
+
+        return response ?: chain.proceed(originalRequest)
+    }
+}
+
+// 2. Main Provider
 class AnimeinProvider : MainAPI() {
     override var mainUrl = "https://xyz-api.animein.net/3/2"
-    override var name = "Animein"
+    override var name = "AnimeInWeb"
     override val hasMainPage = true
     override var lang = "id"
     override val supportedTypes = setOf(TvType.Anime)
 
+    // Kredensial & Parameter API
     private val idUser = "388448"
     private val keyClient = "WOcU74yO3OznevT4fju3CS2ovlff9vVFt788u6tZNUjxyrWlqQ"
     private val apkVer = "5.0.2"
-
-    private val apiHeaders = mapOf(
-        "User-Agent" to "okhttp/4.12.0",
-        "Accept-Encoding" to "gzip"
-    )
 
     private fun getApiUrl(endpoint: String, query: String = ""): String {
         return "$mainUrl/$endpoint?id_user=$idUser&key_client=$keyClient&apk_ver=$apkVer$query"
@@ -33,13 +118,28 @@ class AnimeinProvider : MainAPI() {
         getApiUrl("home/popular", "&limit=12&genre_in=") to "Popular Anime"
     )
 
+    // Helper request ala AnimeSail dengan Interceptor
+    private suspend fun requestApi(url: String, ref: String? = null): NiceResponse {
+        return app.get(
+            url,
+            // Catatan: Target cookie disesuaikan, biasanya web anime pakai cf_clearance untuk Cloudflare
+            interceptor = TurnstileInterceptor("cf_clearance"), 
+            headers = mapOf(
+                "Accept" to "application/json, text/plain, */*",
+                "User-Agent" to "okhttp/4.12.0",
+                "Accept-Encoding" to "gzip"
+            ),
+            referer = ref
+        )
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val response = app.get(request.data, headers = apiHeaders).parsedSafe<ApiResponse>()
+        val response = requestApi(request.data).parsedSafe<ApiResponse>()
         val homeItems = mutableListOf<SearchResponse>()
 
         response?.data?.movie?.forEach { item ->
             val title = item.title ?: return@forEach
-            val url = item.id ?: return@forEach 
+            val url = item.id ?: return@forEach
 
             homeItems.add(newAnimeSearchResponse(title, url, TvType.Anime) {
                 this.posterUrl = item.imagePoster
@@ -51,13 +151,13 @@ class AnimeinProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val searchUrl = getApiUrl("search", "&query=$query")
-        val response = app.get(searchUrl, headers = apiHeaders).parsedSafe<ApiResponse>()
+        val response = requestApi(searchUrl).parsedSafe<ApiResponse>()
         val searchResults = mutableListOf<SearchResponse>()
 
         response?.data?.movie?.forEach { item ->
             val title = item.title ?: return@forEach
             val url = item.id ?: return@forEach
-            
+
             searchResults.add(newAnimeSearchResponse(title, url, TvType.Anime) {
                 this.posterUrl = item.imagePoster
             })
@@ -67,7 +167,7 @@ class AnimeinProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val episodeApiUrl = getApiUrl("movie/episode/$url", "&search=&page=0")
-        val response = app.get(episodeApiUrl, headers = apiHeaders).parsedSafe<ApiEpisodeResponse>()
+        val response = requestApi(episodeApiUrl).parsedSafe<ApiEpisodeResponse>()
         val episodes = mutableListOf<Episode>()
 
         response?.data?.episode?.forEach { ep ->
@@ -96,24 +196,18 @@ class AnimeinProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val streamUrl = "https://animeinweb.com/api/proxy/3/2/episode/streamnew/$data"
-        val response = app.get(streamUrl, headers = apiHeaders).parsedSafe<ApiStreamResponse>()
+        val response = requestApi(streamUrl).parsedSafe<ApiStreamResponse>()
 
         response?.data?.server?.forEach { server ->
             val link = server.link ?: return@forEach
             val qualityStr = server.quality ?: ""
             val type = server.type ?: ""
-            val serverName = server.name ?: "Animein"
+            val serverName = server.name ?: "AnimeInWeb"
 
-            val videoQuality = when {
-                qualityStr.contains("1080") -> Qualities.P1080.value
-                qualityStr.contains("720") -> Qualities.P720.value
-                qualityStr.contains("480") -> Qualities.P480.value
-                qualityStr.contains("360") -> Qualities.P360.value
-                else -> Qualities.Unknown.value
-            }
+            val videoQuality = getIndexQuality(qualityStr)
 
             if (type == "direct" || link.endsWith(".mp4") || link.endsWith(".m3u8")) {
-                callback(
+                callback.invoke(
                     newExtractorLink(
                         source = serverName,
                         name = serverName,
@@ -124,11 +218,50 @@ class AnimeinProvider : MainAPI() {
                     )
                 )
             } else {
-                loadExtractor(link, "https://animeinweb.com/", subtitleCallback, callback)
+                // Gunakan loadFixedExtractor ala AnimeSail untuk link embed (Zoro, Nanimex, dll)
+                loadFixedExtractor(link, videoQuality, "https://animeinweb.com/", subtitleCallback, callback)
             }
         }
         return true
     }
+
+    // Helper Extractor Link ala AnimeSail
+    private suspend fun loadFixedExtractor(
+        url: String,
+        quality: Int?,
+        referer: String? = null,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        loadExtractor(url, referer, subtitleCallback) { link ->
+            runBlocking {
+                callback.invoke(
+                    newExtractorLink(
+                        source = link.name,
+                        name = link.name,
+                        url = link.url,
+                        INFER_TYPE
+                    ) {
+                        this.referer = mainUrl
+                        this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                            ?: Qualities.Unknown.value
+                        this.type = link.type
+                        this.headers = link.headers
+                        this.extractorData = link.extractorData
+                    }
+                )
+            }
+        }
+    }
+
+    private fun getIndexQuality(str: String): Int {
+        return Regex("(\\d{3,4})[pP]").find(str)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            ?: Qualities.Unknown.value
+    }
+
+    // ==========================================
+    // DATA CLASSES UNTUK JSON PARSING
+    // ==========================================
 
     data class ApiResponse(
         @JsonProperty("data") val data: ApiData? = null
