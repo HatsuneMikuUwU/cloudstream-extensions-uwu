@@ -74,18 +74,17 @@ class AnimeinProvider : MainAPI() {
             val epNum = ep.index?.toIntOrNull()
             val imageUrl = if (ep.image?.startsWith("http") == true) ep.image else "https://xyz-api.animein.net${ep.image}"
 
-            episodes.add(Episode(
-                data = epId,
-                name = ep.title ?: "Episode $epNum",
-                episode = epNum,
-                posterUrl = imageUrl
-            ))
+            episodes.add(newEpisode(epId) {
+                this.name = ep.title ?: "Episode $epNum"
+                this.episode = epNum
+                this.posterUrl = imageUrl
+            })
         }
 
         episodes.reverse()
 
         return newAnimeLoadResponse("Anime $url", url, TvType.Anime) {
-            this.episodes = episodes
+            this.episodes = mutableMapOf(DubStatus.Subbed to episodes)
         }
     }
 
@@ -114,7 +113,7 @@ class AnimeinProvider : MainAPI() {
 
             if (type == "direct" || link.endsWith(".mp4") || link.endsWith(".m3u8")) {
                 callback(
-                    ExtractorLink(
+                    newExtractorLink(
                         source = serverName,
                         name = serverName,
                         url = link,
@@ -159,7 +158,7 @@ class AnimeinProvider : MainAPI() {
         @JsonProperty("title") val title: String? = null,
         @JsonProperty("image") val image: String? = null
     )
-    
+
     data class ApiStreamResponse(
         @JsonProperty("data") val data: ApiStreamData? = null
     )
