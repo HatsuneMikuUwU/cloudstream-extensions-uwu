@@ -30,57 +30,71 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
         val url = originalRequest.url.toString()
         val cookieManager = CookieManager.getInstance()
 
-        val currentCookies = cookieManager.getCookie(url) ?: ""
-        if (currentCookies.contains(targetCookie)) {
-            val newRequest = originalRequest.newBuilder()
+        var currentCookies = cookieManager.getCookie(url) ?: ""
+        var userAgent = originalRequest.header("User-Agent") ?: ""
+
+        var response: Response? = null
+        var needsRefresh = false
+
+        if (!currentCookies.contains(targetCookie)) {
+            needsRefresh = true
+        } else {
+            val requestBuilder = originalRequest.newBuilder()
                 .header("Cookie", currentCookies)
-                .build()
-            return chain.proceed(newRequest)
-        }
+            response = chain.proceed(requestBuilder.build())
 
-        var webViewUserAgent = originalRequest.header("User-Agent") ?: ""
-        
-        runBlocking(Dispatchers.Main) {
-            val context = AcraApplication.context 
-            if (context != null) {
-                val webView = WebView(context)
-                
-                webView.settings.javaScriptEnabled = true
-                webView.settings.domStorageEnabled = true
-                webView.settings.userAgentString = webViewUserAgent.ifBlank { webView.settings.userAgentString }
-                webViewUserAgent = webView.settings.userAgentString
-
-                webView.webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        super.onPageFinished(view, url)
-                    }
-                }
-
-                webView.loadUrl(url)
-
-                var attempts = 0
-                val maxAttempts = 15 
-                
-                while (attempts < maxAttempts) {
-                    delay(1000)
-                    val checkCookies = cookieManager.getCookie(url) ?: ""
-                    if (checkCookies.contains(targetCookie)) {
-                        break
-                    }
-                    attempts++
-                }
-
-                webView.stopLoading()
-                webView.destroy()
+            if (response.code == 403 || response.code == 503) {
+                needsRefresh = true
+                response.close()
             }
         }
 
-        val newCookies = cookieManager.getCookie(url) ?: ""
-        val requestBuilder = originalRequest.newBuilder()
-            .header("User-Agent", webViewUserAgent)
-            .header("Cookie", newCookies)
+        if (needsRefresh) {
+            runBlocking(Dispatchers.Main) {
+                val context = AcraApplication.context
+                if (context != null) {
+                    val webView = WebView(context)
+                    
+                    webView.settings.javaScriptEnabled = true
+                    webView.settings.domStorageEnabled = true
+                    webView.settings.userAgentString = userAgent.ifBlank { webView.settings.userAgentString }
+                    userAgent = webView.settings.userAgentString 
 
-        return chain.proceed(requestBuilder.build())
+                    webView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                        }
+                    }
+
+                    cookieManager.setCookie(url, "$targetCookie=; Max-Age=0")
+
+                    webView.loadUrl(url)
+
+                    var attempts = 0
+                    val maxAttempts = 15
+                    while (attempts < maxAttempts) {
+                        delay(1000)
+                        val checkCookies = cookieManager.getCookie(url) ?: ""
+                        if (checkCookies.contains(targetCookie)) {
+                            break
+                        }
+                        attempts++
+                    }
+
+                    webView.stopLoading()
+                    webView.destroy()
+                }
+            }
+
+            currentCookies = cookieManager.getCookie(url) ?: ""
+            val newRequestBuilder = originalRequest.newBuilder()
+                .header("User-Agent", userAgent)
+                .header("Cookie", currentCookies)
+            
+            response = chain.proceed(newRequestBuilder.build())
+        }
+
+        return response ?: chain.proceed(originalRequest)
     }
 }
 
