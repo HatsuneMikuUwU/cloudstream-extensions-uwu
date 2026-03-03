@@ -1,9 +1,5 @@
 package com.animein
 
-import android.annotation.SuppressLint
-import android.webkit.CookieManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -13,89 +9,8 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import okhttp3.Interceptor
-import okhttp3.Response
 
-// 1. Interceptor untuk bypass Turnstile / Cloudflare via WebView
-class TurnstileInterceptor(private val targetCookie: String = "cf_clearance") : Interceptor {
-    @SuppressLint("SetJavaScriptEnabled")
-    override fun intercept(chain: Interceptor.Chain): Response {
-        val originalRequest = chain.request()
-        val url = originalRequest.url.toString()
-        val cookieManager = CookieManager.getInstance()
-
-        var currentCookies = cookieManager.getCookie(url) ?: ""
-        var userAgent = originalRequest.header("User-Agent") ?: ""
-
-        var response: Response? = null
-        var needsRefresh = false
-
-        if (!currentCookies.contains(targetCookie)) {
-            needsRefresh = true
-        } else {
-            val requestBuilder = originalRequest.newBuilder()
-                .header("Cookie", currentCookies)
-            response = chain.proceed(requestBuilder.build())
-
-            if (response.code == 403 || response.code == 503) {
-                needsRefresh = true
-                response.close()
-            }
-        }
-
-        if (needsRefresh) {
-            runBlocking(Dispatchers.Main) {
-                val context = AcraApplication.context
-                if (context != null) {
-                    val webView = WebView(context)
-
-                    webView.settings.javaScriptEnabled = true
-                    webView.settings.domStorageEnabled = true
-                    webView.settings.userAgentString = userAgent.ifBlank { webView.settings.userAgentString }
-                    userAgent = webView.settings.userAgentString
-
-                    webView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
-                        }
-                    }
-
-                    cookieManager.setCookie(url, "$targetCookie=; Max-Age=0")
-
-                    webView.loadUrl(url)
-
-                    var attempts = 0
-                    val maxAttempts = 15
-                    while (attempts < maxAttempts) {
-                        delay(1000)
-                        val checkCookies = cookieManager.getCookie(url) ?: ""
-                        if (checkCookies.contains(targetCookie)) {
-                            break
-                        }
-                        attempts++
-                    }
-
-                    webView.stopLoading()
-                    webView.destroy()
-                }
-            }
-
-            currentCookies = cookieManager.getCookie(url) ?: ""
-            val newRequestBuilder = originalRequest.newBuilder()
-                .header("User-Agent", userAgent)
-                .header("Cookie", currentCookies)
-
-            response = chain.proceed(newRequestBuilder.build())
-        }
-
-        return response ?: chain.proceed(originalRequest)
-    }
-}
-
-// 2. Main Provider
 class AnimeinProvider : MainAPI() {
     override var mainUrl = "https://xyz-api.animein.net/3/2"
     override var name = "AnimeInWeb"
@@ -118,11 +33,10 @@ class AnimeinProvider : MainAPI() {
         getApiUrl("home/popular", "&limit=12&genre_in=") to "Popular Anime"
     )
 
-    // Helper request dengan Interceptor
+    // Helper request murni tanpa Interceptor WebView agar API tidak memblokir
     private suspend fun requestApi(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            interceptor = TurnstileInterceptor("cf_clearance"), 
             headers = mapOf(
                 "Accept" to "application/json, text/plain, */*",
                 "User-Agent" to "okhttp/4.12.0",
@@ -169,6 +83,9 @@ class AnimeinProvider : MainAPI() {
         val response = requestApi(episodeApiUrl).parsedSafe<ApiEpisodeResponse>()
         val episodes = mutableListOf<Episode>()
 
+        var plotSynopsis = ""
+        var bgPoster = ""
+
         response?.data?.episode?.forEach { ep ->
             val epId = ep.id ?: return@forEach
             val epNum = ep.index?.toIntOrNull()
@@ -185,6 +102,8 @@ class AnimeinProvider : MainAPI() {
 
         return newAnimeLoadResponse("Anime $url", url, TvType.Anime) {
             this.episodes = mutableMapOf(DubStatus.Subbed to episodes)
+            this.plot = plotSynopsis
+            this.backgroundPosterUrl = bgPoster
         }
     }
 
