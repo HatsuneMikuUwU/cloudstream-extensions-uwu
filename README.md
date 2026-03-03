@@ -32,6 +32,7 @@
 | **JavHey** | 🇮🇩 ID | 🔞 NSFW | ✅ Active |
 | **KlikXXI** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **Kuronime** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| **LayarAsia** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
 | **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
