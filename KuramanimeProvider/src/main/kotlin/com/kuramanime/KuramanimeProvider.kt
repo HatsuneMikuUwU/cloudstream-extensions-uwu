@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -183,17 +184,15 @@ class KuramanimeProvider : MainAPI() {
 
                 if (pid != null && sid != null) {
                     val tokenUrl = "$mainUrl/misc/token/drive-token"
-                    val payload = """{"pid":"$pid","sid":"$sid"}"""
-
+                    
                     val tokenReq = app.post(
                         tokenUrl,
                         headers = mapOf(
-                            "Content-Type" to "application/json",
                             "X-CSRF-TOKEN" to csrfToken,
                             "X-Requested-With" to "XMLHttpRequest",
                             "Accept" to "application/json"
                         ),
-                        data = payload,
+                        json = mapOf("pid" to pid, "sid" to sid),
                         cookies = cookies
                     )
 
@@ -204,33 +203,32 @@ class KuramanimeProvider : MainAPI() {
                         val realVideoUrl = "https://www.googleapis.com/drive/v3/files/$gid?alt=media"
                         
                         callback.invoke(
-                            ExtractorLink(
+                            newExtractorLink(
                                 fixTitle(server),
                                 fixTitle(server),
                                 realVideoUrl,
-                                referer = "$mainUrl/",
-                                quality = quality ?: Qualities.Unknown.value,
-                                type = INFER_TYPE,
-                                headers = mapOf(
-                                    "Authorization" to "Bearer $accessToken", // Token Dinamis Baru
+                                INFER_TYPE
+                            ) {
+                                this.headers = mapOf(
+                                    "Authorization" to "Bearer $accessToken",
                                     "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
                                     "Range" to "bytes=0-"
                                 )
-                            )
+                                this.quality = quality ?: Qualities.Unknown.value
+                            }
                         )
                     }
                 }
             } else {
-                // Fallback jika ternyata link video mentah biasa
                 callback.invoke(
-                    ExtractorLink(
+                    newExtractorLink(
                         fixTitle(server),
                         fixTitle(server),
                         link,
-                        referer = "$mainUrl/",
-                        quality = quality ?: Qualities.Unknown.value,
-                        type = INFER_TYPE
-                    )
+                        INFER_TYPE
+                    ) {
+                        this.quality = quality ?: Qualities.Unknown.value
+                    }
                 )
             }
         }
