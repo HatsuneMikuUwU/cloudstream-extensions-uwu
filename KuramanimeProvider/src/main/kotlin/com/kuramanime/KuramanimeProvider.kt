@@ -204,15 +204,17 @@ class KuramanimeProvider : MainAPI() {
                         val gid = Regex(""""gid"\s*:\s*"([^"]+)"""").find(tokenReq.text)?.groupValues?.get(1)
 
                         if (accessToken != null && gid != null) {
+                            val realVideoUrl = "https://www.googleapis.com/drive/v3/files/$gid?alt=media"
+                            
                             callback.invoke(
                                 newExtractorLink(
                                     "Kuramadrive",
                                     "Kuramadrive",
-                                    "https://www.googleapis.com/drive/v3/files/$gid?alt=media",
-                                    referer = "$mainUrl/",
-                                    quality = quality,
-                                    type = INFER_TYPE
+                                    realVideoUrl,
+                                    INFER_TYPE
                                 ) {
+                                    this.referer = "$mainUrl/"
+                                    this.quality = quality
                                     this.headers = mapOf(
                                         "Authorization" to "Bearer $accessToken",
                                         "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
@@ -231,10 +233,11 @@ class KuramanimeProvider : MainAPI() {
                         "Server Lokal",
                         "Server Lokal",
                         link,
-                        referer = "$mainUrl/",
-                        quality = quality,
-                        type = INFER_TYPE
-                    )
+                        INFER_TYPE
+                    ) {
+                        this.referer = "$mainUrl/"
+                        this.quality = quality
+                    }
                 )
             }
         }
