@@ -7,7 +7,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
-import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -163,117 +162,152 @@ class KuramanimeProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val req = app.get(data)
-        val res = req.document
+        val document = req.document
         val cookies = req.cookies
+        val csrfToken = document.selectFirst("meta[name=csrf-token]")?.attr("content") ?: ""
 
-        val csrfToken = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
-        val dataKps = res.selectFirst("[data-kk]")?.attr("data-kk") ?: return false
+        // ========================================================
+        // LANGKAH 1: EKSTRAK LANGSUNG DARI HTML UTAMA (SUPER CEPAT)
+        // ========================================================
+        extractVideoLinksFromDoc(document, "Kuramadrive (Utama)", csrfToken, cookies, callback)
 
-        val assets = getAssets(dataKps)
+        // ========================================================
+        // LANGKAH 2: EKSTRAK TAUTAN DOWNLOAD (CADANGAN ANTI MATI)
+        // Mengkonversi Mega, Pixeldrain, dll jadi Server Streaming!
+        // ========================================================
+        document.select("div#animeDownloadLink a").forEach { a ->
+            val dlLink = a.attr("href")
+            if (dlLink.startsWith("http")) {
+                loadExtractor(dlLink, data, subtitleCallback, callback)
+            }
+        }
 
-        val headers = mapOf(
-            "X-CSRF-TOKEN" to csrfToken,
-            "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
-            "X-Request-ID" to randomId(),
-            "X-Request-Index" to "0",
-            "X-Requested-With" to "XMLHttpRequest",
-        )
+        // ========================================================
+        // LANGKAH 3: AMBIL SERVER LAIN LEWAT AJAX JIKA PERLU
+        // ========================================================
+        try {
+            val dataKps = document.selectFirst("[data-kk]")?.attr("data-kk")
+            if (dataKps != null) {
+                val assets = getAssets(dataKps)
+                val headers = mapOf(
+                    "X-CSRF-TOKEN" to csrfToken,
+                    "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
+                    "X-Request-ID" to randomId(),
+                    "X-Request-Index" to "0",
+                    "X-Requested-With" to "XMLHttpRequest",
+                )
+                val tokenKeyUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
+                val tokenKeyReq = app.get(tokenKeyUrl, headers = headers, cookies = cookies)
+                val tokenKey = tokenKeyReq.text.trim()
 
-        val tokenKeyUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
-        val tokenKeyReq = app.get(tokenKeyUrl, headers = headers, cookies = cookies)
-        val tokenKey = tokenKeyReq.text.trim()
-
-        if (tokenKey.isBlank()) return false
-
-        res.select("select#changeServer option").forEach { source ->
-            val serverName = source.attr("value")
-            
-            val ajaxUrl = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$serverName"
-            val ajaxHtml = app.get(ajaxUrl, referer = data, headers = headers, cookies = cookies).document
-
-            if (serverName.contains("kuramadrive", true) || serverName.contains("archive", true)) {
-                
-                ajaxHtml.select("video#player > source").forEach { vidSource ->
-                    val link = fixUrl(vidSource.attr("src"))
-                    val quality = vidSource.attr("size").toIntOrNull() ?: Qualities.Unknown.value
-
-                    if (link.contains("pid=") && link.contains("sid=")) {
-                        val pid = Regex("pid=([^&]+)").find(link)?.groupValues?.get(1)
-                        val sid = Regex("sid=([^&]+)").find(link)?.groupValues?.get(1)
-
-                        if (pid != null && sid != null) {
-                            try {
-                                val tokenUrl = "$mainUrl/misc/token/drive-token"
-                                val driveTokenReq = app.post(
-                                    tokenUrl,
-                                    headers = mapOf(
-                                        "X-CSRF-TOKEN" to csrfToken,
-                                        "X-Requested-With" to "XMLHttpRequest",
-                                        "Content-Type" to "application/json",
-                                        "Accept" to "application/json"
-                                    ),
-                                    json = mapOf("pid" to pid, "sid" to sid),
-                                    cookies = cookies
-                                )
-                                
-                                val accessToken = Regex(""""access_token"\s*:\s*"([^"]+)"""").find(driveTokenReq.text)?.groupValues?.get(1)
-                                val gid = Regex(""""gid"\s*:\s*"([^"]+)"""").find(driveTokenReq.text)?.groupValues?.get(1)
-
-                                if (accessToken != null && gid != null) {
-                                    val realVideoUrl = "https://www.googleapis.com/drive/v3/files/$gid?alt=media"
-                                    
-                                    callback.invoke(
-                                        newExtractorLink(
-                                            "Kuramadrive",
-                                            "Kuramadrive",
-                                            realVideoUrl,
-                                            INFER_TYPE
-                                        ) {
-                                            this.referer = "$mainUrl/"
-                                            this.quality = quality
-                                            this.headers = mapOf(
-                                                "Authorization" to "Bearer $accessToken",
-                                                "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
-                                                "Range" to "bytes=0-"
-                                            )
-                                        }
-                                    )
+                if (tokenKey.isNotBlank()) {
+                    document.select("select#changeServer option").forEach { source ->
+                        val serverName = source.attr("value")
+                        if (!serverName.equals("kuramadrive", true)) { // Skip Kuramadrive krn sdh diload
+                            val ajaxUrl = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$serverName"
+                            val ajaxHtml = app.get(ajaxUrl, referer = data, headers = headers, cookies = cookies).document
+                            
+                            if (serverName.contains("archive", true)) {
+                                extractVideoLinksFromDoc(ajaxHtml, serverName, csrfToken, cookies, callback)
+                            } else {
+                                ajaxHtml.selectFirst("iframe")?.attr("src")?.let { videoUrl ->
+                                    if (videoUrl.isNotBlank()) {
+                                        loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
+                                    }
                                 }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
                             }
                         }
-                    } else {
-                        callback.invoke(
-                            newExtractorLink(
-                                "Kuramadrive Raw",
-                                "Kuramadrive Raw",
-                                link,
-                                INFER_TYPE
-                            ) {
-                                this.referer = "$mainUrl/"
-                                this.quality = quality
-                            }
-                        )
-                    }
-                }
-                
-                ajaxHtml.select("div#animeDownloadLink a").forEach { a ->
-                    val dlLink = a.attr("href")
-                    if (dlLink.startsWith("http")) {
-                        loadExtractor(dlLink, data, subtitleCallback, callback)
-                    }
-                }
-
-            } else {
-                ajaxHtml.selectFirst("iframe")?.attr("src")?.let { videoUrl ->
-                    if (videoUrl.isNotBlank()) {
-                        loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
                     }
                 }
             }
+        } catch (e: Exception) {
+            e.printStackTrace() // Jika AJAX gagal, user tetap bisa nonton dari langkah 1 & 2!
         }
+
         return true
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun extractVideoLinksFromDoc(
+        document: Element,
+        serverPrefix: String,
+        csrfToken: String,
+        cookies: Map<String, String>,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val links = mutableListOf<Pair<String, Int>>()
+        
+        document.selectFirst("#player")?.attr("data-hls-src")?.takeIf { it.isNotBlank() }?.let {
+            links.add(it to Qualities.Unknown.value)
+        }
+        
+        document.select("video#player > source").forEach {
+            val src = it.attr("src")
+            val quality = it.attr("size").toIntOrNull() ?: Qualities.Unknown.value
+            if (src.isNotBlank()) links.add(src to quality)
+        }
+
+        links.forEach { (rawLink, quality) ->
+            // Normalisasi link jika ada "&amp;"
+            val link = fixUrl(rawLink).replace("&amp;", "&")
+
+            if (link.contains("pid=") && link.contains("sid=")) {
+                val pid = Regex("pid=([^&]+)").find(link)?.groupValues?.get(1)
+                val sid = Regex("sid=([^&]+)").find(link)?.groupValues?.get(1)
+
+                if (pid != null && sid != null) {
+                    try {
+                        val tokenReq = app.post(
+                            "$mainUrl/misc/token/drive-token",
+                            headers = mapOf(
+                                "X-CSRF-TOKEN" to csrfToken,
+                                "X-Requested-With" to "XMLHttpRequest",
+                                "Accept" to "application/json"
+                            ),
+                            // Memakai format Map agar bebas error compile dan lolos pemeriksaan backend
+                            data = mapOf("pid" to pid, "sid" to sid),
+                            cookies = cookies
+                        )
+                        
+                        val accessToken = Regex(""""access_token"\s*:\s*"([^"]+)"""").find(tokenReq.text)?.groupValues?.get(1)
+                        val gid = Regex(""""gid"\s*:\s*"([^"]+)"""").find(tokenReq.text)?.groupValues?.get(1)
+
+                        if (accessToken != null && gid != null) {
+                            val realVideoUrl = "https://www.googleapis.com/drive/v3/files/$gid?alt=media"
+                            
+                            callback.invoke(
+                                ExtractorLink(
+                                    source = serverPrefix,
+                                    name = serverPrefix,
+                                    url = realVideoUrl,
+                                    referer = "$mainUrl/",
+                                    quality = quality,
+                                    type = INFER_TYPE,
+                                    headers = mapOf(
+                                        "Authorization" to "Bearer $accessToken",
+                                        "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
+                                        "Range" to "bytes=0-"
+                                    )
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            } else {
+                callback.invoke(
+                    ExtractorLink(
+                        source = "$serverPrefix Cadangan",
+                        name = "$serverPrefix Cadangan",
+                        url = link,
+                        referer = "$mainUrl/",
+                        quality = quality,
+                        type = INFER_TYPE
+                    )
+                )
+            }
+        }
     }
 
     private suspend fun getAssets(bpjs: String?): Assets {
