@@ -6,7 +6,6 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.NativeJSON
@@ -88,7 +87,6 @@ open class Vidguardto : ExtractorApi() {
         var result = ""
         val r = Runnable {
             val rhino = Context.enter()
-            rhino.optimizationLevel = -1
             val scope: Scriptable = rhino.initSafeStandardObjects()
             scope.put("window", scope, scope)
             try {
@@ -117,10 +115,13 @@ open class Vidguardto : ExtractorApi() {
                 Context.exit()
             }
         }
-        val t = Thread(ThreadGroup("A"), r, "thread_rhino", 8 * 1024 * 1024)
+        val t = Thread(null, r, "thread_rhino", 8 * 1024 * 1024)
         t.start()
-        t.join()
-        t.interrupt()
+        try {
+            t.join()
+        } catch (e: InterruptedException) {
+            Log.e("runJS", "Thread interrupted: ${e.message}")
+        }
         return result
     }
 

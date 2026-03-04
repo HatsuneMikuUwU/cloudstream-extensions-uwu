@@ -167,7 +167,7 @@ open class Cinemax21Provider : TmdbProvider() {
             }
         } catch (e: Exception) {
             throw ErrorLoadingException("Invalid URL or JSON data: ${e.message}")
-        } ?: throw ErrorLoadingException("Invalid data format")
+        }
 
         val type = getType(data.type)
         val append = "alternative_titles,credits,external_ids,keywords,videos,recommendations"
@@ -207,7 +207,6 @@ open class Cinemax21Provider : TmdbProvider() {
         val recommendations =
             res.recommendations?.results?.mapNotNull { media -> media.toSearchResponse() }
 
-        // FIX V3: "Safe Mode" Trailer
         val trailer = res.videos?.results
             ?.filter { it.site == "YouTube" && it.key?.isNotBlank() == true && it.type == "Trailer" }
             ?.sortedByDescending { it.type == "Trailer" }

@@ -522,7 +522,7 @@ object Cinemax21ProviderExtractor : Cinemax21Provider() {
 
     private fun extractPlayer4uLinks(document: Document, season:Int?, episode:Int?, title:String, year:Int?): List<Player4uLinkData> {
         return document.select(".playbtnx").mapNotNull { element ->
-            val titleText = element.text()?.split(" | ")?.lastOrNull() ?: return@mapNotNull null
+            val titleText = element.text().split(" | ").lastOrNull() ?: return@mapNotNull null
             if (season == null && episode == null) { if (year != null && (titleText.startsWith("$title $year", ignoreCase = true) || titleText.startsWith("$title ($year)", ignoreCase = true))) Player4uLinkData(name = titleText, url = element.attr("onclick")) else null } else { if (season != null && episode != null && titleText.startsWith("$title S${"%02d".format(season)}E${"%02d".format(episode)}", ignoreCase = true)) Player4uLinkData(name = titleText, url = element.attr("onclick")) else null }
         }
     }

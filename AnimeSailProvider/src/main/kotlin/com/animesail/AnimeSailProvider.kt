@@ -67,21 +67,22 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 var webView: WebView? = null
 
                 handler.post {
-                    webView = WebView(context)
-                    webView?.settings?.apply {
+                    val newWebView = WebView(context)
+                    webView = newWebView
+                    
+                    newWebView.settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        databaseEnabled = true
                         userAgentString = userAgent.ifBlank { userAgentString }
                     }
-                    userAgent = webView?.settings?.userAgentString ?: userAgent
+                    userAgent = newWebView.settings.userAgentString ?: userAgent
 
-                    webView?.webViewClient = WebViewClient()
+                    newWebView.webViewClient = WebViewClient()
 
                     cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
                     cookieManager.flush()
 
-                    webView?.loadUrl(url)
+                    newWebView.loadUrl(url)
                 }
 
                 var attempts = 0
