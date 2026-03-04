@@ -3,6 +3,7 @@ package com.kuramanime
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
@@ -155,86 +156,31 @@ class KuramanimeProvider : MainAPI() {
         }
     }
 
+    @Suppress("DEPRECATION")
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val req = app.get(data)
+        
+        val req = app.get(
+            data,
+            interceptor = WebViewResolver(Regex("""animeDownloadLink|player"""))
+        )
+        
         val document = req.document
         val cookies = req.cookies
         val csrfToken = document.selectFirst("meta[name=csrf-token]")?.attr("content") ?: ""
 
-        // ========================================================
-        // LANGKAH 1: EKSTRAK LANGSUNG DARI HTML UTAMA (SUPER CEPAT)
-        // ========================================================
-        extractVideoLinksFromDoc(document, "Kuramadrive (Utama)", csrfToken, cookies, callback)
-
-        // ========================================================
-        // LANGKAH 2: EKSTRAK TAUTAN DOWNLOAD (CADANGAN ANTI MATI)
-        // Mengkonversi Mega, Pixeldrain, dll jadi Server Streaming!
-        // ========================================================
         document.select("div#animeDownloadLink a").forEach { a ->
             val dlLink = a.attr("href")
+            
             if (dlLink.startsWith("http")) {
                 loadExtractor(dlLink, data, subtitleCallback, callback)
             }
         }
 
-        // ========================================================
-        // LANGKAH 3: AMBIL SERVER LAIN LEWAT AJAX JIKA PERLU
-        // ========================================================
-        try {
-            val dataKps = document.selectFirst("[data-kk]")?.attr("data-kk")
-            if (dataKps != null) {
-                val assets = getAssets(dataKps)
-                val headers = mapOf(
-                    "X-CSRF-TOKEN" to csrfToken,
-                    "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
-                    "X-Request-ID" to randomId(),
-                    "X-Request-Index" to "0",
-                    "X-Requested-With" to "XMLHttpRequest",
-                )
-                val tokenKeyUrl = "$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
-                val tokenKeyReq = app.get(tokenKeyUrl, headers = headers, cookies = cookies)
-                val tokenKey = tokenKeyReq.text.trim()
-
-                if (tokenKey.isNotBlank()) {
-                    document.select("select#changeServer option").forEach { source ->
-                        val serverName = source.attr("value")
-                        if (!serverName.equals("kuramadrive", true)) { // Skip Kuramadrive krn sdh diload
-                            val ajaxUrl = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$serverName"
-                            val ajaxHtml = app.get(ajaxUrl, referer = data, headers = headers, cookies = cookies).document
-                            
-                            if (serverName.contains("archive", true)) {
-                                extractVideoLinksFromDoc(ajaxHtml, serverName, csrfToken, cookies, callback)
-                            } else {
-                                ajaxHtml.selectFirst("iframe")?.attr("src")?.let { videoUrl ->
-                                    if (videoUrl.isNotBlank()) {
-                                        loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace() // Jika AJAX gagal, user tetap bisa nonton dari langkah 1 & 2!
-        }
-
-        return true
-    }
-
-    @Suppress("DEPRECATION")
-    private suspend fun extractVideoLinksFromDoc(
-        document: Element,
-        serverPrefix: String,
-        csrfToken: String,
-        cookies: Map<String, String>,
-        callback: (ExtractorLink) -> Unit
-    ) {
         val links = mutableListOf<Pair<String, Int>>()
         
         document.selectFirst("#player")?.attr("data-hls-src")?.takeIf { it.isNotBlank() }?.let {
@@ -248,7 +194,6 @@ class KuramanimeProvider : MainAPI() {
         }
 
         links.forEach { (rawLink, quality) ->
-            // Normalisasi link jika ada "&amp;"
             val link = fixUrl(rawLink).replace("&amp;", "&")
 
             if (link.contains("pid=") && link.contains("sid=")) {
@@ -262,10 +207,10 @@ class KuramanimeProvider : MainAPI() {
                             headers = mapOf(
                                 "X-CSRF-TOKEN" to csrfToken,
                                 "X-Requested-With" to "XMLHttpRequest",
+                                "Content-Type" to "application/json",
                                 "Accept" to "application/json"
                             ),
-                            // Memakai format Map agar bebas error compile dan lolos pemeriksaan backend
-                            data = mapOf("pid" to pid, "sid" to sid),
+                            data = """{"pid":"$pid","sid":"$sid"}""", // Gunakan raw JSON string
                             cookies = cookies
                         )
                         
@@ -277,8 +222,8 @@ class KuramanimeProvider : MainAPI() {
                             
                             callback.invoke(
                                 ExtractorLink(
-                                    source = serverPrefix,
-                                    name = serverPrefix,
+                                    source = "Kuramadrive",
+                                    name = "Kuramadrive",
                                     url = realVideoUrl,
                                     referer = "$mainUrl/",
                                     quality = quality,
@@ -298,8 +243,8 @@ class KuramanimeProvider : MainAPI() {
             } else {
                 callback.invoke(
                     ExtractorLink(
-                        source = "$serverPrefix Cadangan",
-                        name = "$serverPrefix Cadangan",
+                        source = "Kuramadrive Raw",
+                        name = "Kuramadrive Raw",
                         url = link,
                         referer = "$mainUrl/",
                         quality = quality,
@@ -308,38 +253,7 @@ class KuramanimeProvider : MainAPI() {
                 )
             }
         }
-    }
 
-    private suspend fun getAssets(bpjs: String?): Assets {
-        val env = app.get("$mainUrl/assets/js/$bpjs.js").text
-        val MIX_PREFIX_AUTH_ROUTE_PARAM = env.substringAfter("MIX_PREFIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
-        val MIX_AUTH_ROUTE_PARAM = env.substringAfter("MIX_AUTH_ROUTE_PARAM: '").substringBefore("',")
-        val MIX_AUTH_KEY = env.substringAfter("MIX_AUTH_KEY: '").substringBefore("',")
-        val MIX_AUTH_TOKEN = env.substringAfter("MIX_AUTH_TOKEN: '").substringBefore("',")
-        val MIX_PAGE_TOKEN_KEY = env.substringAfter("MIX_PAGE_TOKEN_KEY: '").substringBefore("',")
-        val MIX_STREAM_SERVER_KEY = env.substringAfter("MIX_STREAM_SERVER_KEY: '").substringBefore("',")
-        
-        return Assets(
-            MIX_PREFIX_AUTH_ROUTE_PARAM,
-            MIX_AUTH_ROUTE_PARAM,
-            MIX_AUTH_KEY,
-            MIX_AUTH_TOKEN,
-            MIX_PAGE_TOKEN_KEY,
-            MIX_STREAM_SERVER_KEY
-        )
+        return true
     }
-
-    private fun randomId(length: Int = 6): String {
-        val allowedChars = ('a'..'z') + ('A'..'Z') + ('0'..'9')
-        return (1..length).map { allowedChars.random() }.joinToString("")
-    }
-
-    data class Assets(
-        val MIX_PREFIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_KEY: String,
-        val MIX_AUTH_TOKEN: String,
-        val MIX_PAGE_TOKEN_KEY: String,
-        val MIX_STREAM_SERVER_KEY: String,
-    )
 }
