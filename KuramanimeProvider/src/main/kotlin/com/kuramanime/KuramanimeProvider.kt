@@ -3,7 +3,6 @@ package com.kuramanime
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
@@ -26,6 +25,21 @@ class KuramanimeProvider : MainAPI() {
     )
 
     companion object {
+        // ========================================================
+        // INJEKSI COOKIES PAKSA (HARDCODED) DARI BROWSER
+        // ========================================================
+        val mySavedCookies = mapOf(
+            "__cflb" to "0H28v5q7tFKkx8SAUD1uxeNggJWFNzHvJSkjhnDMXzP",
+            "auto_timezone_v2" to "yes",
+            "full_timezone_v2" to "Waktu Indonesia Barat",
+            "kuramanime_session" to "eyJpdiI6IkpLcHBBY2V6RzRoS3JKVk95S0xmT0E9PSIsInZhbHVlIjoiZnBMS0wyUFQ3K3JZV2NjTUp1VFZ0Ujg1YWZ4eDYyQ2tDK05mR3VWbDloTWNrejZRdjc2eWZHY24yU3NHQWRnRlFtcy91dUhYMHJKd0dyWCtCK0t5YVc5LzVrckR2Y0VsNHBOcHpIdG1yVkZlUGxwVmdpNy9WOUZSMlNQQzI2NFYiLCJtYWMiOiI1ZjdmNDFiMjhkMDdlNzJkOGVhM2M3ZDY5YzY5ODc3NWY0OGMwMmIzOWJjOTI0OWRmYjExMzY0N2VhZDUwZWMyIiwidGFnIjoiIn0%3D",
+            "preferred_stserver" to "kuramadrive",
+            "sel_timezone_v2" to "Asia/Jakarta",
+            "short_timezone_v2" to "WIB",
+            "should_do_galak" to "hide",
+            "XSRF-TOKEN" to "eyJpdiI6ImVuN1A1cHlmbW5wVkp6WXg1Y0lMMnc9PSIsInZhbHVlIjoiSTZJcDhJZXdqKzB6a2VjeGhCZjNjUWpaVXZKbFZXaEdRa0hlWUE0cDUvN0F3TU9BZlpuRVZzMU9BODdYNUVkekJhR2c0cUVsTEdKbGNmOWErbStFdERNSjNhemxQNGkyRnNWWlhRTjRGcThueGlwdFJXMTd3MmNER0RaSnlHbUoiLCJtYWMiOiJmZDRjM2FhZGM4MTI3OWE0ZTA5ZjcxZWE4YWY4NmRmNTE2NTg5Nzc4ZmUyNTk0MzQ2ODI2Yzg3MGViZWRlMmQ2IiwidGFnIjoiIn0%3D"
+        )
+
         fun getType(t: String, s: Int): TvType {
             return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
             else if (t.contains("Movie", true) && s == 1) TvType.AnimeMovie
@@ -52,7 +66,7 @@ class KuramanimeProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val document = app.get(request.data + page).document
+        val document = app.get(request.data + page, cookies = mySavedCookies).document
         val home = document.select("div.product__item").mapNotNull {
             it.toSearchResult()
         }
@@ -83,14 +97,15 @@ class KuramanimeProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         return app.get(
-            "$mainUrl/anime?search=$query&order_by=latest"
+            "$mainUrl/anime?search=$query&order_by=latest", 
+            cookies = mySavedCookies
         ).document.select("div.product__item").mapNotNull {
             it.toSearchResult()
         }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).document
+        val document = app.get(url, cookies = mySavedCookies).document
 
         val title = document.selectFirst(".anime__details__title > h3")!!.text().trim()
         val poster = document.selectFirst(".anime__details__pic")?.attr("data-setbg")
@@ -110,7 +125,7 @@ class KuramanimeProvider : MainAPI() {
         val episodes = mutableListOf<Episode>()
 
         for (i in 1..30) {
-            val doc = app.get("$url?page=$i").document
+            val doc = app.get("$url?page=$i", cookies = mySavedCookies).document
             val content = doc.select("#episodeLists").attr("data-content")
             if (content.isBlank()) break
 
@@ -164,23 +179,20 @@ class KuramanimeProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         
-        val req = app.get(
-            data,
-            interceptor = WebViewResolver(Regex("""animeDownloadLink|player"""))
-        )
-        
+        // MENGIRIM REQUEST DENGAN COOKIES YANG SUDAH DI-HARDCODE
+        val req = app.get(data, cookies = mySavedCookies)
         val document = req.document
-        val cookies = req.cookies
         val csrfToken = document.selectFirst("meta[name=csrf-token]")?.attr("content") ?: ""
 
+        // EKSTRAK TAUTAN UNDUH (MEGA, PIXELDRAIN, DLL)
         document.select("div#animeDownloadLink a").forEach { a ->
             val dlLink = a.attr("href")
-            
             if (dlLink.startsWith("http")) {
                 loadExtractor(dlLink, data, subtitleCallback, callback)
             }
         }
 
+        // EKSTRAK VIDEO PLAYER (KURAMADRIVE)
         val links = mutableListOf<Pair<String, Int>>()
         
         document.selectFirst("#player")?.attr("data-hls-src")?.takeIf { it.isNotBlank() }?.let {
@@ -210,8 +222,8 @@ class KuramanimeProvider : MainAPI() {
                                 "Content-Type" to "application/json",
                                 "Accept" to "application/json"
                             ),
-                            data = """{"pid":"$pid","sid":"$sid"}""", // Gunakan raw JSON string
-                            cookies = cookies
+                            data = """{"pid":"$pid","sid":"$sid"}""", 
+                            cookies = mySavedCookies // INJEKSI COOKIES DI SINI JUGA
                         )
                         
                         val accessToken = Regex(""""access_token"\s*:\s*"([^"]+)"""").find(tokenReq.text)?.groupValues?.get(1)
