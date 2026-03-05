@@ -22,7 +22,6 @@
 | :--- | :---: | :--- | :---: |
 | **Anichin** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
 | **AnimeSail** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua | ✅ Active |
-| **Anoboy** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **CineMax21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **Donghub** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
 | **Drakor** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
