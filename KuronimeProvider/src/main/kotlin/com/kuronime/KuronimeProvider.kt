@@ -54,6 +54,25 @@ class KuronimeProvider : MainAPI() {
         }
     }
 
+    private suspend fun translateToIndonesian(text: String?): String? {
+        if (text.isNullOrBlank()) return text
+        return try {
+            val encodedText = java.net.URLEncoder.encode(text, "UTF-8")
+            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=$encodedText"
+            val response = app.get(url).text
+            val jsonArray = org.json.JSONArray(response)
+            val segments = jsonArray.getJSONArray(0)
+            val translatedText = StringBuilder()
+            
+            for (i in 0 until segments.length()) {
+                translatedText.append(segments.getJSONArray(i).getString(0))
+            }
+            translatedText.toString()
+        } catch (e: Exception) {
+            text
+        }
+    }
+
     override val mainPage = mainPageOf(
         "$mainUrl/page/" to "New Episodes",
         "$mainUrl/ongoing-anime/page/" to "Ongoing Anime",
@@ -158,7 +177,7 @@ class KuronimeProvider : MainAPI() {
         val status = getStatus(statusText)
         
         val description = document.select("span.const > p").text()
-
+        
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
         val malId = tracker?.malId
 
@@ -180,14 +199,14 @@ class KuronimeProvider : MainAPI() {
             apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
             type = type,
             tmdbId = tmdbid,
-            appLangCode = "en"
+            appLangCode = "id"
         )
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
 
-        val episodes = document.select("div.bixbox.bxcl > ul > li").mapNotNull {
-            val link = it.selectFirst("a")?.attr("href") ?: return@mapNotNull null
-            val name = it.selectFirst("a")?.text() ?: return@mapNotNull null
+        val episodes = document.select("div.bixbox.bxcl > ul > li").amap { element ->
+            val link = element.selectFirst("a")?.attr("href") ?: return@amap null
+            val name = element.selectFirst("a")?.text() ?: return@amap null
             var episodeNum = Regex("(\\d+[.,]?\\d*)").find(name)?.groupValues?.getOrNull(0)?.toIntOrNull()
             
             if (type == TvType.AnimeMovie && episodeNum == null) {
@@ -196,6 +215,13 @@ class KuronimeProvider : MainAPI() {
 
             val episodeKey = episodeNum?.toString()
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
+
+            val epOverview = metaEp?.overview
+            val translatedOverview = if (!epOverview.isNullOrBlank()) {
+                translateToIndonesian(epOverview)
+            } else {
+                "Sinopsis belum tersedia."
+            }
 
             newEpisode(link) { 
                 this.name = if (type == TvType.AnimeMovie) {
@@ -206,14 +232,20 @@ class KuronimeProvider : MainAPI() {
                 this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                this.description = metaEp?.overview ?: "No summary available"
+                this.description = translatedOverview
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
             }
-        }.reversed()
+        }.filterNotNull().reversed()
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
-        val finalPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview ?: description
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        
+        val finalPlot = if (!rawPlot.isNullOrBlank()) {
+            translateToIndonesian(rawPlot)
+        } else {
+            description
+        }
 
         return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.engName = animeMetaData?.titles?.get("en") ?: title

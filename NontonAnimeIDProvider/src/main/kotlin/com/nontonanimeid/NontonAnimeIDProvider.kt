@@ -49,6 +49,25 @@ class NontonAnimeIDProvider : MainAPI() {
         }
     }
 
+    private suspend fun translateToIndonesian(text: String?): String? {
+        if (text.isNullOrBlank()) return text
+        return try {
+            val encodedText = java.net.URLEncoder.encode(text, "UTF-8")
+            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=$encodedText"
+            val response = app.get(url).text
+            val jsonArray = org.json.JSONArray(response)
+            val segments = jsonArray.getJSONArray(0)
+            val translatedText = StringBuilder()
+            
+            for (i in 0 until segments.length()) {
+                translatedText.append(segments.getJSONArray(i).getString(0))
+            }
+            translatedText.toString()
+        } catch (e: Exception) {
+            text
+        }
+    }
+
     override val mainPage = mainPageOf(
         "$mainUrl/anime/?mode=&sort=series_tahun_newest&status=Currently+Airing&type=" to "Ongoing Anime",
         "$mainUrl/anime/?mode=&sort=series_tahun_newest&status=Finished+Airing&type=" to "Complete Anime",
@@ -179,7 +198,7 @@ class NontonAnimeIDProvider : MainAPI() {
             apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
             type = type,
             tmdbId = tmdbid,
-            appLangCode = "en"
+            appLangCode = "id"
         )
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
@@ -233,7 +252,7 @@ class NontonAnimeIDProvider : MainAPI() {
             }.reversed()
         }
 
-        val episodes = extractedEpisodes.map { ep ->
+        val episodes = extractedEpisodes.amap { ep ->
             var episodeNum = ep.episode
             
             if (type == TvType.AnimeMovie && episodeNum == null) {
@@ -242,6 +261,13 @@ class NontonAnimeIDProvider : MainAPI() {
 
             val episodeKey = episodeNum?.toString()
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
+
+            val epOverview = metaEp?.overview
+            val translatedOverview = if (!epOverview.isNullOrBlank()) {
+                translateToIndonesian(epOverview)
+            } else {
+                "Sinopsis belum tersedia."
+            }
 
             ep.apply {
                 this.name = if (type == TvType.AnimeMovie) {
@@ -252,7 +278,7 @@ class NontonAnimeIDProvider : MainAPI() {
                 this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                this.description = metaEp?.overview ?: "No summary available"
+                this.description = translatedOverview
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
             }
@@ -272,7 +298,13 @@ class NontonAnimeIDProvider : MainAPI() {
         }
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
-        val finalPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview ?: description
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        
+        val finalPlot = if (!rawPlot.isNullOrBlank()) {
+            translateToIndonesian(rawPlot)
+        } else {
+            description
+        }
 
         return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.engName = animeMetaData?.titles?.get("en") ?: title

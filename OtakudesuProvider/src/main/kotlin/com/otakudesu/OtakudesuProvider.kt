@@ -55,6 +55,25 @@ class OtakudesuProvider : MainAPI() {
         }
     }
 
+    private suspend fun translateToIndonesian(text: String?): String? {
+        if (text.isNullOrBlank()) return text
+        return try {
+            val encodedText = java.net.URLEncoder.encode(text, "UTF-8")
+            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=$encodedText"
+            val response = app.get(url).text
+            val jsonArray = org.json.JSONArray(response)
+            val segments = jsonArray.getJSONArray(0)
+            val translatedText = StringBuilder()
+            
+            for (i in 0 until segments.length()) {
+                translatedText.append(segments.getJSONArray(i).getString(0))
+            }
+            translatedText.toString()
+        } catch (e: Exception) {
+            text
+        }
+    }
+
     override val mainPage = mainPageOf(
         "$mainUrl/ongoing-anime/page/" to "Ongoing Anime",
         "$mainUrl/complete-anime/page/" to "Complete Anime"
@@ -131,9 +150,7 @@ class OtakudesuProvider : MainAPI() {
                 animeMetaData = parseAnimeData(syncMetaData)
                 tmdbid = animeMetaData?.mappings?.themoviedbId
                 kitsuid = animeMetaData?.mappings?.kitsuId
-            } catch (e: Exception) {
-                // Ignore if AniZip fails
-            }
+            } catch (e: Exception) {}
         }
 
         val logoUrl = fetchTmdbLogoUrl(
@@ -141,30 +158,45 @@ class OtakudesuProvider : MainAPI() {
             apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
             type = type,
             tmdbId = tmdbid,
-            appLangCode = "en"
+            appLangCode = "id"
         )
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
 
-        val episodes = document.select("div.episodelist")[1].select("ul > li").mapNotNull {
-            val name = it.selectFirst("a")?.text() ?: return@mapNotNull null
-            val episodeNum = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val episodes = document.select("div.episodelist")[1].select("ul > li").amap { element ->
+            val name = element.selectFirst("a")?.text() ?: return@amap null
+            var episodeNum = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
             val fallbackName = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(0) ?: name
-            val link = fixUrl(it.selectFirst("a")!!.attr("href"))
+            val link = fixUrl(element.selectFirst("a")!!.attr("href"))
+
+            if (type == TvType.AnimeMovie && episodeNum == null) {
+                episodeNum = 1
+            }
 
             val episodeKey = episodeNum?.toString()
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
 
+            val epOverview = metaEp?.overview
+            val translatedOverview = if (!epOverview.isNullOrBlank()) {
+                translateToIndonesian(epOverview)
+            } else {
+                "Sinopsis belum tersedia."
+            }
+
             newEpisode(link) { 
-                this.name = metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: fallbackName
+                this.name = if (type == TvType.AnimeMovie) {
+                    animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
+                } else {
+                    metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: fallbackName
+                }
                 this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                this.description = metaEp?.overview ?: "No summary available"
+                this.description = translatedOverview
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
             }
-        }.reversed()
+        }.filterNotNull().reversed()
 
         val recommendations =
             document.select("div.isi-recommend-anime-series > div.isi-konten").map {
@@ -176,7 +208,16 @@ class OtakudesuProvider : MainAPI() {
                 }
             }
 
-        return newAnimeLoadResponse(title, url, type) {
+        val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        
+        val finalPlot = if (!rawPlot.isNullOrBlank()) {
+            translateToIndonesian(rawPlot)
+        } else {
+            description
+        }
+
+        return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.engName = animeMetaData?.titles?.get("en") ?: title
             this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             this.posterUrl = tracker?.image ?: poster
@@ -185,7 +226,7 @@ class OtakudesuProvider : MainAPI() {
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             this.showStatus = status
-            this.plot = animeMetaData?.episodes?.get("1")?.overview ?: description
+            this.plot = finalPlot
             this.tags = tags
             this.recommendations = recommendations
             addMalId(malId)
@@ -341,6 +382,7 @@ class OtakudesuProvider : MainAPI() {
     @JsonIgnoreProperties(ignoreUnknown = true)
     data class MetaAnimeData(
         @JsonProperty("titles") val titles: Map<String, String>?,
+        @JsonProperty("description") val description: String?,
         @JsonProperty("images") val images: List<MetaImage>?,
         @JsonProperty("episodes") val episodes: Map<String, MetaEpisode>?,
         @JsonProperty("mappings") val mappings: MetaMappings? = null
