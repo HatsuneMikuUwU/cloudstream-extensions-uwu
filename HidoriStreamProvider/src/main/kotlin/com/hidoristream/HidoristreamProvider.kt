@@ -213,7 +213,7 @@ class HidoristreamProvider : MainAPI() {
 
         val episodes = if (isMovie && episodeElements.isEmpty()) {
             val epOverview = animeMetaData?.episodes?.get("1")?.overview
-            val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else ""
+            val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
             
             listOf(
                 newEpisode(url) {
@@ -233,7 +233,7 @@ class HidoristreamProvider : MainAPI() {
                 val metaEp = animeMetaData?.episodes?.get(episodeKey)
 
                 val epOverview = metaEp?.overview
-                val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else ""
+                val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
 
                 newEpisode(fixUrl(aTag.attr("href"))) {
                     this.name = metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: "Episode $epNum"

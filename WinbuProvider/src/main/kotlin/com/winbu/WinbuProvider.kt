@@ -192,7 +192,7 @@ class WinbuProvider : MainAPI() {
 
         val finalEpisodes = if (extractedEpisodes.isEmpty() || isMovie) {
             val epOverview = animeMetaData?.episodes?.get("1")?.overview
-            val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else ""
+            val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
             
             listOf(
                 newEpisode(url) {
@@ -210,7 +210,7 @@ class WinbuProvider : MainAPI() {
                 val metaEp = animeMetaData?.episodes?.get(episodeKey)
 
                 val epOverview = metaEp?.overview
-                val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else ""
+                val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
 
                 newEpisode(link) {
                     this.name = metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: "Episode $num"

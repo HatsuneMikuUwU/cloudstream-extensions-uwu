@@ -247,7 +247,7 @@ class NontonAnimeIDProvider : MainAPI() {
             val finalOverview = if (!epOverview.isNullOrBlank()) {
                 epOverview
             } else {
-                ""
+                "Synopsis not yet available."
             }
 
             ep.apply {

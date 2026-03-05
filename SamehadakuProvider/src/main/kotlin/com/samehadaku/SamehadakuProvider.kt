@@ -167,7 +167,7 @@ class SamehadakuProvider : MainAPI() {
             val finalOverview = if (!epOverview.isNullOrBlank()) {
                 epOverview
             } else {
-                ""
+                "Synopsis not yet available."
             }
 
             newEpisode(link) { 
