@@ -36,25 +36,6 @@ class WinbuProvider : MainAPI() {
     data class FiledonProps(val url: String? = null, val files: FiledonFile? = null)
     data class FiledonFile(val name: String? = null)
 
-    private suspend fun translateToIndonesian(text: String?): String? {
-        if (text.isNullOrBlank()) return text
-        return try {
-            val encodedText = java.net.URLEncoder.encode(text, "UTF-8")
-            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=$encodedText"
-            val response = app.get(url).text
-            val jsonArray = org.json.JSONArray(response)
-            val segments = jsonArray.getJSONArray(0)
-            val translatedText = StringBuilder()
-            
-            for (i in 0 until segments.length()) {
-                translatedText.append(segments.getJSONArray(i).getString(0))
-            }
-            translatedText.toString()
-        } catch (e: Exception) {
-            text
-        }
-    }
-
     override val mainPage = mainPageOf(
         "anime-terbaru-animasu/page/%d/" to "New Episodes",
         "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing Anime",
@@ -194,7 +175,7 @@ class WinbuProvider : MainAPI() {
             apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
             type = tvType,
             tmdbId = tmdbid,
-            appLangCode = "id"
+            appLangCode = "en"
         )
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
@@ -211,7 +192,7 @@ class WinbuProvider : MainAPI() {
 
         val finalEpisodes = if (extractedEpisodes.isEmpty() || isMovie) {
             val epOverview = animeMetaData?.episodes?.get("1")?.overview
-            val translatedOverview = if (!epOverview.isNullOrBlank()) translateToIndonesian(epOverview) else "Sinopsis belum tersedia."
+            val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else ""
             
             listOf(
                 newEpisode(url) {
@@ -219,7 +200,7 @@ class WinbuProvider : MainAPI() {
                     this.episode = 1
                     this.score = Score.from10(animeMetaData?.episodes?.get("1")?.rating)
                     this.posterUrl = animeMetaData?.episodes?.get("1")?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                    this.description = translatedOverview
+                    this.description = finalOverview
                     this.addDate(animeMetaData?.episodes?.get("1")?.airDateUtc)
                 }
             )
@@ -229,14 +210,14 @@ class WinbuProvider : MainAPI() {
                 val metaEp = animeMetaData?.episodes?.get(episodeKey)
 
                 val epOverview = metaEp?.overview
-                val translatedOverview = if (!epOverview.isNullOrBlank()) translateToIndonesian(epOverview) else "Sinopsis belum tersedia."
+                val finalOverview = if (!epOverview.isNullOrBlank()) epOverview else ""
 
                 newEpisode(link) {
                     this.name = metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: "Episode $num"
                     this.episode = num
                     this.score = Score.from10(metaEp?.rating)
                     this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                    this.description = translatedOverview
+                    this.description = finalOverview
                     this.addDate(metaEp?.airDateUtc)
                     this.runTime = metaEp?.runtime
                 }
@@ -247,7 +228,7 @@ class WinbuProvider : MainAPI() {
         val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
         
         val finalPlot = if (!rawPlot.isNullOrBlank()) {
-            translateToIndonesian(rawPlot)
+            rawPlot
         } else {
             description
         }

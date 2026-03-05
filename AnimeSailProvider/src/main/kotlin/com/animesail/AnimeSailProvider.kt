@@ -157,45 +157,6 @@ class AnimeSailProvider : MainAPI() {
         )
     }
 
-    private suspend fun bulkTranslateToIndonesian(texts: List<String>): List<String> {
-        if (texts.isEmpty()) return emptyList()
-        val results = mutableListOf<String>()
-        
-        val chunks = texts.chunked(40) 
-        
-        for (chunk in chunks) {
-            try {
-                val separator = " \n~|~ \n" 
-                val combinedText = chunk.joinToString(separator)
-                
-                val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t"
-                val response = app.post(
-                    url,
-                    data = mapOf("q" to combinedText)
-                ).text
-                
-                val jsonArray = org.json.JSONArray(response)
-                val segments = jsonArray.getJSONArray(0)
-                val translatedText = StringBuilder()
-                
-                for (i in 0 until segments.length()) {
-                    translatedText.append(segments.getJSONArray(i).getString(0))
-                }
-                
-                val translatedChunk = translatedText.toString().split(Regex("~\\|~")).map { it.trim() }
-                
-                if (translatedChunk.size == chunk.size) {
-                    results.addAll(translatedChunk)
-                } else {
-                    results.addAll(chunk)
-                }
-            } catch (e: Exception) {
-                results.addAll(chunk)
-            }
-        }
-        return results
-    }
-
     override val mainPage = mainPageOf(
         "$mainUrl/rilisan-anime-terbaru/page/" to "Ongoing Anime",
         "$mainUrl/rilisan-donghua-terbaru/page/" to "Ongoing Donghua",
@@ -284,18 +245,17 @@ class AnimeSailProvider : MainAPI() {
             apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
             type = type,
             tmdbId = tmdbid,
-            appLangCode = "id"
+            appLangCode = "en"
         )
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
 
-        val textsToTranslate = mutableListOf<String>()
-        
-        val tempEpisodes = document.select("ul.daftar > li").map { it ->
+        val episodes = document.select("ul.daftar > li").amap {
             val link = fixUrl(it.select("a").attr("href"))
             val name = it.select("a").text()
             
             var episodeNum = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            
             if (type == TvType.AnimeMovie && episodeNum == null) {
                 episodeNum = 1
             }
@@ -303,44 +263,26 @@ class AnimeSailProvider : MainAPI() {
             val episodeKey = episodeNum?.toString()
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
 
-            val epOverview = metaEp?.overview ?: "Sinopsis belum tersedia."
-            
-            val rawEpisodeName = if (type == TvType.AnimeMovie) {
-                animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
+            val epOverview = metaEp?.overview
+            val finalOverview = if (!epOverview.isNullOrBlank()) {
+                epOverview
             } else {
-                metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: name
+                ""
             }
 
-            val titleIndex = if (rawEpisodeName.isNotBlank()) {
-                textsToTranslate.size.also { textsToTranslate.add(rawEpisodeName) }
-            } else -1
-            
-            val overviewIndex = if (epOverview.isNotBlank() && epOverview != "Sinopsis belum tersedia.") {
-                textsToTranslate.size.also { textsToTranslate.add(epOverview) }
-            } else -1
-
-            TempEpData(link, name, episodeNum, metaEp, rawEpisodeName, epOverview, titleIndex, overviewIndex)
-        }
-
-        val translatedTexts = bulkTranslateToIndonesian(textsToTranslate)
-
-        val episodes = tempEpisodes.map { temp ->
-            val translatedEpisodeName = if (temp.titleIndex != -1) {
-                translatedTexts.getOrNull(temp.titleIndex)?.takeIf { it.isNotBlank() } ?: temp.rawEpisodeName
-            } else temp.rawEpisodeName
-            
-            val translatedOverview = if (temp.overviewIndex != -1) {
-                translatedTexts.getOrNull(temp.overviewIndex)?.takeIf { it.isNotBlank() } ?: temp.epOverview
-            } else temp.epOverview
-
-            newEpisode(temp.link) {                 
-                this.name = translatedEpisodeName
-                this.episode = temp.episodeNum 
-                this.score = Score.from10(temp.metaEp?.rating)
-                this.posterUrl = temp.metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                this.description = translatedOverview
-                this.addDate(temp.metaEp?.airDateUtc)
-                this.runTime = temp.metaEp?.runtime
+            newEpisode(link) {                 
+                this.name = if (type == TvType.AnimeMovie) {
+                    animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
+                } else {
+                    metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: name
+                }
+                
+                this.episode = episodeNum 
+                this.score = Score.from10(metaEp?.rating)
+                this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
+                this.description = finalOverview
+                this.addDate(metaEp?.airDateUtc)
+                this.runTime = metaEp?.runtime
             }
         }.reversed()
 
@@ -348,7 +290,7 @@ class AnimeSailProvider : MainAPI() {
         val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
         
         val finalPlot = if (!rawPlot.isNullOrBlank()) {
-            bulkTranslateToIndonesian(listOf(rawPlot)).firstOrNull() ?: rawPlot
+            rawPlot
         } else {
             plotText
         }
@@ -559,17 +501,6 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 }
-
-data class TempEpData(
-    val link: String,
-    val name: String,
-    val episodeNum: Int?,
-    val metaEp: AnimeSailProvider.MetaEpisode?,
-    val rawEpisodeName: String,
-    val epOverview: String,
-    val titleIndex: Int,
-    val overviewIndex: Int
-)
 
 suspend fun fetchTmdbLogoUrl(
     tmdbAPI: String,

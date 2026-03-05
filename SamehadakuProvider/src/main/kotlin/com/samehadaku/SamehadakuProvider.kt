@@ -38,25 +38,6 @@ class SamehadakuProvider : MainAPI() {
         }
     }
 
-    private suspend fun translateToIndonesian(text: String?): String? {
-        if (text.isNullOrBlank()) return text
-        return try {
-            val encodedText = java.net.URLEncoder.encode(text, "UTF-8")
-            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=$encodedText"
-            val response = app.get(url).text
-            val jsonArray = org.json.JSONArray(response)
-            val segments = jsonArray.getJSONArray(0)
-            val translatedText = StringBuilder()
-            
-            for (i in 0 until segments.length()) {
-                translatedText.append(segments.getJSONArray(i).getString(0))
-            }
-            translatedText.toString()
-        } catch (e: Exception) {
-            text
-        }
-    }
-
     override val mainPage = mainPageOf(
         "anime-terbaru/page/%d/" to "New Episodes",
         "daftar-anime-2/page/%d/?status=Currently+Airing&order=latest" to "Ongoing Anime",
@@ -164,7 +145,7 @@ class SamehadakuProvider : MainAPI() {
             apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
             type = type,
             tmdbId = tmdbid,
-            appLangCode = "id"
+            appLangCode = "en"
         )
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
@@ -183,10 +164,10 @@ class SamehadakuProvider : MainAPI() {
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
 
             val epOverview = metaEp?.overview
-            val translatedOverview = if (!epOverview.isNullOrBlank()) {
-                translateToIndonesian(epOverview)
+            val finalOverview = if (!epOverview.isNullOrBlank()) {
+                epOverview
             } else {
-                "Sinopsis belum tersedia."
+                ""
             }
 
             newEpisode(link) { 
@@ -198,7 +179,7 @@ class SamehadakuProvider : MainAPI() {
                 this.episode = episodeNum 
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
-                this.description = translatedOverview
+                this.description = finalOverview
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
             }
@@ -210,7 +191,7 @@ class SamehadakuProvider : MainAPI() {
         val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
         
         val finalPlot = if (!rawPlot.isNullOrBlank()) {
-            translateToIndonesian(rawPlot)
+            rawPlot
         } else {
             description
         }
