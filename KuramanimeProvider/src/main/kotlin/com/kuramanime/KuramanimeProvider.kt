@@ -3,6 +3,7 @@ package com.kuramanime
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -26,6 +27,8 @@ class KuramanimeProvider : MainAPI() {
         TvType.AnimeMovie,
         TvType.OVA
     )
+
+    private val cfKiller = CloudflareKiller()
 
     companion object {
         fun getType(t: String, s: Int): TvType {
@@ -54,7 +57,7 @@ class KuramanimeProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val document = app.get(request.data + page).document
+        val document = app.get(request.data + page, interceptor = cfKiller).document
         val home = document.select("div.product__item").mapNotNull {
             it.toSearchResult()
         }
@@ -85,14 +88,15 @@ class KuramanimeProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         return app.get(
-            "$mainUrl/anime?search=$query&order_by=latest"
+            "$mainUrl/anime?search=$query&order_by=latest",
+            interceptor = cfKiller
         ).document.select("div.product__item").mapNotNull {
             it.toSearchResult()
         }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).document
+        val document = app.get(url, interceptor = cfKiller).document
 
         val title = document.selectFirst(".anime__details__title > h3")!!.text().trim()
         val poster = document.selectFirst(".anime__details__pic")?.attr("data-setbg")
@@ -112,7 +116,7 @@ class KuramanimeProvider : MainAPI() {
         val episodes = mutableListOf<Episode>()
 
         for (i in 1..30) {
-            val doc = app.get("$url?page=$i").document
+            val doc = app.get("$url?page=$i", interceptor = cfKiller).document
             val content = doc.select("#episodeLists").attr("data-content")
             if (content.isBlank()) break
 
@@ -249,7 +253,7 @@ class KuramanimeProvider : MainAPI() {
                 link.contains("filemoon", true) ||
                 link.contains("dropbox", true) ||
                 link.contains("pikpak", true) ||
-                link.contains("kuramadrive.com", true) 
+                link.contains("kuramadrive.com", true)
             ) {
                 if (link.endsWith(".mp4", true) || link.endsWith(".m3u8", true)) {
                     val serverName = if (link.contains("p2pstream")) "P2P Stream"
