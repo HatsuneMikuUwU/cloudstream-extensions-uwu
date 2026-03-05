@@ -37,6 +37,7 @@
 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **PencuriMovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
