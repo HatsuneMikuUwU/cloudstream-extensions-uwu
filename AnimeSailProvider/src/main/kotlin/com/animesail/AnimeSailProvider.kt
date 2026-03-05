@@ -289,13 +289,20 @@ class AnimeSailProvider : MainAPI() {
                 "Sinopsis belum tersedia."
             }
 
+            val rawEpisodeName = if (type == TvType.AnimeMovie) {
+                animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
+            } else {
+                metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: name
+            }
+            
+            val translatedEpisodeName = if (!rawEpisodeName.isNullOrBlank()) {
+                translateToIndonesian(rawEpisodeName) ?: rawEpisodeName
+            } else {
+                rawEpisodeName
+            }
+
             newEpisode(link) {                 
-                this.name = if (type == TvType.AnimeMovie) {
-                    animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
-                } else {
-                    metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: name
-                }
-                
+                this.name = translatedEpisodeName
                 this.episode = episodeNum 
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
