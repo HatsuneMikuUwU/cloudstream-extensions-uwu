@@ -8,6 +8,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
@@ -21,7 +22,6 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -67,22 +67,26 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 var webView: WebView? = null
 
                 handler.post {
-                    val newWebView = WebView(context)
-                    webView = newWebView
-                    
-                    newWebView.settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        userAgentString = userAgent.ifBlank { userAgentString }
+                    try {
+                        val newWebView = WebView(context)
+                        webView = newWebView
+                        
+                        newWebView.settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            userAgentString = userAgent.ifBlank { userAgentString }
+                        }
+                        userAgent = newWebView.settings.userAgentString ?: userAgent
+
+                        newWebView.webViewClient = WebViewClient()
+
+                        cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
+                        cookieManager.flush()
+
+                        newWebView.loadUrl(url)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                    userAgent = newWebView.settings.userAgentString ?: userAgent
-
-                    newWebView.webViewClient = WebViewClient()
-
-                    cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
-                    cookieManager.flush()
-
-                    newWebView.loadUrl(url)
                 }
 
                 var attempts = 0
@@ -99,8 +103,12 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 }
 
                 handler.post {
-                    webView?.stopLoading()
-                    webView?.destroy()
+                    try {
+                        webView?.stopLoading()
+                        webView?.destroy()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
 
@@ -130,6 +138,10 @@ class AnimeSailProvider : MainAPI() {
     )
 
     companion object {
+        private val mapper: ObjectMapper by lazy { 
+            ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false) 
+        }
+
         fun getType(t: String): TvType {
             return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
             else if (t.contains("Movie", true)) TvType.AnimeMovie
@@ -145,10 +157,12 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
+    private val turnstileInterceptor = TurnstileInterceptor("_as_turnstile")
+
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            interceptor = TurnstileInterceptor("_as_turnstile"),
+            interceptor = turnstileInterceptor,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
@@ -177,9 +191,7 @@ class AnimeSailProvider : MainAPI() {
         } else {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
-                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
-                    "-episode"
-                )
+                (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
@@ -188,13 +200,26 @@ class AnimeSailProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
-        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
-        val title = this.select(".tt > h2").text().trim()
+        val rawHref = fixUrlNull(this.selectFirst("a")?.attr("href")).toString()
+        val href = getProperAnimeLink(rawHref)
+        
+        val rawTitle = this.selectFirst(".tt > h2")?.text() ?: ""
+        
+        val title = rawTitle.replace(Regex("(?i)Episode\\s?\\d+"), "")
+            .replace(Regex("(?i)Subtitle Indonesia"), "")
+            .replace(Regex("(?i)Sub Indo"), "")
+            .trim()
+            .removeSuffix("-")
+            .trim()
+
         val posterUrl = fixUrlNull(this.selectFirst("div.limit img")?.attr("src"))
-        val epNum = this.selectFirst(".tt > h2")?.text()?.let {
-            Regex("Episode\\s?(\\d+)").find(it)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        }
-        return newAnimeSearchResponse(title, href, TvType.Anime) {
+        
+        val epNum = Regex("(?i)Episode\\s?(\\d+)").find(rawTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        
+        val typeText = this.selectFirst(".tt > span")?.text() ?: ""
+        val type = if (typeText.contains("Movie", ignoreCase = true)) TvType.AnimeMovie else TvType.Anime
+
+        return newAnimeSearchResponse(title, href, type) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
@@ -236,7 +261,6 @@ class AnimeSailProvider : MainAPI() {
                 tmdbid = animeMetaData?.mappings?.themoviedbId
                 kitsuid = animeMetaData?.mappings?.kitsuId
             } catch (e: Exception) {
-                // Ignore if AniZip fails
             }
         }
 
@@ -328,28 +352,23 @@ class AnimeSailProvider : MainAPI() {
                 if (encodedData.isBlank()) return@safeApiCall
 
                 val iframe = fixUrl(Jsoup.parse(base64Decode(encodedData)).select("iframe").attr("src"))
-                
                 if (iframe.contains("statistic") || iframe.isBlank()) return@safeApiCall
 
-                val quality = getIndexQuality(element.text())
+                val rawText = element.text().trim()
+                val quality = getIndexQuality(rawText)
+                
+                val serverName = rawText.split(" ").firstOrNull()?.replaceFirstChar { 
+                    if (it.isLowerCase()) it.titlecase() else it.toString() 
+                } ?: name
 
                 when {
-                    iframe.endsWith(".mp4", ignoreCase = true) || iframe.endsWith(".m3u8", ignoreCase = true) || iframe.contains("yorudrive.com") -> {
-                        val isM3u8 = iframe.endsWith(".m3u8", ignoreCase = true)
-                        val hostName = try {
-                            java.net.URI(iframe).host?.substringBeforeLast(".")?.substringAfterLast(".")
-                                ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } 
-                                ?: "Direct Link"
-                        } catch (e: Exception) {
-                            "Direct Link"
-                        }
-
+                    iframe.endsWith(".mp4", ignoreCase = true) || iframe.endsWith(".m3u8", ignoreCase = true) -> {
                         callback.invoke(
                             newExtractorLink(
-                                source = hostName,
-                                name = hostName,
+                                source = serverName,
+                                name = serverName,
                                 url = iframe,
-                                type = if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                                type = if (iframe.endsWith(".m3u8", ignoreCase = true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                             ) {
                                 referer = mainUrl
                                 this.quality = quality
@@ -361,65 +380,67 @@ class AnimeSailProvider : MainAPI() {
                         val encodedUrl = iframe.substringAfter("url=").substringBefore("&")
                         if (encodedUrl.isNotBlank()) {
                             val realUrl = java.net.URLDecoder.decode(encodedUrl, "UTF-8")
-                            loadFixedExtractor(realUrl, quality, mainUrl, subtitleCallback, callback)
+                            loadFixedExtractor(realUrl, serverName, quality, mainUrl, subtitleCallback, callback)
                         }
                     }
 
-                    iframe.contains("${playerPath}kodir2") -> {
+                    iframe.contains("player-kodir.aghanim.xyz") || iframe.contains("${playerPath}kodir2") -> {
                         val res = request(iframe, ref = data).text
-                        val scriptData = res.substringAfter("= `").substringBefore("`;")
-                        val link = Jsoup.parse(scriptData).select("source").last()?.attr("src") ?: return@safeApiCall
+                        var link = Jsoup.parse(res.substringAfter("= `", "").substringBefore("`;", "")).select("source").last()?.attr("src")
+                        
+                        if (link.isNullOrBlank()) {
+                            link = Jsoup.parse(res).select("source").attr("src")
+                        }
 
-                        callback.invoke(
-                            newExtractorLink(
-                                source = name,
-                                name = name,
-                                url = link,
-                                type = INFER_TYPE
-                            ) {
-                                referer = mainUrl
-                                this.quality = quality
-                            }
-                        )
+                        if (!link.isNullOrBlank()) {
+                            callback.invoke(
+                                newExtractorLink(
+                                    source = serverName,
+                                    name = serverName,
+                                    url = link,
+                                    type = INFER_TYPE
+                                ) {
+                                    referer = iframe 
+                                    this.quality = quality
+                                }
+                            )
+                        }
                     }
 
                     iframe.contains("${playerPath}framezilla") || iframe.contains("uservideo.xyz") -> {
-                        val link = request(iframe, ref = data).document.select("iframe").attr("src")
-                        if (link.isNotBlank()) {
-                            loadFixedExtractor(fixUrl(link), quality, mainUrl, subtitleCallback, callback)
+                        val doc = request(iframe, ref = data).document
+                        val innerLink = doc.select("iframe").attr("src")
+                        if (innerLink.isNotBlank()) {
+                            loadFixedExtractor(fixUrl(innerLink), serverName, quality, mainUrl, subtitleCallback, callback)
                         }
                     }
-                    
+
                     iframe.contains("aghanim.xyz/tools/redirect/") -> {
                         val id = iframe.substringAfter("id=").substringBefore("&token")
                         val link = "https://rasa-cintaku-semakin-berantai.xyz/v/$id"
-                        loadFixedExtractor(link, quality, mainUrl, subtitleCallback, callback)
+                        loadFixedExtractor(link, serverName, quality, mainUrl, subtitleCallback, callback)
                     }
 
                     iframe.contains(playerPath) -> {
-                        val link = request(iframe, ref = data).document.select("source").attr("src")
-                        if (link.isBlank()) return@safeApiCall
-
-                        val rawSource = iframe.substringAfter(playerPath).substringBefore("/").substringBefore("?")
-                        val sourceName = rawSource.replaceFirstChar { 
-                            if (it.isLowerCase()) it.titlecase() else it.toString() 
-                        }.ifBlank { name }
-
-                        callback.invoke(
-                            newExtractorLink(
-                                source = sourceName,
-                                name = sourceName,
-                                url = link,
-                                type = INFER_TYPE
-                            ) {
-                                referer = mainUrl
-                                this.quality = quality
-                            }
-                        )
+                        val doc = request(iframe, ref = data).document
+                        val link = doc.select("source").attr("src")
+                        if (link.isNotBlank()) {
+                            callback.invoke(
+                                newExtractorLink(
+                                    source = serverName,
+                                    name = serverName,
+                                    url = link,
+                                    type = INFER_TYPE
+                                ) {
+                                    referer = iframe 
+                                    this.quality = quality
+                                }
+                            )
+                        }
                     }
 
                     else -> {
-                        loadFixedExtractor(iframe, quality, mainUrl, subtitleCallback, callback)
+                        loadFixedExtractor(iframe, serverName, quality, mainUrl, subtitleCallback, callback)
                     }
                 }
             }
@@ -429,23 +450,25 @@ class AnimeSailProvider : MainAPI() {
 
     private suspend fun loadFixedExtractor(
         url: String,
+        serverName: String,
         quality: Int?,
         referer: String? = null,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
+            val finalName = if (serverName.equals(link.name, ignoreCase = true)) link.name else "$serverName - ${link.name}"
+            
             runBlocking {
                 callback.invoke(
                     newExtractorLink(
                         source = link.name,
-                        name = link.name,
+                        name = finalName,
                         url = link.url,
-                        type = INFER_TYPE
+                        type = link.type 
                     ) {
                         this.referer = referer ?: mainUrl
                         this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality ?: Qualities.Unknown.value
-                        this.type = link.type
                         this.headers = link.headers
                         this.extractorData = link.extractorData
                     }
@@ -494,8 +517,7 @@ class AnimeSailProvider : MainAPI() {
 
     private fun parseAnimeData(jsonString: String): MetaAnimeData? {
         return try {
-            val objectMapper = ObjectMapper()
-            objectMapper.readValue(jsonString, MetaAnimeData::class.java)
+            mapper.readValue(jsonString, MetaAnimeData::class.java)
         } catch (_: Exception) {
             null
         }
