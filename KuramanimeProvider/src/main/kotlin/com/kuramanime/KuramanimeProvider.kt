@@ -1,17 +1,7 @@
 package com.kuramanime
 
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
-import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
-import com.lagradost.cloudstream3.amap
-import com.lagradost.cloudstream3.mvvm.safeApiCall
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.INFER_TYPE
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.loadExtractor
-import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.runBlocking
+import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -23,145 +13,48 @@ class KuramanimeProvider : MainAPI() {
     override var lang = "id"
     override var sequentialMainPage = true
     override val hasDownloadSupport = true
+    
+    private var authorization: String? = null
+
     override val supportedTypes = setOf(
         TvType.Anime,
         TvType.AnimeMovie,
         TvType.OVA
     )
 
-    companion object {
-        fun getType(t: String, s: Int): TvType {
-            return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
-            else if (t.contains("Movie", true) && s == 1) TvType.AnimeMovie
-            else TvType.Anime
-        }
-
-        fun getStatus(t: String): ShowStatus {
-            return when (t) {
-                "Selesai Tayang" -> ShowStatus.Completed
-                "Sedang Tayang" -> ShowStatus.Ongoing
-                else -> ShowStatus.Completed
-            }
-        }
-    }
-
-    override val mainPage = mainPageOf(
-        "$mainUrl/anime/ongoing?order_by=updated&page=" to "Sedang Tayang",
-        "$mainUrl/anime/finished?order_by=updated&page=" to "Selesai Tayang",
-        "$mainUrl/properties/season/summer-2022?order_by=most_viewed&page=" to "Dilihat Terbanyak Musim Ini",
-        "$mainUrl/anime/movie?order_by=updated&page=" to "Film Layar Lebar",
-    )
-
-    override suspend fun getMainPage(
-        page: Int,
-        request: MainPageRequest
-    ): HomePageResponse {
-        val document = app.get(request.data + page).document
-        val home = document.select("div#animeList div.product__item").mapNotNull {
-            it.toSearchResult()
-        }
-
-        return newHomePageResponse(request.name, home)
-    }
-
-    private fun getProperAnimeLink(uri: String): String {
-        return if (uri.contains("/episode")) {
-            Regex("(.*)/episode/.+").find(uri)?.groupValues?.get(1).toString() + "/"
-        } else {
-            uri
-        }
-    }
-
-    private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val href = getProperAnimeLink(fixUrl(this.selectFirst("a")?.attr("href") ?: return null))
-        val title = this.selectFirst("h5 a")?.text() ?: return null
-        val posterUrl = fixUrl(this.select("div.product__item__pic.set-bg").attr("data-setbg"))
-        val episode = this.select("div.ep span").text().let {
-            Regex("Ep\\s(\\d+)\\s/").find(it)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        }
-
-        return newAnimeSearchResponse(title, href, TvType.Anime) {
-            this.posterUrl = posterUrl
-            addSub(episode)
-        }
-    }
-
-    override suspend fun search(query: String): List<SearchResponse> {
-        return app.get(
-            "$mainUrl/anime?search=$query&order_by=latest"
-        ).document.select("div#animeList div.product__item").mapNotNull {
-            it.toSearchResult()
-        }
-    }
-
+    // Selector utama berdasarkan HTML terbaru
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
-
-        val title = document.selectFirst(".anime__details__title > h3")?.text()?.trim() ?: "Unknown Title"
-        val poster = document.selectFirst(".anime__details__pic")?.attr("data-setbg")
-        val tags = document.select("div.anime__details__widget > div > div:nth-child(2) > ul > li:nth-child(1)")
-            .text().trim().replace("Genre: ", "").split(", ")
-
-        val yearText = document.select("div.anime__details__widget > div > div:nth-child(1) > ul > li:nth-child(5)")
-            .text().trim().replace("Musim: ", "")
-        val year = Regex("\\d+").find(yearText)?.value?.toIntOrNull()
-
-        val status = getStatus(
-            document.select("div.anime__details__widget > div > div:nth-child(1) > ul > li:nth-child(3)")
-                .text().trim().replace("Status: ", "")
-        )
+        
+        // Ambil judul dari breadcrumb atau title tag
+        val title = document.selectFirst("#episodeTitle")?.text()
+            ?.substringBefore(" (Episode")?.trim() 
+            ?: document.selectFirst(".anime__details__title > h3")?.text()?.trim() ?: ""
+            
+        val poster = document.selectFirst("meta[property=og:image]")?.attr("content")
         val description = document.select(".anime__details__text > p").text().trim()
-
+        
         val episodes = mutableListOf<Episode>()
-
-        for (i in 1..30) {
-            val doc = app.get("$url?page=$i").document
-            val epsData = doc.select("#episodeLists").attr("data-content")
-            if (epsData.isEmpty()) break
-
-            val eps = Jsoup.parse(epsData)
-                .select("a.btn.btn-sm.btn-danger")
-                .mapNotNull {
-                    val name = it.text().trim()
-                    val episode = Regex("(\\d+[.,]?\\d*)").find(name)?.groupValues?.getOrNull(0)
-                        ?.toIntOrNull()
-                    val link = it.attr("href")
-                    if (link.isNotBlank()) {
-                        newEpisode(link) { this.episode = episode }
-                    } else null
-                }
-            if (eps.isEmpty()) break else episodes.addAll(eps)
+        
+        // Perbaikan: Episode sekarang ada di dalam #animeEpisodes
+        document.select("#animeEpisodes a").forEach {
+            val name = it.text().trim()
+            val epsNum = Regex("(\\d+)").find(name)?.groupValues?.get(1)?.toIntOrNull()
+            val href = fixUrl(it.attr("href"))
+            
+            episodes.add(newEpisode(href) {
+                this.episode = epsNum
+                this.name = name
+            })
         }
+        
+        // Balikkan urutan jika perlu (biasanya Kuramanime urut dari Ep 1)
+        episodes.sortBy { it.episode }
 
-        val typeText = document.selectFirst("div.col-lg-6.col-md-6 ul li:contains(Tipe:) a")?.text()?.lowercase() ?: "tv"
-        val type = getType(typeText, episodes.size)
-
-        val recommendations = document.select("div#randomList > a").mapNotNull {
-            val epHref = it.attr("href")
-            val epTitle = it.select("h5.sidebar-title-h5.px-2.py-2").text()
-            val epPoster = it.select(".product__sidebar__view__item.set-bg").attr("data-setbg")
-            if (epTitle.isNotBlank() && epHref.isNotBlank()) {
-                newAnimeSearchResponse(epTitle, epHref, TvType.Anime) {
-                    this.posterUrl = epPoster
-                    addDubStatus(dubExist = false, subExist = true)
-                }
-            } else null
-        }
-
-        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
-
-        return newAnimeLoadResponse(title, url, type) {
-            engName = title
-            posterUrl = tracker?.image ?: poster
-            backgroundPosterUrl = tracker?.cover
-            this.year = year
+        return newAnimeLoadResponse(title, url, TvType.Anime) {
+            this.posterUrl = poster
+            this.plot = description
             addEpisodes(DubStatus.Subbed, episodes)
-            showStatus = status
-            plot = description
-            this.tags = tags
-            this.recommendations = recommendations
-            addMalId(tracker?.malId)
-            addAniListId(tracker?.aniId?.toIntOrNull())
         }
     }
 
@@ -171,74 +64,116 @@ class KuramanimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
+        val req = app.get(data)
+        val res = req.document
+        val cookies = req.cookies
 
-        document.select("video#player > source").amap { source ->
-            safeApiCall {
-                val link = fixUrl(source.attr("src"))
-                val qualityString = source.attr("size")
-                val quality = qualityString.toIntOrNull() ?: Qualities.Unknown.value
+        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: ""
+        // Selector kk yang baru berada di div breadcrumb
+        val dataKps = res.selectFirst("div[data-kk]")?.attr("data-kk")
 
-                if (link.isNotBlank()) {
-                    callback.invoke(
-                        newExtractorLink(
-                            source = "Kuramadrive",
-                            name = "Kuramadrive ${qualityString}p",
-                            url = link,
-                            type = INFER_TYPE
-                        ) {
-                            this.referer = mainUrl
-                            this.quality = quality
-                        }
+        val assets = getAssets(dataKps)
+        val auth = getAuth()
+
+        val headers = mapOf(
+            "X-CSRF-TOKEN" to token,
+            "X-Requested-With" to "XMLHttpRequest",
+            "Authorization" to "Bearer $auth",
+            "Referer" to data,
+            "Accept" to "*/*"
+        )
+
+        // Loop server dari dropdown <select id="changeServer">
+        res.select("select#changeServer option").forEach { source ->
+            val serverValue = source.attr("value")
+            val serverName = source.text().trim()
+            
+            // Request ke endpoint server untuk mendapatkan data player
+            val apiUrl = "$data?server=$serverValue"
+            
+            val response = app.get(
+                apiUrl,
+                headers = headers,
+                cookies = cookies
+            )
+
+            val videoDoc = Jsoup.parse(response.text)
+            
+            // 1. Ambil direct link dari tag <video> jika tersedia (KuramaDrive)
+            videoDoc.select("video source").forEach {
+                val videoUrl = it.attr("src")
+                val quality = it.attr("size").toIntOrNull() ?: Qualities.Unknown.value
+                
+                callback.invoke(
+                    newExtractorLink(
+                        "Kurama $serverName",
+                        "Kurama $serverName",
+                        fixUrl(videoUrl),
+                        data,
+                        quality,
+                        isM3u8 = videoUrl.contains(".m3u8")
                     )
+                )
+            }
+
+            // 2. Ambil dari Iframe (FileMoon, DoodStream, dll)
+            videoDoc.select("iframe").attr("src").let { iframeUrl ->
+                if (iframeUrl.isNotEmpty()) {
+                    loadExtractor(fixUrl(iframeUrl), data, subtitleCallback, callback)
                 }
             }
         }
-
-        document.select("div#animeDownloadLink a").amap { linkElement ->
-            safeApiCall {
-                val href = linkElement.attr("href")
-                val qualityText = linkElement.parent()?.previousElementSibling()?.text() ?: ""
-                val quality = getIndexQuality(qualityText)
-
-                if (href.isNotBlank() && !href.contains(Regex("(?i)kdrive|kturbo|kuramadrive"))) {
-                    loadFixedExtractor(href, quality, mainUrl, subtitleCallback, callback)
-                }
+        
+        // 3. Tambahkan support dari Tautan Unduh (Download Links)
+        res.select("#animeDownloadLink a").forEach {
+            val downloadUrl = it.attr("href")
+            if (!downloadUrl.contains("kuramadrive")) { // kuramadrive butuh auth lagi, skip dulu
+                loadExtractor(downloadUrl, data, subtitleCallback, callback)
             }
         }
 
         return true
     }
 
-    private suspend fun loadFixedExtractor(
-        url: String,
-        quality: Int?,
-        referer: String? = null,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        loadExtractor(url, referer, subtitleCallback) { link ->
-            runBlocking {
-                callback.invoke(
-                    newExtractorLink(
-                        source = link.name,
-                        name = link.name,
-                        url = link.url,
-                        type = INFER_TYPE
-                    ) {
-                        this.referer = referer ?: mainUrl
-                        this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality ?: Qualities.Unknown.value
-                        this.type = link.type
-                        this.headers = link.headers
-                        this.extractorData = link.extractorData
-                    }
-                )
-            }
+    private suspend fun getAssets(bpjs: String?): Assets {
+        if (bpjs == null) return Assets(null, null, null, null, null, null)
+        val env = app.get("$mainUrl/assets/js/$bpjs.js").text
+        
+        fun String.findKey(key: String) = Regex("$key:\\s*'(.*?)'").find(this)?.groupValues?.get(1)
+
+        return Assets(
+            env.findKey("MIX_PREFIX_AUTH_ROUTE_PARAM"),
+            env.findKey("MIX_AUTH_ROUTE_PARAM"),
+            env.findKey("MIX_AUTH_KEY"),
+            env.findKey("MIX_AUTH_TOKEN"),
+            env.findKey("MIX_PAGE_TOKEN_KEY"),
+            env.findKey("MIX_STREAM_SERVER_KEY")
+        )
+    }
+
+    private suspend fun getAuth(): String {
+        return authorization ?: fetchAuth().also { authorization = it }
+    }
+
+    private suspend fun fetchAuth(): String {
+        // Berdasarkan HTML: /storage/leviathan.js?v=1389
+        val res = app.get("$mainUrl/storage/leviathan.js").text
+        val authArray = Regex("""'(.*?)'""").findAll(res).map { it.groupValues[1] }.toList()
+        
+        return if (authArray.size >= 10) {
+            // Formula Kuramanime: Last + Index 9 + Index 1 + First + "i"
+            "${authArray.last()}${authArray[9]}${authArray[1]}${authArray.first()}i"
+        } else {
+            "KFhElffuFYZZHAqqBqlGewkwbaaFUtJS"
         }
     }
 
-    private fun getIndexQuality(str: String): Int {
-        return Regex("(\\d{3,4})[pP]").find(str)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            ?: Qualities.Unknown.value
-    }
+    data class Assets(
+        val MIX_PREFIX_AUTH_ROUTE_PARAM: String?,
+        val MIX_AUTH_ROUTE_PARAM: String?,
+        val MIX_AUTH_KEY: String?,
+        val MIX_AUTH_TOKEN: String?,
+        val MIX_PAGE_TOKEN_KEY: String?,
+        val MIX_STREAM_SERVER_KEY: String?,
+    )
 }
