@@ -54,7 +54,7 @@ class KuronimeProvider : MainAPI() {
         }
     }
 
-   override val mainPage = mainPageOf(
+    override val mainPage = mainPageOf(
         "$mainUrl/page/" to "New Episodes",
         "$mainUrl/ongoing-anime/page/" to "Ongoing Anime",
         "$mainUrl/popular-anime/page/" to "Most Popular",
@@ -67,11 +67,10 @@ class KuronimeProvider : MainAPI() {
     ): HomePageResponse {
         val url = "${request.data}$page/" 
         val req = app.get(url)
-        
         val currentMainUrl = getBaseUrl(req.url)
         val document = req.document
         
-        val home = document.select(".listupd article, .listo .bs").map {
+        val home = document.select(".listupd article").map {
             it.toSearchResult(currentMainUrl)
         }
         
@@ -84,8 +83,7 @@ class KuronimeProvider : MainAPI() {
         )
     }
 
-
-    private fun getProperAnimeLink(uri: String): String {
+    private fun getProperAnimeLink(uri: String, baseUrl: String): String {
         if (uri.contains("/anime/")) return uri
         
         val slug = uri.trimEnd('/').substringAfterLast("/")
@@ -97,7 +95,7 @@ class KuronimeProvider : MainAPI() {
             else -> slug
         }
 
-        return "$mainUrl/anime/$title"
+        return "$baseUrl/anime/$title"
     }
 
     private fun Element.getImageAttr(): String? {
@@ -109,8 +107,8 @@ class KuronimeProvider : MainAPI() {
         }
     }
 
-    private fun Element.toSearchResult(): AnimeSearchResponse {
-        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
+    private fun Element.toSearchResult(baseUrl: String): AnimeSearchResponse {
+        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString(), baseUrl)
         val title = this.selectFirst("h2, .bsuxtt, .tt > h4, .entry-title")?.text()?.trim() ?: "Unknown"
         
         val img = this.selectFirst("img[itemprop=image]") ?: this.select("img").lastOrNull()
@@ -128,9 +126,9 @@ class KuronimeProvider : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        mainUrl = app.get(mainUrl).url
+        val currentBaseUrl = app.get(mainUrl).url
         return app.post(
-            "$mainUrl/wp-admin/admin-ajax.php", data = mapOf(
+            "$currentBaseUrl/wp-admin/admin-ajax.php", data = mapOf(
                 "action" to "ajaxy_sf",
                 "sf_value" to query,
                 "search" to "false"
@@ -149,6 +147,7 @@ class KuronimeProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
+        val currentBaseUrl = getBaseUrl(url)
 
         val title = document.selectFirst(".entry-title")?.text().toString().trim()
         val poster = document.selectFirst("div.l[itemprop=image] > img, .l > img")?.getImageAttr()
@@ -260,8 +259,9 @@ class KuronimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-
-        val document = app.get(data).document
+        val req = app.get(data)
+        val document = req.document
+        val currentBaseUrl = getBaseUrl(req.url)
         
         val scriptData = document.select("script").map { it.data() }
             .firstOrNull { it.contains("_0xa100d42aa") }
@@ -272,7 +272,7 @@ class KuronimeProvider : MainAPI() {
         val servers = app.post(
             "$animekuUrl/api/v9/sources", requestBody = """{"id":"$id"}""".toRequestBody(
                 RequestBodyTypes.JSON.toMediaTypeOrNull()
-            ), referer = "$mainUrl/"
+            ), referer = "$currentBaseUrl/"
         ).parsedSafe<Servers>()
 
         runAllAsync(
@@ -304,7 +304,7 @@ class KuronimeProvider : MainAPI() {
                         loadFixedExtractor(
                             entry.value,
                             embed.key.removePrefix("v"),
-                            "$mainUrl/",
+                            "$currentBaseUrl/",
                             subtitleCallback,
                             callback
                         )
@@ -497,3 +497,4 @@ suspend fun fetchTmdbLogoUrl(
 
     return null
 }
+
