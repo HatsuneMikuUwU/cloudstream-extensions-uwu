@@ -98,14 +98,22 @@ class KuronimeProvider : MainAPI() {
 
         return "$mainUrl/anime/$title"
     }
+    
+    private fun Element.getImageAttr(): String? {
+        return when {
+            this.hasAttr("data-src") -> this.attr("abs:data-src")
+            this.hasAttr("data-lazy-src") -> this.attr("abs:data-lazy-src")
+            this.hasAttr("srcset") -> this.attr("abs:srcset").substringBefore(" ")
+            else -> this.attr("abs:src")
+        }
+    }
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
         val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
-        
         val title = this.selectFirst("h2, .bsuxtt, .tt > h4, .entry-title")?.text()?.trim() ?: "Unknown"
         
-        val img = this.selectFirst("img[itemprop=image], img")
-        val posterUrl = fixUrlNull(img?.attr("data-src")?.takeIf { it.isNotEmpty() } ?: img?.attr("src"))
+        val img = this.selectFirst("img[itemprop=image]") ?: this.select("img").lastOrNull()
+        val posterUrl = fixUrlNull(img?.getImageAttr())
         
         val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
         val tvType = getType(this.selectFirst(".bt > span, .bt > .type")?.text().toString())
@@ -142,9 +150,7 @@ class KuronimeProvider : MainAPI() {
         val document = app.get(url).document
 
         val title = document.selectFirst(".entry-title")?.text().toString().trim()
-        val poster = document.selectFirst("div.l[itemprop=image] > img")?.let {
-            it.attr("data-src").ifEmpty { it.attr("src") }
-        }
+        val poster = document.selectFirst("div.l[itemprop=image] > img, .l > img")?.getImageAttr()
         val tags = document.select(".infodetail > ul > li:nth-child(2) > a").map { it.text() }
         val typeString = document.selectFirst(".infodetail > ul > li:nth-child(7)")?.ownText()?.removePrefix(":")?.trim() ?: "tv"
         val type = getType(typeString.lowercase())

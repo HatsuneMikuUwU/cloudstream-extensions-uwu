@@ -18,7 +18,7 @@ import org.jsoup.nodes.Element
 import java.net.URI
 
 class NontonAnimeIDProvider : MainAPI() {
-    override var mainUrl = "https://s11.nontonanimeid.boats"
+    override var mainUrl = "https://s12.nontonanimeid.boats"
     override var name = "NontonAnimeID"
     override val hasQuickSearch = false
     override val hasMainPage = true
@@ -66,7 +66,7 @@ class NontonAnimeIDProvider : MainAPI() {
 
         val document = app.get(pageUrl).document
         
-        val home = document.select("a.as-anime-card").mapNotNull {
+        val home = document.select("article.animeseries, .animeseries, a.as-anime-card").mapNotNull {
             it.toSearchResult()
         }
         
@@ -76,37 +76,29 @@ class NontonAnimeIDProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val card = if (this.tagName() == "a") this else this.selectFirst("a") ?: return null
-        val href = card.attr("href").takeIf { it.isNotBlank() }?.let { fixUrl(it) } ?: return null
-        val title = card.selectFirst(".as-anime-title")?.text()?.trim()
-            ?: card.attr("title").trim()
-            ?: return null
-        val posterUrl =
-            fixUrlNull(card.selectFirst(".as-card-thumbnail img, img")?.getImageAttr())
+        val a = if (this.tagName() == "a") this else this.selectFirst("a") ?: return null
+        val href = fixUrlNull(a.attr("href")) ?: return null
+        
+        val title = this.selectFirst("h3.title span, .title span, .as-anime-title, h2")?.text()?.trim()
+            ?: this.selectFirst("img")?.attr("alt")?.trim()
+            ?: a.attr("title").trim()
+            
+        if (title.isBlank()) return null
+            
+        val posterUrl = fixUrlNull(this.selectFirst("img")?.getImageAttr())
 
         return newAnimeSearchResponse(title, href, TvType.Anime) {
             this.posterUrl = posterUrl
             addDubStatus(dubExist = false, subExist = true)
         }
-
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val link = "$mainUrl/?s=$query"
         val document = app.get(link).document
 
-        return document.select(".result > ul > li").mapNotNull {
-            val title = it.selectFirst("h2")!!.text().trim()
-            val poster = it.selectFirst("img")?.getImageAttr()
-            val tvType = getType(
-                it.selectFirst(".boxinfores > span.typeseries")!!.text()
-            )
-            val href = fixUrl(it.selectFirst("a")!!.attr("href"))
-
-            newAnimeSearchResponse(title, href, tvType) {
-                this.posterUrl = poster
-                addDubStatus(dubExist = false, subExist = true)
-            }
+        return document.select("article.animeseries, .animeseries, .result > ul > li").mapNotNull {
+            it.toSearchResult()
         }
     }
 
@@ -126,13 +118,13 @@ class NontonAnimeIDProvider : MainAPI() {
             ?.replace(Regex("\\s+Sub\\s+Indo$", RegexOption.IGNORE_CASE), "")
             ?.trim()
             ?: return null
-        val poster = document.selectFirst(".anime-card__sidebar img, .poster > img")?.getImageAttr()
-        val tags = document.select(".anime-card__genres .genre-tag, .tagline > a").map { it.text() }
+        val poster = document.selectFirst(".anime-card__sidebar img, .poster > img, .thumb > img")?.getImageAttr()
+        val tags = document.select(".anime-card__genres .genre-tag, .tagline > a, .genxed a").map { it.text() }
 
         val year = Regex("(19|20)\\d{2}").find(
-            document.select(".details-list li:contains(Aired), .info-item.season, .bottomtitle").text()
+            document.select(".details-list li:contains(Aired), .info-item.season, .bottomtitle, .info-content").text()
         )?.value?.toIntOrNull()
-        val statusText = document.selectFirst(".info-item.status-finish, .info-item.status-airing, span.statusseries")
+        val statusText = document.selectFirst(".info-item.status-finish, .info-item.status-airing, span.statusseries, .status")
             ?.text()
             ?.trim()
             .orEmpty()
@@ -152,8 +144,8 @@ class NontonAnimeIDProvider : MainAPI() {
         val rating = Regex("(\\d+(?:\\.\\d+)?)").find(
             document.selectFirst(".anime-card__score")?.text().orEmpty()
         )?.groupValues?.getOrNull(1)?.toDoubleOrNull()
-            ?: document.select("span.nilaiseries").text().trim().toDoubleOrNull()
-        val description = document.select(".synopsis-prose > p, .entry-content.seriesdesc > p")
+            ?: document.select("span.nilaiseries, .rating strong").text().trim().toDoubleOrNull()
+        val description = document.select(".synopsis-prose > p, .entry-content.seriesdesc > p, .desc > p")
             .text()
             .trim()
         val trailer = document.selectFirst("a.trailerbutton")?.attr("href")
@@ -224,7 +216,7 @@ class NontonAnimeIDProvider : MainAPI() {
                 newEpisode(link) { this.episode = episode?.toIntOrNull() }
             }.reversed()
         } else {
-            document.select("ul.misha_posts_wrap2 > li").map {
+            document.select("ul.misha_posts_wrap2 > li, .lstepi > li, .episodelist > ul > li").map {
                 val episode = Regex("Episode\\s?(\\d+)").find(
                     it.selectFirst("a")?.text().toString()
                 )?.groupValues?.getOrNull(1) ?: it.selectFirst("a")?.text()
@@ -265,17 +257,8 @@ class NontonAnimeIDProvider : MainAPI() {
             }
         }
 
-        val recommendations = document.select(".related a.as-anime-card, .result > li").mapNotNull {
-            val card = if (it.tagName() == "a") it else it.selectFirst("a")
-            val epHref = card?.attr("href")?.takeIf { href -> href.isNotBlank() } ?: return@mapNotNull null
-            val epTitle = card.selectFirst(".as-anime-title, h3")?.text()?.trim()
-                ?: card.attr("title").trim()
-            if (epTitle.isBlank()) return@mapNotNull null
-            val epPoster = card.selectFirst(".as-card-thumbnail img, .top > img, img")?.getImageAttr()
-            newAnimeSearchResponse(epTitle, epHref, TvType.Anime) {
-                this.posterUrl = epPoster
-                addDubStatus(dubExist = false, subExist = true)
-            }
+        val recommendations = document.select(".related a.as-anime-card, .result > li, .animeseries").mapNotNull {
+            it.toSearchResult()
         }
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
@@ -334,8 +317,7 @@ class NontonAnimeIDProvider : MainAPI() {
 
         fun collectIframes(doc: Document) {
             doc.select("iframe").forEach { iframe ->
-                normalizeUrl(iframe.attr("src"))?.let { iframeLinks.add(it) }
-                normalizeUrl(iframe.attr("data-src"))?.let { iframeLinks.add(it) }
+                normalizeUrl(iframe.attr("data-src").ifEmpty { iframe.attr("src") })?.let { iframeLinks.add(it) }
             }
         }
 
@@ -347,6 +329,7 @@ class NontonAnimeIDProvider : MainAPI() {
             ?.takeIf { it.isNotBlank() }
             ?.let { encoded -> base64Decode(encoded) }
             .orEmpty()
+            
         val ajaxUrl = Regex("\"url\"\\s*:\\s*\"([^\"]+)\"")
             .find(ajaxConfigScript)
             ?.groupValues
@@ -354,6 +337,7 @@ class NontonAnimeIDProvider : MainAPI() {
             ?.replace("\\/", "/")
             ?.let { fixUrl(it) }
             ?: "$mainUrl/wp-admin/admin-ajax.php"
+            
         val nonce = Regex("\"nonce\"\\s*:\\s*\"([^\"]+)\"")
             .find(ajaxConfigScript)
             ?.groupValues
@@ -387,17 +371,31 @@ class NontonAnimeIDProvider : MainAPI() {
         }
 
         iframeLinks.toList().amap { link ->
-            val nestedLink = if (link.contains("/video-frame/")) {
-                app.get(link, referer = data).document.selectFirst("iframe")
-                    ?.attr("data-src")
-                    ?.let { nested -> normalizeUrl(nested) }
+            val nestedLink = if (link.contains("/video-frame/") || link.contains("/video-embed/")) {
+                app.get(link, referer = data).document.selectFirst("iframe")?.let { iframe -> 
+                    normalizeUrl(iframe.attr("data-src").ifEmpty { iframe.attr("src") })
+                }
             } else {
                 null
             }
             loadExtractor(nestedLink ?: link, "$mainUrl/", subtitleCallback, callback)
         }
+        
+        document.select(".listlink a").amap { a ->
+            val href = normalizeUrl(a.attr("href"))
+            if (href != null && !href.contains("javascript", true)) {
+                try {
+                    val realUrl = app.get(href, allowRedirects = true).url
+                    if (realUrl != href && realUrl.isNotBlank()) {
+                        loadExtractor(realUrl, "$mainUrl/", subtitleCallback, callback)
+                    }
+                } catch (e: Exception) {
+                    // Ignore redirect failures
+                }
+            }
+        }
 
-        return iframeLinks.isNotEmpty()
+        return true
     }
 
     private fun getBaseUrl(url: String): String {
