@@ -73,13 +73,10 @@ class KuronimeProvider : MainAPI() {
             it.toSearchResult()
         }
         
-        val isLandscape = request.name == "New Episodes"
-        
         return newHomePageResponse(
             HomePageList(
                 name = request.name,
-                list = home,
-                isHorizontalImages = isLandscape
+                list = home
             )
         )
     }
@@ -98,7 +95,7 @@ class KuronimeProvider : MainAPI() {
 
         return "$mainUrl/anime/$title"
     }
-    
+
     private fun Element.getImageAttr(): String? {
         return when {
             this.hasAttr("data-src") -> this.attr("abs:data-src")
