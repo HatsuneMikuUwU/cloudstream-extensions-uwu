@@ -43,7 +43,7 @@ class OploverzProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "latestEpisodes" to "Latest Release",
+        "latest" to "Latest Release",
         "trending" to "Trending",
         "recently" to "Recently Added"
     )
@@ -52,80 +52,89 @@ class OploverzProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        if (page > 1 && request.data != "latestEpisodes") {
-            return newHomePageResponse(request.name, emptyList())
-        }
+        val home = mutableListOf<SearchResponse>()
 
-        val url = if (page == 1) mainUrl else "$mainUrl/?page=$page"
-        val document = app.get(url).document
-        val home = ArrayList<SearchResponse>()
-
-        val scriptData = document.select("script:containsData(__sveltekit)").lastOrNull()?.data()
-        val jsonMatch = Regex("(?s)data:\\s*(\\[\\{.*?\\}\\]),\\s*form:").find(scriptData ?: "")?.groupValues?.getOrNull(1)
-
-        if (jsonMatch != null) {
-            val svelteNodes = AppUtils.tryParseJson<List<SvelteRoot>>(jsonMatch)
-            svelteNodes?.forEach { node ->
-                when (request.data) {
-                    "latestEpisodes" -> {
-                        node.data?.latestEpisodes?.data?.forEach { ep ->
-                            val series = ep.series
-                            if (series != null && series.title != null) {
-                                home.add(
-                                    newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
-                                        this.posterUrl = series.poster
-                                        this.score = Score.from10(series.score)
-                                        addSub(ep.episodeNumber?.toIntOrNull() ?: series.totalEpisodes)
-                                    }
-                                )
-                            }
+        if (page > 1) {
+            if (request.data != "latest") {
+                return newHomePageResponse(request.name, emptyList())
+            } else {
+                try {
+                    val apiResponse = app.get("$backAPI/api/episodes?page=$page&pageSize=24&sort=latest").parsedSafe<Anime>()
+                    apiResponse?.data?.forEach { ep ->
+                        val series = ep.series
+                        if (series != null && series.title != null) {
+                            home.add(
+                                newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
+                                    this.posterUrl = series.poster
+                                    this.score = Score.from10(series.score)
+                                    addSub(ep.episodeNumber?.toIntOrNull() ?: series.totalEpisodes)
+                                }
+                            )
                         }
                     }
-                    "trending" -> {
-                        node.data?.trending?.data?.forEach { series ->
-                            if (series.title != null) {
-                                home.add(
-                                    newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
-                                        this.posterUrl = series.poster
-                                        this.score = Score.from10(series.score)
-                                        addSub(series.totalEpisodes)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    "recently" -> {
-                        node.data?.recently?.data?.forEach { series ->
-                            if (series.title != null) {
-                                home.add(
-                                    newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
-                                        this.posterUrl = series.poster
-                                        this.score = Score.from10(series.score)
-                                        addSub(series.totalEpisodes)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                } catch (e: Exception) {}
+                
+                return newHomePageResponse(request.name, home)
             }
         }
 
-        if (home.isEmpty() && request.data == "latestEpisodes") {
-            document.select("a[href^=/series/]:has(img)").forEach {
-                val rawHref = it.attr("href")
-                val href = fixUrl(rawHref.substringBefore("/episode/"))
-                val title = it.selectFirst("p")?.text() ?: it.selectFirst("img")?.attr("alt") ?: return@forEach
-                val posterUrl = it.selectFirst("img")?.attr("src")
+        val document = app.get(mainUrl).document
 
-                val epNum = it.select("p:contains(Episode)").text().filter { char -> char.isDigit() }.toIntOrNull()
+        when (request.data) {
+            "latest" -> {
+                val section = document.select("p:contains(Rilis Terbaru)").first()?.parent()
+                section?.select("div.bg-card:has(a[href*=/episode/])")?.forEach { card ->
+                    val a = card.selectFirst("a[href*=/episode/]") ?: return@forEach
+                    val href = fixUrl(a.attr("href").substringBefore("/episode/"))
+                    val img = a.selectFirst("img")
+                    val title = img?.attr("alt") ?: return@forEach
+                    val posterUrl = img.attr("src")
+                    
+                    val epNum = card.select("p:contains(Episode)").text().filter { it.isDigit() }.toIntOrNull()
 
-                home.add(
-                    newAnimeSearchResponse(title, href, TvType.Anime) {
-                        this.posterUrl = posterUrl
-                        addSub(epNum)
-                    }
-                )
+                    home.add(
+                        newAnimeSearchResponse(title, href, TvType.Anime) {
+                            this.posterUrl = posterUrl
+                            addSub(epNum)
+                        }
+                    )
+                }
+            }
+            "trending" -> {
+                val section = document.select("p:contains(Sedang Trending)").first()?.parent()
+                section?.select("a[href^=/series/]:has(img)")?.distinctBy { it.attr("href") }?.forEach { a ->
+                    val href = fixUrl(a.attr("href"))
+                    val img = a.selectFirst("img")
+                    val title = img?.attr("alt") ?: return@forEach
+                    val posterUrl = img.attr("src")
+
+                    val epNum = a.select("span").mapNotNull { it.text().filter { c -> c.isDigit() }.toIntOrNull() }.firstOrNull()
+
+                    home.add(
+                        newAnimeSearchResponse(title, href, TvType.Anime) {
+                            this.posterUrl = posterUrl
+                            addSub(epNum)
+                        }
+                    )
+                }
+            }
+            "recently" -> {
+                val section = document.select("p:contains(Tayangan Baru Ditambahkan)").first()?.parent()
+                section?.select("a[href^=/series/]:has(img)")?.distinctBy { it.attr("href") }?.forEach { a ->
+                    val href = fixUrl(a.attr("href"))
+                    val img = a.selectFirst("img")
+                    val title = img?.attr("alt") ?: return@forEach
+                    val posterUrl = img.attr("src")
+
+                    val epNum = a.select("span").mapNotNull { it.text().filter { c -> c.isDigit() }.toIntOrNull() }.firstOrNull()
+
+                    home.add(
+                        newAnimeSearchResponse(title, href, TvType.Anime) {
+                            this.posterUrl = posterUrl
+                            addSub(epNum)
+                        }
+                    )
+                }
             }
         }
 
@@ -222,18 +231,14 @@ class OploverzProvider : MainAPI() {
 
         val doc = app.get(data).document
 
-        val scriptData = doc.select("script:containsData(__sveltekit)").lastOrNull()?.data()
-        val streamUrlRegex = Regex(""""streamUrl"\s*:\s*(\[\{.*?\}\])""")
-        val streamMatches = streamUrlRegex.findAll(scriptData ?: "")
+        val scriptData = doc.select("script:containsData(__sveltekit)").lastOrNull()?.data() ?: ""
         
-        val currentEpisodeStreams = streamMatches.lastOrNull()?.groupValues?.get(1)
-        if (currentEpisodeStreams != null) {
-            AppUtils.tryParseJson<List<StreamSource>>(currentEpisodeStreams)?.forEach { stream ->
-                stream.url?.let { url ->
-                    val quality = getQuality(stream.source ?: "")
-                    loadFixedExtractor(url, quality, data, subtitleCallback, callback)
-                }
-            }
+        val streamRegex = Regex("""source\s*:\s*["']([^"']+)["']\s*,\s*url\s*:\s*["']([^"']+)["']""")
+        streamRegex.findAll(scriptData).forEach { match ->
+            val source = match.groupValues[1]
+            val streamUrl = match.groupValues[2]
+            val quality = getQuality(source)
+            loadFixedExtractor(streamUrl, quality, data, subtitleCallback, callback)
         }
 
         doc.select("div.flex.flex-row.items-start").amap { selector ->
@@ -289,31 +294,6 @@ class OploverzProvider : MainAPI() {
             else -> getQualityFromName(quality)
         }
     }
-
-    data class StreamSource(
-        @JsonProperty("source") val source: String? = null,
-        @JsonProperty("url") val url: String? = null
-    )
-
-    data class SvelteRoot(
-        @JsonProperty("type") val type: String? = null,
-        @JsonProperty("data") val data: SvelteData? = null
-    )
-
-    data class SvelteData(
-        @JsonProperty("latestEpisodes") val latestEpisodes: SveltePagination<Data>? = null,
-        @JsonProperty("trending") val trending: SveltePagination<Series>? = null,
-        @JsonProperty("recently") val recently: SveltePagination<Series>? = null
-    )
-
-    data class SveltePagination<T>(
-        @JsonProperty("data") val data: List<T>? = emptyList()
-    )
-
-    data class Sources(
-        @JsonProperty("format") val format: String? = null,
-        @JsonProperty("url") val url: ArrayList<String>? = arrayListOf(),
-    )
 
     data class Anime(
         @JsonProperty("data") val data: ArrayList<Data>? = arrayListOf(),
