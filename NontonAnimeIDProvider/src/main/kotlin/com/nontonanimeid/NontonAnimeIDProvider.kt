@@ -25,7 +25,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 
-class TurnstileInterceptor(private val targetCookie: String = "cf_clearance") : Interceptor {
+class TurnstileInterceptor(private val targetCookie: String = "_lscache_vary") : Interceptor {
     @SuppressLint("SetJavaScriptEnabled")
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
@@ -134,7 +134,7 @@ class NontonAnimeIDProvider : MainAPI() {
         TvType.OVA
     )
 
-    private val turnstileInterceptor = TurnstileInterceptor("cf_clearance")
+    private val turnstileInterceptor = TurnstileInterceptor("_lscache_vary")
 
     companion object {
         fun getType(t: String): TvType {
