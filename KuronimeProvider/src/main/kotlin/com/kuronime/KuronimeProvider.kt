@@ -69,7 +69,7 @@ class KuronimeProvider : MainAPI() {
         val req = app.get(request.data + page)
         mainUrl = getBaseUrl(req.url)
         val document = req.document
-        val home = document.select(".listupd article").map {
+        val home = document.select("article").map {
             it.toSearchResult()
         }
         
@@ -82,39 +82,33 @@ class KuronimeProvider : MainAPI() {
         )
     }
 
-    private fun getProperAnimeLink(uri: String, baseUrl: String): String {
-        if (uri.contains("/anime/")) return uri
-        
-        val slug = uri.trimEnd('/').substringAfterLast("/")
-        val title = when {
-            slug.contains("-episode") && !slug.contains("-movie") -> 
-                Regex("nonton-(.+)-episode").find(slug)?.groupValues?.get(1) ?: slug
-            slug.contains("-movie") -> 
-                Regex("nonton-(.+)-movie").find(slug)?.groupValues?.get(1) ?: slug
-            else -> slug
-        }
+    private fun getProperAnimeLink(uri: String): String {
+        return if (uri.contains("/anime/")) {
+            uri
+        } else {
+            var title = uri.substringAfter("$mainUrl/")
+            title = when {
+                (title.contains("-episode")) && !(title.contains("-movie")) -> Regex("nonton-(.+)-episode").find(
+                    title
+                )?.groupValues?.get(1).toString()
 
-        return "$baseUrl/anime/$title"
-    }
+                (title.contains("-movie")) -> Regex("nonton-(.+)-movie").find(title)?.groupValues?.get(
+                    1
+                ).toString()
 
-    private fun Element.getImageAttr(): String? {
-        return when {
-            this.hasAttr("data-src") -> this.attr("abs:data-src")
-            this.hasAttr("data-lazy-src") -> this.attr("abs:data-lazy-src")
-            this.hasAttr("srcset") -> this.attr("abs:srcset").substringBefore(" ")
-            else -> this.attr("abs:src")
+                else -> title
+            }
+
+            "$mainUrl/anime/$title"
         }
     }
 
-    private fun Element.toSearchResult(baseUrl: String): AnimeSearchResponse {
-        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString(), baseUrl)
-        val title = this.selectFirst("h2, .bsuxtt, .tt > h4, .entry-title")?.text()?.trim() ?: "Unknown"
-        
-        val img = this.selectFirst("img[itemprop=image]") ?: this.select("img").lastOrNull()
-        val posterUrl = fixUrlNull(img?.getImageAttr())
-        
+    private fun Element.toSearchResult(): AnimeSearchResponse {
+        val href = getProperAnimeLink(fixUrlNull(this.selectFirst("a")?.attr("href")).toString())
+        val title = this.select(".bsuxtt, .tt > h4, .entry-title, h2, h3").text().trim()
+        val posterUrl = fixUrlNull(this.selectFirst("img[itemprop=image]")?.attr("src"))
         val epNum = this.select(".ep").text().replace(Regex("\\D"), "").trim().toIntOrNull()
-        val tvType = getType(this.selectFirst(".bt > span, .bt > .type")?.text().toString())
+        val tvType = getType(this.selectFirst(".bt > span")?.text().toString())
         
         return newAnimeSearchResponse(title, href, tvType) {
             this.posterUrl = posterUrl
@@ -125,9 +119,9 @@ class KuronimeProvider : MainAPI() {
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        val currentBaseUrl = app.get(mainUrl).url
+        mainUrl = app.get(mainUrl).url
         return app.post(
-            "$currentBaseUrl/wp-admin/admin-ajax.php", data = mapOf(
+            "$mainUrl/wp-admin/admin-ajax.php", data = mapOf(
                 "action" to "ajaxy_sf",
                 "sf_value" to query,
                 "search" to "false"
@@ -146,10 +140,9 @@ class KuronimeProvider : MainAPI() {
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
-        val currentBaseUrl = getBaseUrl(url)
 
         val title = document.selectFirst(".entry-title")?.text().toString().trim()
-        val poster = document.selectFirst("div.l[itemprop=image] > img, .l > img")?.getImageAttr()
+        val poster = document.selectFirst("div.l[itemprop=image] > img")?.attr("src")
         val tags = document.select(".infodetail > ul > li:nth-child(2) > a").map { it.text() }
         val typeString = document.selectFirst(".infodetail > ul > li:nth-child(7)")?.ownText()?.removePrefix(":")?.trim() ?: "tv"
         val type = getType(typeString.lowercase())
@@ -258,20 +251,15 @@ class KuronimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val req = app.get(data)
-        val document = req.document
-        val currentBaseUrl = getBaseUrl(req.url)
-        
-        val scriptData = document.select("script").map { it.data() }
-            .firstOrNull { it.contains("_0xa100d42aa") }
-            ?: throw ErrorLoadingException("No id found in script tags")
-            
-        val id = scriptData.substringAfter("_0xa100d42aa = \"").substringBefore("\";")
 
+        val document = app.get(data).document
+        val id = document.selectFirst("div#content script:containsData(is_singular)")?.data()
+            ?.substringAfter("_0xa100d42aa = \"")?.substringBefore("\";")
+            ?: throw ErrorLoadingException("No id found")
         val servers = app.post(
             "$animekuUrl/api/v9/sources", requestBody = """{"id":"$id"}""".toRequestBody(
                 RequestBodyTypes.JSON.toMediaTypeOrNull()
-            ), referer = "$currentBaseUrl/"
+            ), referer = "$mainUrl/"
         ).parsedSafe<Servers>()
 
         runAllAsync(
@@ -303,7 +291,7 @@ class KuronimeProvider : MainAPI() {
                         loadFixedExtractor(
                             entry.value,
                             embed.key.removePrefix("v"),
-                            "$currentBaseUrl/",
+                            "$mainUrl/",
                             subtitleCallback,
                             callback
                         )
@@ -496,4 +484,3 @@ suspend fun fetchTmdbLogoUrl(
 
     return null
 }
-
