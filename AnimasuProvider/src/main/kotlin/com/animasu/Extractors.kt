@@ -2,7 +2,7 @@ package com.animasu
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.extractors.Filesim
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorApi
@@ -25,16 +25,19 @@ class Archivd : ExtractorApi() {
         val res = app.get(url).document
         val json = res.select("div#app").attr("data-page")
         val video = AppUtils.tryParseJson<Sources>(json)?.props?.datas?.data?.link?.media
-        callback.invoke(
-            newExtractorLink(
-                this.name,
-                this.name,
-                video ?: return,
-                INFER_TYPE
-            ) {
-                this.referer = "$mainUrl/"
-            }
-        )
+        
+        if (video != null) {
+            callback.invoke(
+                newExtractorLink(
+                    this.name,
+                    this.name,
+                    video,
+                    INFER_TYPE
+                ) {
+                    this.referer = "$mainUrl/"
+                }
+            )
+        }
     }
 
     data class Link(
@@ -69,16 +72,21 @@ class Newuservideo : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val iframe = app.get(url,referer=referer).document.select("iframe#videoFrame").attr("src")
-        val doc = app.get(iframe,referer="$mainUrl/").text
-        val json = "VIDEO_CONFIG\\s?=\\s?(.*)".toRegex().find(doc)?.groupValues?.get(1)
+        val iframe = app.get(url, referer = referer).document.selectFirst("iframe#videoFrame")?.attr("src")
+        if (iframe.isNullOrBlank()) return
 
-        AppUtils.tryParseJson<Sources>(json)?.streams?.map {
+        val doc = app.get(iframe, referer = "$mainUrl/").text
+        
+        val json = "VIDEO_CONFIG\\s?=\\s?(\\{.*?\\});".toRegex().find(doc)?.groupValues?.getOrNull(1)
+            ?: "VIDEO_CONFIG\\s?=\\s?(.*)".toRegex().find(doc)?.groupValues?.getOrNull(1)
+
+        AppUtils.tryParseJson<Sources>(json)?.streams?.forEach {
+            val playUrl = it.playUrl ?: return@forEach
             callback.invoke(
                 newExtractorLink(
                     this.name,
                     this.name,
-                    it.playUrl ?: return@map,
+                    playUrl,
                     INFER_TYPE
                 ) {
                     this.referer = "$mainUrl/"
@@ -90,7 +98,6 @@ class Newuservideo : ExtractorApi() {
                 }
             )
         }
-
     }
 
     data class Streams(
@@ -101,10 +108,14 @@ class Newuservideo : ExtractorApi() {
     data class Sources(
         @JsonProperty("streams") val streams: ArrayList<Streams>? = null,
     )
-
 }
 
 class Vidhidepro : Filesim() {
     override val mainUrl = "https://vidhidepro.com"
     override val name = "Vidhidepro"
+}
+
+class Vidhideplus : Filesim() {
+    override val mainUrl = "https://vidhideplus.com"
+    override val name = "Vidhideplus"
 }

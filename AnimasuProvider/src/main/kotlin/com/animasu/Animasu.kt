@@ -108,12 +108,11 @@ class Animasu : MainAPI() {
                 ?.toIntOrNull()
         val status = table?.selectFirst("span:contains(Status:) font")?.text()
         val trailer = document.selectFirst("div.trailer iframe")?.attr("src")
-        
         val episodes = document.select("ul#daftarepisode > li").map {
             val link = fixUrl(it.selectFirst("a")!!.attr("href"))
             val name = it.selectFirst("a")?.text() ?: ""
             val episode =
-                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull() // Perbaikan index regex
+                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
@@ -163,7 +162,21 @@ class Animasu : MainAPI() {
                 null
             }
         }.amap { (iframe, quality) ->
-            loadFixedExtractor(iframe, quality, "$mainUrl/", subtitleCallback, callback)
+            var finalUrl = iframe
+            
+            if (finalUrl.contains("short.icu") || finalUrl.contains("short.ink") || finalUrl.contains("goid.space")) {
+                try {
+                    finalUrl = app.get(finalUrl).url 
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            
+            if (finalUrl.contains("vidhidepro.com")) {
+                finalUrl = finalUrl.replace("vidhidepro.com", "vidhideplus.com")
+            }
+
+            loadFixedExtractor(finalUrl, quality, "$mainUrl/", subtitleCallback, callback)
         }
         return true
     }
