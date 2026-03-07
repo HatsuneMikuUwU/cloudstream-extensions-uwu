@@ -43,7 +43,7 @@ class OploverzProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "latest" to "Latest Release",
+        "latestEpisodes" to "Latest Release",
         "trending" to "Trending",
         "recently" to "Recently Added"
     )
@@ -53,35 +53,38 @@ class OploverzProvider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         val home = mutableListOf<SearchResponse>()
+        var hasNext = false
 
-        if (page > 1) {
-            if (request.data != "latest") {
-                return newHomePageResponse(request.name, emptyList())
-            } else {
-                try {
-                    val apiResponse = app.get("$backAPI/api/episodes?page=$page&pageSize=24&sort=latest").parsedSafe<Anime>()
-                    apiResponse?.data?.forEach { ep ->
-                        val series = ep.series
-                        if (series != null && series.title != null) {
-                            home.add(
-                                newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
-                                    this.posterUrl = series.poster
-                                    this.score = Score.from10(series.score)
-                                    addSub(ep.episodeNumber?.toIntOrNull() ?: series.totalEpisodes)
-                                }
-                            )
-                        }
+        if (request.data != "latestEpisodes" && page > 1) {
+            return newHomePageResponse(request.name, emptyList(), false)
+        }
+
+        if (request.data == "latestEpisodes" && page > 1) {
+            try {
+                val apiResponse = app.get("$backAPI/api/episodes?page=$page").parsedSafe<Anime>()
+                apiResponse?.data?.forEach { ep ->
+                    val series = ep.series
+                    if (series != null && series.title != null) {
+                        home.add(
+                            newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
+                                this.posterUrl = series.poster
+                                this.score = Score.from10(series.score)
+                                addSub(ep.episodeNumber?.toIntOrNull() ?: series.totalEpisodes)
+                            }
+                        )
                     }
-                } catch (e: Exception) {}
-                
-                return newHomePageResponse(request.name, home)
+                }
+                hasNext = home.isNotEmpty()
+            } catch (e: Exception) {
+                hasNext = false
             }
+            return newHomePageResponse(request.name, home.distinctBy { it.url }, hasNext)
         }
 
         val document = app.get(mainUrl).document
 
         when (request.data) {
-            "latest" -> {
+            "latestEpisodes" -> {
                 val section = document.select("p:contains(Rilis Terbaru)").first()?.parent()
                 section?.select("div.bg-card:has(a[href*=/episode/])")?.forEach { card ->
                     val a = card.selectFirst("a[href*=/episode/]") ?: return@forEach
@@ -99,10 +102,11 @@ class OploverzProvider : MainAPI() {
                         }
                     )
                 }
+                hasNext = home.isNotEmpty()
             }
             "trending" -> {
                 val section = document.select("p:contains(Sedang Trending)").first()?.parent()
-                section?.select("a[href^=/series/]:has(img)")?.distinctBy { it.attr("href") }?.forEach { a ->
+                section?.select("a[href^=/series/]:has(img)")?.forEach { a ->
                     val href = fixUrl(a.attr("href"))
                     val img = a.selectFirst("img")
                     val title = img?.attr("alt") ?: return@forEach
@@ -120,7 +124,7 @@ class OploverzProvider : MainAPI() {
             }
             "recently" -> {
                 val section = document.select("p:contains(Tayangan Baru Ditambahkan)").first()?.parent()
-                section?.select("a[href^=/series/]:has(img)")?.distinctBy { it.attr("href") }?.forEach { a ->
+                section?.select("a[href^=/series/]:has(img)")?.forEach { a ->
                     val href = fixUrl(a.attr("href"))
                     val img = a.selectFirst("img")
                     val title = img?.attr("alt") ?: return@forEach
@@ -138,7 +142,7 @@ class OploverzProvider : MainAPI() {
             }
         }
 
-        return newHomePageResponse(request.name, home.distinctBy { it.url })
+        return newHomePageResponse(request.name, home.distinctBy { it.url }, hasNext)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
@@ -228,9 +232,7 @@ class OploverzProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-
         val doc = app.get(data).document
-
         val scriptData = doc.select("script:containsData(__sveltekit)").lastOrNull()?.data() ?: ""
         
         val streamRegex = Regex("""source\s*:\s*["']([^"']+)["']\s*,\s*url\s*:\s*["']([^"']+)["']""")
