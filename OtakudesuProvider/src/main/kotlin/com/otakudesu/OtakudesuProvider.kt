@@ -238,38 +238,41 @@ class OtakudesuProvider : MainAPI() {
 
         runAllAsync(
             {
-                val scriptData = document.select("script:containsData(action:)").lastOrNull()?.data()
-                val token = scriptData?.substringAfter("{action:\"")?.substringBefore("\"}").toString()
+                val scriptData = document.select("script:containsData(action:)").lastOrNull()?.data() ?: ""
+                
+                val nonceAction = Regex("""data:\{action:"([^"]+)"""").find(scriptData)?.groupValues?.getOrNull(1)
+                val embedAction = Regex("""nonce:[^,]+,action:"([^"]+)"""").find(scriptData)?.groupValues?.getOrNull(1)
 
-                val nonce = app.post("$mainUrl/wp-admin/admin-ajax.php", data = mapOf("action" to token))
-                        .parsed<ResponseData>().data
-                val action = scriptData?.substringAfter(",action:\"")?.substringBefore("\"}").toString()
+                if (nonceAction != null && embedAction != null) {
+                    val nonceResp = app.post("$mainUrl/wp-admin/admin-ajax.php", data = mapOf("action" to nonceAction))
+                            .parsed<ResponseData>()
+                    val nonce = nonceResp.data
 
-                val mirrorData = document.select("div.mirrorstream > ul > li").mapNotNull {
-                    base64Decode(it.select("a").attr("data-content"))
-                }.toString()
+                    document.select("div.mirrorstream > ul > li").amap { li ->
+                        val dataContent = li.select("a").attr("data-content")
+                        if (dataContent.isNotBlank()) {
+                            val decodedData = base64Decode(dataContent)
+                            val res = tryParseJson<ResponseSources>(decodedData)
+                            
+                            if (res != null) {
+                                val sources = Jsoup.parse(
+                                    base64Decode(
+                                        app.post(
+                                            "${mainUrl}/wp-admin/admin-ajax.php", data = mapOf(
+                                                "id" to res.id,
+                                                "i" to res.i,
+                                                "q" to res.q,
+                                                "nonce" to nonce,
+                                                "action" to embedAction
+                                            )
+                                        ).parsed<ResponseData>().data
+                                    )
+                                ).select("iframe").attr("src")
 
-                tryParseJson<List<ResponseSources>>(mirrorData)?.amap { res ->
-                    val id = res.id
-                    val i = res.i
-                    val q = res.q
-
-                    val sources = Jsoup.parse(
-                        base64Decode(
-                            app.post(
-                                "${mainUrl}/wp-admin/admin-ajax.php", data = mapOf(
-                                    "id" to id,
-                                    "i" to i,
-                                    "q" to q,
-                                    "nonce" to nonce,
-                                    "action" to action
-                                )
-                            ).parsed<ResponseData>().data
-                        )
-                    ).select("iframe").attr("src")
-
-                    loadCustomExtractor(sources, data, subtitleCallback, callback, getQuality(q))
-
+                                loadCustomExtractor(sources, data, subtitleCallback, callback, getQuality(res.q))
+                            }
+                        }
+                    }
                 }
             },
             {
@@ -472,4 +475,14 @@ class Desudesuhd : JWPlayer() {
 class Odvidhide : Filesim() {
     override val name = "Odvidhide"
     override var mainUrl = "https://odvidhide.com"
+}
+
+class DesustreamInfo : JWPlayer() {
+    override val name = "DesustreamInfo"
+    override val mainUrl = "https://desustream.info"
+}
+
+class Updesu : JWPlayer() {
+    override val name = "Updesu"
+    override val mainUrl = "https://desustream.info/dstream/updesu"
 }
