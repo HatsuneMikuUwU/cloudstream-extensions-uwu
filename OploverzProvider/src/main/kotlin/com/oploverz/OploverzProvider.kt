@@ -6,8 +6,6 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.utils.*
 import kotlinx.coroutines.runBlocking
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 
 class OploverzProvider : MainAPI() {
     override var mainUrl = "https://coba.oploverz.ltd"
@@ -23,9 +21,10 @@ class OploverzProvider : MainAPI() {
     )
 
     companion object {
-        fun getType(t: String): TvType {
+        fun getType(t: String?): TvType {
+            if (t == null) return TvType.Anime
             return when {
-                t.contains("Serial TV", true) -> TvType.Anime
+                t.contains("Serial TV", true) || t.contains("TV", true) -> TvType.Anime
                 t.contains("OVA", true) -> TvType.OVA
                 t.contains("Movie", true) || t.contains("BD", true) -> TvType.AnimeMovie
                 else -> TvType.Anime
@@ -36,16 +35,15 @@ class OploverzProvider : MainAPI() {
 
         fun getStatus(t: String?): ShowStatus {
             return when {
-                t?.contains("Berlangsung", true) == true -> ShowStatus.Ongoing
+                t?.contains("Berlangsung", true) == true || t?.contains("Ongoing", true) == true -> ShowStatus.Ongoing
                 else -> ShowStatus.Completed
             }
         }
     }
 
-    // Menggunakan URL yang direquest untuk halaman beranda (Daftar Anime)
     override val mainPage = mainPageOf(
-        "releaseDate-desc" to "Daftar Anime (Rilis Terbaru)",
-        "score-desc" to "Daftar Anime (Rating Tertinggi)",
+        "episodes" to "Update Episode Terbaru",
+        "score-desc" to "Rating Tertinggi",
         "title-asc" to "Daftar Anime (A-Z)"
     )
 
@@ -56,124 +54,120 @@ class OploverzProvider : MainAPI() {
         val home = mutableListOf<SearchResponse>()
         var hasNext = false
 
-        try {
-            // PRIORITAS 1: Gunakan API Backend Oploverz agar DAPAT GAMBAR POSTER dan BISA DI-SCROLL
-            val apiResponse = app.get("$backAPI/api/series?page=$page&sort_by=${request.data}").parsedSafe<SearchAnime>()
-            
-            apiResponse?.data?.forEach { series ->
-                if (series.title != null) {
-                    home.add(
-                        newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
-                            this.posterUrl = series.poster
-                            this.score = Score.from10(series.score)
-                            addSub(series.totalEpisodes)
-                        }
-                    )
-                }
-            }
-            
-            // Cek apakah masih ada halaman selanjutnya (Pagination Check)
-            val currentPage = apiResponse?.meta?.currentPage ?: 1
-            val lastPage = apiResponse?.meta?.lastPage ?: 1
-            hasNext = currentPage < lastPage
-            
-        } catch (e: Exception) {
-            // PRIORITAS 2 (FALLBACK): Jika API gagal/diblokir, parse HTML teks A-Z yang kamu berikan
-            // Karena isinya langsung ribuan teks A-Z, kita stop di page 1 agar tidak Infinite Loop
-            if (page == 1) {
-                val document = app.get("$mainUrl/series?sort_by=${request.data}").document
-                document.select("div[id^=section-] a").forEach { a ->
-                    val href = a.attr("href")
-                    if (href.contains("/series/") || href.contains("/movie/")) {
-                        val title = a.text().trim()
-                        if (title.isNotBlank()) {
-                            home.add(newAnimeSearchResponse(title, fixUrl(href), TvType.Anime))
-                        }
+        if (request.data == "episodes") {
+            // FULL API: Mengambil Rilis Terbaru langsung dari Endpoint Episodes
+            try {
+                val apiResponse = app.get("$backAPI/api/episodes?page=$page&pageSize=24").parsedSafe<AnimeResponse>()
+                apiResponse?.data?.forEach { ep ->
+                    val series = ep.series
+                    if (series != null && series.title != null) {
+                        home.add(
+                            newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
+                                this.posterUrl = series.poster
+                                this.score = Score.from10(series.score)
+                                addSub(ep.episodeNumber?.toIntOrNull() ?: series.totalEpisodes)
+                            }
+                        )
                     }
                 }
-            }
-            hasNext = false // Menghentikan looping CloudStream secara paksa
+                val currentPage = apiResponse?.meta?.currentPage ?: 1
+                val lastPage = apiResponse?.meta?.lastPage ?: 1
+                hasNext = currentPage < lastPage
+            } catch (e: Exception) {}
+            
+        } else {
+            // FULL API: Mengambil Daftar Anime Sorting
+            try {
+                val sortParam = request.data.substringBefore("-")
+                val orderParam = request.data.substringAfter("-")
+                val apiUrl = "$backAPI/api/series?page=$page&sort_by=${request.data}&sort=$sortParam&order=$orderParam"
+                
+                val apiResponse = app.get(apiUrl).parsedSafe<SeriesResponse>()
+                
+                apiResponse?.data?.forEach { series ->
+                    if (series.title != null) {
+                        home.add(
+                            newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
+                                this.posterUrl = series.poster
+                                this.score = Score.from10(series.score)
+                                addSub(series.totalEpisodes)
+                            }
+                        )
+                    }
+                }
+                val currentPage = apiResponse?.meta?.currentPage ?: 1
+                val lastPage = apiResponse?.meta?.lastPage ?: 1
+                hasNext = currentPage < lastPage
+            } catch (e: Exception) {}
         }
 
+        if (home.isEmpty()) hasNext = false
         return newHomePageResponse(request.name, home.distinctBy { it.url }, hasNext)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query)
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        return try {
+        // FULL API: Menggunakan rute pencarian backend
+        val home = mutableListOf<SearchResponse>()
+        try {
             app.get("$backAPI/api/series?q=$query")
-                .parsedSafe<SearchAnime>()?.data?.map {
-                    newAnimeSearchResponse(
-                        it.title ?: "",
-                        "$mainUrl/series/${it.slug}",
-                        TvType.Anime
-                    ) {
-                        this.otherName = it.japaneseTitle
-                        this.posterUrl = it.poster
-                        this.score = Score.from10(it.score)
-                        addSub(it.totalEpisodes)
+                .parsedSafe<SeriesResponse>()?.data?.forEach { series ->
+                    if (series.title != null) {
+                        home.add(
+                            newAnimeSearchResponse(series.title, "$mainUrl/series/${series.slug}", TvType.Anime) {
+                                this.otherName = series.japaneseTitle
+                                this.posterUrl = series.poster
+                                this.score = Score.from10(series.score)
+                                addSub(series.totalEpisodes)
+                            }
+                        )
                     }
                 }
-        } catch (e: Exception) {
-            val document = app.get("$mainUrl/search?q=$query").document
-            document.select("a[href^=/series/]:has(img)")
-                .distinctBy { it.attr("href").substringBefore("/episode/") }
-                .mapNotNull {
-                    val href = fixUrl(it.attr("href").substringBefore("/episode/"))
-                    val title = it.selectFirst("p")?.text() ?: it.selectFirst("img")?.attr("alt") ?: return@mapNotNull null
-                    val posterUrl = it.selectFirst("img")?.attr("src")
-                    newAnimeSearchResponse(title, href, TvType.Anime) {
-                        this.posterUrl = posterUrl
-                    }
-                }
-        }
-    }
-
-    private fun Document.selectList(selector: String): String {
-        return this.select("ul.grid.list-inside li:contains($selector:)").text().substringAfter(":").trim()
+        } catch (e: Exception) {}
+        return home.ifEmpty { null }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).body.string().let { Jsoup.parse(it) }
-
-        val title = document.selectFirst("p.text-2xl.font-semibold")?.text() 
-            ?: document.selectFirst("div[role=heading]")?.text()?.substringBefore(" Episode") ?: ""
-        val poster = document.selectFirst("img.h-full.w-full")?.attr("src") 
-            ?: document.select("meta[property=og:image]").attr("content")
+        val slug = url.substringAfter("/series/").substringBefore("/").substringBefore("?")
         
-        val tags = document.selectList("Genre").split(",")
-            .filter { it.isNotBlank() }
-            .map { it.trim() }
+        // FULL API: Mengambil Info Detail Anime
+        val seriesDetail = app.get("$backAPI/api/series/$slug").parsedSafe<SingleSeriesResponse>()?.data
+            ?: throw ErrorLoadingException("Gagal memuat detail dari API")
 
-        val year = document.selectList("Tanggal Rilis").let {
-            Regex("\\d{4}").find(it)?.groupValues?.get(0)?.toIntOrNull()
-        }
-        val status = getStatus(document.selectList("Status"))
-        val type = getType(document.selectList("Tipe"))
-        val description = document.select("div.flex.w-full p").text().trim()
-
-        val episodes = document.select("a[href*=/episode/]").mapNotNull { element ->
-            val href = element.attr("href")
-            val episodeText = element.select("p:first-child").text().ifBlank { element.text() }
-            val epNum = episodeText.filter { it.isDigit() }.toIntOrNull() ?: return@mapNotNull null
-            
-            newEpisode(fixUrl(href)) { 
-                this.episode = epNum 
-            }
-        }.distinctBy { it.data }.reversed()
-
+        val title = seriesDetail.title ?: ""
+        val type = getType(seriesDetail.releaseType)
+        val year = seriesDetail.releaseDate?.let { Regex("\\d{4}").find(it)?.value?.toIntOrNull() }
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
 
+        // FULL API: Mengambil Daftar Episode
+        val episodes = mutableListOf<Episode>()
+        try {
+            val episodesApi = app.get("$backAPI/api/episodes?series.slug=$slug&pageSize=2000&sort=episodeNumber-asc").parsedSafe<AnimeResponse>()
+            episodesApi?.data?.forEach { ep ->
+                val epNum = ep.episodeNumber?.toIntOrNull()
+                // Menyimpan URL API Episode langsung ke dalam data episode
+                val epUrl = "$backAPI/api/episodes/${ep.id}"
+                
+                episodes.add(
+                    newEpisode(epUrl) {
+                        this.episode = epNum
+                        this.name = ep.title
+                    }
+                )
+            }
+        } catch (e: Exception) {}
+
         return newAnimeLoadResponse(title, url, type) {
-            engName = title
-            posterUrl = tracker?.image ?: poster
-            backgroundPosterUrl = tracker?.cover ?: poster
+            this.engName = title
+            this.japName = seriesDetail.japaneseTitle
+            this.posterUrl = tracker?.image ?: seriesDetail.poster
+            this.backgroundPosterUrl = tracker?.cover ?: seriesDetail.poster
             this.year = year
-            addEpisodes(DubStatus.Subbed, episodes)
-            showStatus = status
-            plot = description
-            this.tags = tags
+            addEpisodes(DubStatus.Subbed, episodes.reversed())
+            this.showStatus = getStatus(seriesDetail.status)
+            this.plot = seriesDetail.description
+            this.tags = seriesDetail.genres?.mapNotNull { it.name }
             addMalId(tracker?.malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
         }
@@ -185,28 +179,26 @@ class OploverzProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val doc = app.get(data).document
-        val scriptData = doc.select("script:containsData(__sveltekit)").lastOrNull()?.data() ?: ""
         
-        // 1. Nonton Online (Streaming Links)
-        val streamRegex = Regex("""source\s*:\s*["']([^"']+)["']\s*,\s*url\s*:\s*["']([^"']+)["']""")
-        streamRegex.findAll(scriptData).forEach { match ->
-            val source = match.groupValues[1]
-            val streamUrl = match.groupValues[2]
-            val quality = getQuality(source)
-            loadFixedExtractor(streamUrl, quality, data, subtitleCallback, callback)
+        // FULL API: Memuat data episode spesifik (karena data yang dilempar adalah URL API, bukan frontend)
+        val episodeDetail = app.get(data).parsedSafe<SingleEpisodeResponse>()?.data ?: return false
+
+        // 1. Ekstraksi Streaming Links dari Response JSON
+        episodeDetail.streamUrl?.forEach { stream ->
+            stream.url?.let { url ->
+                val quality = getQuality(stream.source ?: "")
+                loadFixedExtractor(url, quality, data, subtitleCallback, callback)
+            }
         }
 
-        // 2. Tautan Download Server (GD, Akira, dll)
-        doc.select("div.flex.flex-row.items-start").amap { selector ->
-            val qualityText = selector.select("div.w-20 > p").text().trim()
-            if (qualityText.isNotBlank()) {
-                val quality = getQuality(qualityText)
-
-                selector.select("div.flex.flex-row.flex-wrap > a").amap { server ->
-                    val link = server.attr("href")
-                    if (link.isNotBlank() && link != "#") {
-                        loadFixedExtractor(link, quality, data, subtitleCallback, callback)
+        // 2. Ekstraksi Download Links dari Response JSON
+        episodeDetail.downloadUrl?.forEach { format ->
+            format.resolutions?.forEach { res ->
+                val quality = getQuality(res.quality ?: "")
+                res.downloadLinks?.forEach { link ->
+                    val url = link.url
+                    if (!url.isNullOrBlank() && url != "#") {
+                        loadFixedExtractor(url, quality, data, subtitleCallback, callback)
                     }
                 }
             }
@@ -252,25 +244,28 @@ class OploverzProvider : MainAPI() {
         }
     }
 
-    // Penambahan class Meta untuk sistem Pagination
-    data class SearchAnime(
-        @JsonProperty("data") val data: ArrayList<Series>? = arrayListOf(),
-        @JsonProperty("meta") val meta: Meta? = null
-    )
-
+    // --- DATA CLASSES UNTUK API OPLOVERZ ---
     data class Meta(
         @JsonProperty("currentPage") val currentPage: Int? = null,
         @JsonProperty("lastPage") val lastPage: Int? = null
     )
 
-    data class Anime(
-        @JsonProperty("data") val data: ArrayList<Data>? = arrayListOf()
+    data class SeriesResponse(
+        @JsonProperty("data") val data: ArrayList<Series>? = arrayListOf(),
+        @JsonProperty("meta") val meta: Meta? = null
     )
 
-    data class Data(
-        @JsonProperty("episodeNumber") val episodeNumber: String? = null,
-        @JsonProperty("subbed") val subbed: String? = null,
-        @JsonProperty("series") val series: Series? = null,
+    data class AnimeResponse(
+        @JsonProperty("data") val data: ArrayList<EpisodeData>? = arrayListOf(),
+        @JsonProperty("meta") val meta: Meta? = null
+    )
+
+    data class SingleSeriesResponse(
+        @JsonProperty("data") val data: Series? = null
+    )
+
+    data class SingleEpisodeResponse(
+        @JsonProperty("data") val data: EpisodeData? = null
     )
 
     data class Series(
@@ -283,5 +278,43 @@ class OploverzProvider : MainAPI() {
         @JsonProperty("poster") val poster: String? = null,
         @JsonProperty("score") val score: Double? = null,
         @JsonProperty("totalEpisodes") val totalEpisodes: Int? = null,
+        @JsonProperty("description") val description: String? = null,
+        @JsonProperty("status") val status: String? = null,
+        @JsonProperty("releaseType") val releaseType: String? = null,
+        @JsonProperty("genres") val genres: List<Genre>? = null
+    )
+
+    data class Genre(
+        @JsonProperty("name") val name: String? = null
+    )
+
+    data class EpisodeData(
+        @JsonProperty("id") val id: Int? = null,
+        @JsonProperty("title") val title: String? = null,
+        @JsonProperty("episodeNumber") val episodeNumber: String? = null,
+        @JsonProperty("subbed") val subbed: String? = null,
+        @JsonProperty("series") val series: Series? = null,
+        @JsonProperty("streamUrl") val streamUrl: List<StreamSource>? = null,
+        @JsonProperty("downloadUrl") val downloadUrl: List<DownloadFormat>? = null
+    )
+
+    data class StreamSource(
+        @JsonProperty("source") val source: String? = null,
+        @JsonProperty("url") val url: String? = null
+    )
+
+    data class DownloadFormat(
+        @JsonProperty("format") val format: String? = null,
+        @JsonProperty("resolutions") val resolutions: List<DownloadResolution>? = null
+    )
+
+    data class DownloadResolution(
+        @JsonProperty("quality") val quality: String? = null,
+        @JsonProperty("download_links") val downloadLinks: List<DownloadLink>? = null
+    )
+
+    data class DownloadLink(
+        @JsonProperty("host") val host: String? = null,
+        @JsonProperty("url") val url: String? = null
     )
 }
