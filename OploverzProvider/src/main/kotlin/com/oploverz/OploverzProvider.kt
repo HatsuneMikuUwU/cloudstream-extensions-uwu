@@ -43,8 +43,8 @@ class OploverzProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "latestEpisodes" to "Rilis Terbaru",
-        "trending" to "Latest Release",
+        "latestEpisodes" to "Latest Release",
+        "trending" to "Trending",
         "recently" to "Recently Added"
     )
 
@@ -192,7 +192,7 @@ class OploverzProvider : MainAPI() {
             val episodeText = element.select("p:first-child").text().ifBlank { element.text() }
             val epNum = episodeText.filter { it.isDigit() }.toIntOrNull() ?: return@mapNotNull null
             
-            newEpisode(url = fixUrl(href)) { 
+            newEpisode(fixUrl(href)) { 
                 this.episode = epNum 
             }
         }.distinctBy { it.data }.reversed()
