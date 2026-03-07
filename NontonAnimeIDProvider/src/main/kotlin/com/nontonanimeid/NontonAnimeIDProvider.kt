@@ -1,5 +1,11 @@
 package com.nontonanimeid
 
+import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
+import android.webkit.CookieManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -11,11 +17,98 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import okhttp3.Interceptor
+import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+
+class TurnstileInterceptor : Interceptor {
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val originalRequest = chain.request()
+        val url = originalRequest.url.toString()
+        val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
+        val cookieManager = CookieManager.getInstance()
+
+        var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
+        val requestBuilder = originalRequest.newBuilder()
+            .header("Cookie", currentCookies)
+        
+        var response = chain.proceed(requestBuilder.build())
+
+        if (response.code != 403 && response.code != 503) {
+            return response
+        }
+
+        response.close()
+        var isBypassed = false
+        val context = AcraApplication.context ?: return chain.proceed(originalRequest)
+        
+        val handler = Handler(Looper.getMainLooper())
+        var webView: WebView? = null
+        var spoofedUserAgent = originalRequest.header("User-Agent") ?: ""
+
+        handler.post {
+            try {
+                webView = WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.databaseEnabled = true
+                    
+                    spoofedUserAgent = settings.userAgentString
+                        .replace("; wv", "")
+                        .replace("Version/4.0 ", "")
+                    settings.userAgentString = spoofedUserAgent
+
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView, url: String) {
+                            view.evaluateJavascript("document.title") { title ->
+                                val pageTitle = title?.replace("\"", "") ?: ""
+                                if (pageTitle.isNotBlank() && 
+                                    !pageTitle.contains("Just a moment", true) && 
+                                    !pageTitle.contains("Tunggu sebentar", true) && 
+                                    !pageTitle.contains("Cloudflare", true)) {
+                                    isBypassed = true
+                                }
+                            }
+                        }
+                    }
+                    loadUrl(url)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        var attempts = 0
+        while (attempts < 20 && !isBypassed) {
+            Thread.sleep(1000)
+            attempts++
+        }
+
+        handler.post {
+            try {
+                webView?.stopLoading()
+                webView?.destroy()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        cookieManager.flush()
+        currentCookies = cookieManager.getCookie(domainUrl) ?: ""
+        
+        val finalRequest = originalRequest.newBuilder()
+            .header("User-Agent", spoofedUserAgent)
+            .header("Cookie", currentCookies)
+            .build()
+
+        return chain.proceed(finalRequest)
+    }
+}
 
 class NontonAnimeIDProvider : MainAPI() {
     override var mainUrl = "https://s12.nontonanimeid.boats"
@@ -30,6 +123,8 @@ class NontonAnimeIDProvider : MainAPI() {
         TvType.AnimeMovie,
         TvType.OVA
     )
+
+    private val turnstileInterceptor = TurnstileInterceptor()
 
     companion object {
         fun getType(t: String): TvType {
@@ -64,7 +159,7 @@ class NontonAnimeIDProvider : MainAPI() {
             request.data.replaceFirst("?", "page/$page/?")
         }
 
-        val document = app.get(pageUrl).document
+        val document = app.get(pageUrl, interceptor = turnstileInterceptor).document
         
         val home = document.select("article.animeseries, .animeseries, a.as-anime-card").mapNotNull {
             it.toSearchResult()
@@ -95,7 +190,7 @@ class NontonAnimeIDProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val link = "$mainUrl/?s=$query"
-        val document = app.get(link).document
+        val document = app.get(link, interceptor = turnstileInterceptor).document
 
         return document.select("article.animeseries, .animeseries, .result > ul > li").mapNotNull {
             it.toSearchResult()
@@ -106,10 +201,10 @@ class NontonAnimeIDProvider : MainAPI() {
         val fixUrl = if (url.contains("/anime/")) {
             url
         } else {
-            app.get(url).document.selectFirst("div.nvs.nvsc a")?.attr("href")
+            app.get(url, interceptor = turnstileInterceptor).document.selectFirst("div.nvs.nvsc a")?.attr("href")
         }
 
-        val req = app.get(fixUrl ?: return null)
+        val req = app.get(fixUrl ?: return null, interceptor = turnstileInterceptor)
         mainUrl = getBaseUrl(req.url)
         val document = req.document
 
@@ -201,6 +296,7 @@ class NontonAnimeIDProvider : MainAPI() {
             Jsoup.parse(
                 app.post(
                     url = "$mainUrl/wp-admin/admin-ajax.php",
+                    interceptor = turnstileInterceptor,
                     data = mapOf(
                         "misha_number_of_results" to numEp,
                         "misha_order_by" to "date-DESC",
@@ -298,7 +394,7 @@ class NontonAnimeIDProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
 
-        val document = app.get(data).document
+        val document = app.get(data, interceptor = turnstileInterceptor).document
         val iframeLinks = linkedSetOf<String>()
 
         fun normalizeUrl(value: String?): String? {
@@ -353,6 +449,7 @@ class NontonAnimeIDProvider : MainAPI() {
 
                     val response = app.post(
                         url = ajaxUrl,
+                        interceptor = turnstileInterceptor,
                         data = mapOf(
                             "action" to "player_ajax",
                             "nonce" to nonce,
@@ -372,7 +469,7 @@ class NontonAnimeIDProvider : MainAPI() {
 
         iframeLinks.toList().amap { link ->
             val nestedLink = if (link.contains("/video-frame/") || link.contains("/video-embed/")) {
-                app.get(link, referer = data).document.selectFirst("iframe")?.let { iframe -> 
+                app.get(link, referer = data, interceptor = turnstileInterceptor).document.selectFirst("iframe")?.let { iframe -> 
                     normalizeUrl(iframe.attr("data-src").ifEmpty { iframe.attr("src") })
                 }
             } else {
@@ -385,7 +482,7 @@ class NontonAnimeIDProvider : MainAPI() {
             val href = normalizeUrl(a.attr("href"))
             if (href != null && !href.contains("javascript", true)) {
                 try {
-                    val realUrl = app.get(href, allowRedirects = true).url
+                    val realUrl = app.get(href, allowRedirects = true, interceptor = turnstileInterceptor).url
                     if (realUrl != href && realUrl.isNotBlank()) {
                         loadExtractor(realUrl, "$mainUrl/", subtitleCallback, callback)
                     }
