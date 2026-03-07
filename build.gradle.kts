@@ -16,6 +16,12 @@ buildscript {
         classpath("com.github.recloudstream:gradle:-SNAPSHOT")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
+
+    configurations.all {
+        resolutionStrategy {
+            force("com.github.vidstige:jadb:v1.2.1")
+        }
+    }
 }
 
 allprojects {
@@ -45,16 +51,14 @@ subprojects {
 
         defaultConfig {
             minSdk = 21
-            compileSdkVersion(35)
+            compileSdk = 35
             targetSdk = 35
-
         }
 
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_1_8
             targetCompatibility = JavaVersion.VERSION_1_8
         }
-
 
         tasks.withType<KotlinJvmCompile> {
             compilerOptions {
