@@ -4,6 +4,7 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.httpsify
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
@@ -140,23 +141,42 @@ class AnimeIndoProvider : MainAPI() {
             val wireSnapshotAttr = snapshotDiv.attr("wire:snapshot")
             
             val regex = Regex(""""link":"(.*?)"""")
-            val matches = regex.findAll(wireSnapshotAttr)
+            val matches = regex.findAll(wireSnapshotAttr).toList()
 
-            matches.forEach { matchResult ->
-                val embedUrl = matchResult.groupValues[1].replace("\\/", "/")
-                
-                val embedDoc = app.get(embedUrl, referer = data).document
-                val iframeSrc = embedDoc.selectFirst("iframe")?.attr("src")
+            matches.amap { matchResult ->
+                try {
+                    val embedUrl = matchResult.groupValues[1].replace("\\/", "/")
+                    
+                    val response = app.get(embedUrl, referer = data)
+                    val embedDoc = response.document
 
-                if (!iframeSrc.isNullOrBlank()) {
-                    loadExtractor(httpsify(iframeSrc), data, subtitleCallback, callback)
+                    val iframeSrc = embedDoc.selectFirst("iframe")?.attr("src")
+                    if (!iframeSrc.isNullOrBlank()) {
+                        loadExtractor(httpsify(iframeSrc), embedUrl, subtitleCallback, callback)
+                    }
+
+                    val sourceSrc = embedDoc.selectFirst("video source, video")?.attr("src")
+                    if (!sourceSrc.isNullOrBlank()) {
+                        callback.invoke(
+                            ExtractorLink(
+                                source = name,
+                                name = name,
+                                url = httpsify(sourceSrc),
+                                referer = embedUrl,
+                                quality = Qualities.Unknown.value,
+                                isM3u8 = sourceSrc.contains(".m3u8", true)
+                            )
+                        )
+                    }
+
+                    val finalUrl = response.url
+                    if (finalUrl != embedUrl && !finalUrl.contains("animeindo")) {
+                        loadExtractor(finalUrl, data, subtitleCallback, callback)
+                    }
+
+                } catch (e: Exception) {
                 }
             }
-        }
-
-        val directIframe = document.selectFirst("div.aspect-video iframe")?.attr("src")
-        if (!directIframe.isNullOrBlank()) {
-             loadExtractor(httpsify(directIframe), data, subtitleCallback, callback)
         }
 
         return true
