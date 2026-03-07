@@ -40,25 +40,11 @@ class Archivd : ExtractorApi() {
         }
     }
 
-    data class Link(
-        @JsonProperty("media") val media: String? = null,
-    )
-
-    data class Data(
-        @JsonProperty("link") val link: Link? = null,
-    )
-
-    data class Datas(
-        @JsonProperty("data") val data: Data? = null,
-    )
-
-    data class Props(
-        @JsonProperty("datas") val datas: Datas? = null,
-    )
-
-    data class Sources(
-        @JsonProperty("props") val props: Props? = null,
-    )
+    data class Link(@JsonProperty("media") val media: String? = null)
+    data class Data(@JsonProperty("link") val link: Link? = null)
+    data class Datas(@JsonProperty("data") val data: Data? = null)
+    data class Props(@JsonProperty("datas") val datas: Datas? = null)
+    data class Sources(@JsonProperty("props") val props: Props? = null)
 }
 
 class Newuservideo : ExtractorApi() {
@@ -72,11 +58,16 @@ class Newuservideo : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val iframe = app.get(url, referer = referer).document.selectFirst("iframe#videoFrame")?.attr("src")
-        if (iframe.isNullOrBlank()) return
-
-        val doc = app.get(iframe, referer = "$mainUrl/").text
+        var targetUrl = url
         
+        val initialDoc = app.get(url, referer = referer).document
+        val iframeSrc = initialDoc.selectFirst("iframe#videoFrame")?.attr("src")
+        
+        if (!iframeSrc.isNullOrBlank()) {
+            targetUrl = iframeSrc
+        }
+        
+        val doc = app.get(targetUrl, referer = "$mainUrl/").text
         val json = "VIDEO_CONFIG\\s?=\\s?(\\{.*?\\});".toRegex().find(doc)?.groupValues?.getOrNull(1)
             ?: "VIDEO_CONFIG\\s?=\\s?(.*)".toRegex().find(doc)?.groupValues?.getOrNull(1)
 

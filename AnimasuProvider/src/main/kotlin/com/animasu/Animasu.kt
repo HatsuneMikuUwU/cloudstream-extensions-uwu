@@ -68,11 +68,9 @@ class Animasu : MainAPI() {
                 (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore(
                     "-episode"
                 )
-
                 (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
-
             "$mainUrl/anime/$title"
         }
     }
@@ -97,22 +95,18 @@ class Animasu : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title =
-            document.selectFirst("div.infox h1")?.text().toString().replace("Sub Indo", "").trim()
+        val title = document.selectFirst("div.infox h1")?.text().toString().replace("Sub Indo", "").trim()
         val poster = document.selectFirst("div.bigcontent img")?.getImageAttr()
 
         val table = document.selectFirst("div.infox div.spe")
         val type = getType(table?.selectFirst("span:contains(Jenis:)")?.ownText())
-        val year =
-            table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()
-                ?.toIntOrNull()
+        val year = table?.selectFirst("span:contains(Rilis:)")?.ownText()?.substringAfterLast(",")?.trim()?.toIntOrNull()
         val status = table?.selectFirst("span:contains(Status:) font")?.text()
         val trailer = document.selectFirst("div.trailer iframe")?.attr("src")
         val episodes = document.select("ul#daftarepisode > li").map {
             val link = fixUrl(it.selectFirst("a")!!.attr("href"))
             val name = it.selectFirst("a")?.text() ?: ""
-            val episode =
-                Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            val episode = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
             newEpisode(link) { this.episode = episode }
         }.reversed()
 
@@ -144,34 +138,40 @@ class Animasu : MainAPI() {
             val value = it.attr("value")
             if (value.isBlank()) return@mapNotNull null
             
-            var iframeSrc = Jsoup.parse(base64Decode(value)).select("iframe").attr("src")
+            val iframeSrc = Jsoup.parse(base64Decode(value)).select("iframe").attr("src")
+            if (iframeSrc.isBlank()) return@mapNotNull null
             
-            if (iframeSrc.contains("uservideo.in")) iframeSrc = iframeSrc.replace(".in", ".xyz")
-            if (iframeSrc.contains("short.ink")) iframeSrc = iframeSrc.replace(".ink", ".icu")
-            if (iframeSrc.contains("uservideo.nanime.in")) iframeSrc = iframeSrc.replace(".nanime.in", ".xyz")
-            if (iframeSrc.contains("nanime.yt")) iframeSrc = iframeSrc.replace(".yt", ".in")
-            
-            if (iframeSrc.contains("uservideo.xyz") && !iframeSrc.contains("new.uservideo.xyz")) {
-                iframeSrc = iframeSrc.replace("uservideo.xyz", "new.uservideo.xyz")
-                iframeSrc = iframeSrc.replace("?embed=true", "/embed/?")
-            }
-
-            if (iframeSrc.isNotBlank()) {
-                fixUrl(iframeSrc) to it.text()
-            } else {
-                null
-            }
+            iframeSrc to it.text()
         }.amap { (iframe, quality) ->
             var finalUrl = iframe
             
-            if (finalUrl.contains("short.icu") || finalUrl.contains("short.ink") || finalUrl.contains("goid.space")) {
+            if (finalUrl.contains("uservideo.in")) finalUrl = finalUrl.replace(".in", ".xyz")
+            if (finalUrl.contains("short.ink")) finalUrl = finalUrl.replace(".ink", ".icu")
+            if (finalUrl.contains("uservideo.nanime.in")) finalUrl = finalUrl.replace(".nanime.in", ".xyz")
+            if (finalUrl.contains("nanime.yt")) finalUrl = finalUrl.replace(".yt", ".in")
+            
+            if (finalUrl.contains("uservideo.xyz") && !finalUrl.contains("new.uservideo.xyz")) {
+                finalUrl = finalUrl.replace("uservideo.xyz", "new.uservideo.xyz")
+            }
+
+            if (finalUrl.contains("short.icu") || finalUrl.contains("short.ink")) {
                 try {
-                    finalUrl = app.get(finalUrl).url 
+                    val response = app.get(finalUrl, allowRedirects = false)
+                    if (response.code in 300..399) {
+                        finalUrl = response.headers["location"] ?: finalUrl
+                    } else {
+                        val match = Regex("""window\.location(?:\.href)?\s*=\s*['"](.*?)['"]""").find(response.text)
+                        if (match != null) finalUrl = match.groupValues[1]
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
-            
+
+            if (finalUrl.contains("uservideo")) {
+                finalUrl = finalUrl.replace("?embed=true", "?autoplay=true").replace("/embed/", "/")
+            }
+
             if (finalUrl.contains("vidhidepro.com")) {
                 finalUrl = finalUrl.replace("vidhidepro.com", "vidhideplus.com")
             }
@@ -198,9 +198,7 @@ class Animasu : MainAPI() {
                         link.type
                     ) {
                         this.referer = link.referer
-                        this.quality = if (link.type == ExtractorLinkType.M3U8 || link.name == "Uservideo") link.quality else getIndexQuality(
-                                quality
-                            )
+                        this.quality = if (link.type == ExtractorLinkType.M3U8 || link.name == "Uservideo") link.quality else getIndexQuality(quality)
                         this.headers = link.headers
                         this.extractorData = link.extractorData
                     }
