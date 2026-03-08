@@ -154,17 +154,26 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/category/hentai/" to "Hentai",
-        "$mainUrl/category/jav/" to "Jav",
-        "$mainUrl/category/3d-hentai/" to "3D Hentai",
-        "$mainUrl/category/jav-cosplay/" to "Jav Cosplay",
+        "$mainUrl/page/" to "Episode Terbaru",
+        "$mainUrl/category/hentai/page/" to "Hentai",
+        "$mainUrl/category/jav/page/" to "Jav",
+        "$mainUrl/category/3d-hentai/page/" to "3D Hentai",
+        "$mainUrl/category/jav-cosplay/page/" to "Jav Cosplay",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = fetch.get("${request.data}/page/$page").document
-        val home = document.select("div.result ul li").mapNotNull {
+        val url = if (request.name == "Episode Terbaru") {
+            if (page == 1) mainUrl else "${mainUrl}/page/$page/"
+        } else {
+            "${request.data}$page"
+        }
+
+        val document = fetch.get(url).document
+        
+        val home = document.select("div.nk-post-card, div.nk-hentai-grid ul li, div.result ul li").mapNotNull {
             it.toSearchResult()
         }
+        
         return newHomePageResponse(
             list = HomePageList(
                 name = request.name,
@@ -176,7 +185,7 @@ class Nekopoi : MainAPI() {
     }
 
     private fun getProperAnimeLink(uri: String): String {
-        return if (uri.contains("-episode-")) {
+        return if (uri.contains("-episode-") && !uri.contains("/hentai/")) {
             val title = uri.substringAfter("$mainUrl/")
                 .substringBefore("-episode-")
                 .removePrefix("new-release-")
@@ -188,10 +197,25 @@ class Nekopoi : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val title = this.selectFirst("h2 a")?.text()?.trim() ?: return null
-        val href = getProperAnimeLink(this.selectFirst("a")?.attr("href") ?: return null)
-        val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
-        val epNum = this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }?.toIntOrNull()
+        val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title, h2 a") ?: return null
+        val title = titleElement.text().trim()
+        val href = getProperAnimeLink(titleElement.attr("href") ?: this.selectFirst("a")?.attr("href") ?: return null)
+        
+        var posterUrl: String? = null
+        val bgImageElement = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb")
+        if (bgImageElement != null) {
+            val bgStyle = bgImageElement.attr("style")
+            posterUrl = Regex("""url\('([^']+)'\)""").find(bgStyle)?.groupValues?.getOrNull(1)
+        }
+        
+        if (posterUrl == null) {
+             posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+        }
+
+        val epNumStr = Regex("Episode\\s?(\\d+)").find(title)?.groupValues?.getOrNull(1) 
+            ?: this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }
+            
+        val epNum = epNumStr?.toIntOrNull()
         
         return newAnimeSearchResponse(title, href, TvType.NSFW) {
             this.posterUrl = posterUrl
@@ -200,7 +224,8 @@ class Nekopoi : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        return fetch.get("$mainUrl/search/$query").document.select("div.result ul li")
+        return fetch.get("$mainUrl/?s=$query&post_type=anime").document
+            .select("div.nk-post-card, div.nk-hentai-grid ul li, div.result ul li")
             .mapNotNull { it.toSearchResult() }
     }
 
@@ -228,9 +253,9 @@ class Nekopoi : MainAPI() {
         val description = table.select("p:contains(Sinopsis) + p").text().takeIf { it.isNotBlank() } 
             ?: document.selectFirst("span.desc p")?.text()
 
-        val episodes = document.select("div.episodelist ul li").mapNotNull {
-            val name = it.selectFirst("a")?.text()
-            val link = fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
+        val episodes = document.select("div.episodelist ul li, div.nk-episode-nav a").mapNotNull {
+            val name = it.text() ?: it.selectFirst("span")?.text()
+            val link = fixUrlNull(it.attr("href").takeIf { href -> href.isNotBlank() } ?: it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
             newEpisode(link) { this.name = name }
         }.takeIf { it.isNotEmpty() } ?: listOf(newEpisode(url) { this.name = title })
 
