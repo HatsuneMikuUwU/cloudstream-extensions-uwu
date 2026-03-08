@@ -190,9 +190,10 @@ class NekopoiProvider : MainAPI() {
 
     override val mainPage = mainPageOf(
         "$mainUrl/category/hentai/" to "Hentai",
-        "$mainUrl/category/jav/" to "Jav",
+        "$mainUrl/category/2d-animation/" to "2D Animation",
         "$mainUrl/category/3d-hentai/" to "3D Hentai",
-        "$mainUrl/category/jav-cosplay/" to "Jav Cosplay",
+        "$mainUrl/category/jav/" to "JAV",
+        "$mainUrl/category/jav-cosplay/" to "JAV Cosplay"
     )
 
     override suspend fun getMainPage(
