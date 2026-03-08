@@ -206,9 +206,13 @@ class Nekopoi : MainAPI() {
         }
 
         val document = fetch.get(url).document
-        val home = document.select("div.nk-post-card, div.nk-hentai-grid ul li, div.result ul li, article").mapNotNull {
-            it.toSearchResult()
-        }
+        val home = document.select(
+            "div.nk-post-card, " +               // card episode terbaru
+            "div.nk-hentai-grid ul li, " +        // grid kategori (jika ada)
+            "div.result ul li, " +                 // hasil pencarian
+            "div.nk-search-results ul li, " +      // hasil kategori (struktur baru)
+            "article"                               // fallback artikel
+        ).mapNotNull { it.toSearchResult() }
         
         return newHomePageResponse(
             list = HomePageList(
@@ -231,23 +235,43 @@ class Nekopoi : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title, h2 a") ?: return null
-        val title = titleElement.text().trim()
-        val rawHref = titleElement.attr("href").takeIf { it.isNotBlank() } ?: this.selectFirst("a")?.attr("href") ?: return null
-        val href = getProperAnimeLink(rawHref)
-        
-        var posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+        // Coba untuk tipe nk-post-card (homepage)
+        var titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title a, h2 a, h3 a, h4 a, .entry-title a, a[rel=bookmark]")
+        var href = titleElement?.attr("href")?.takeIf { it.isNotBlank() } ?: this.selectFirst("a")?.attr("href")
+        var title = titleElement?.text()?.trim()
+        var posterUrl: String? = null
+
+        // Jika tidak ketemu, coba untuk tipe nk-search-item (category page)
+        if (title == null) {
+            val searchItem = this.selectFirst("a.nk-search-item")
+            if (searchItem != null) {
+                href = searchItem.attr("href")
+                title = searchItem.selectFirst("div.nk-search-info h2")?.text()?.trim()
+                // poster dari background-image
+                val thumbStyle = searchItem.selectFirst("div.nk-search-thumb")?.attr("style")
+                posterUrl = Regex("""url\(['"]?([^'")]+)['"]?\)""").find(thumbStyle ?: "")?.groupValues?.getOrNull(1)
+            }
+        }
+
+        // Jika masih null, skip
+        if (title.isNullOrBlank() || href.isNullOrBlank()) return null
+
+        val properHref = getProperAnimeLink(href)
+
+        // Jika posterUrl belum didapat, coba cari dari elemen img atau background lain
         if (posterUrl == null) {
-            val bgStyle = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb, div.nk-post-thumb")?.attr("style")
-            posterUrl = Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
+            posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+        }
+        if (posterUrl == null) {
+            val bgStyle = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb, div.nk-post-thumb, [style*='background']")?.attr("style")
+            posterUrl = Regex("""url\(['"]?([^'")]+)['"]?\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
         }
 
         val epNumStr = Regex("Episode\\s?(\\d+)").find(title)?.groupValues?.getOrNull(1) 
-            ?: this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }
-            
+            ?: this.selectFirst("i.dot, .episode-number, .eps")?.text()?.filter { it.isDigit() }
         val epNum = epNumStr?.toIntOrNull()
-        
-        return newAnimeSearchResponse(title, href, TvType.NSFW) {
+
+        return newAnimeSearchResponse(title, properHref, TvType.NSFW) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
@@ -269,7 +293,7 @@ class Nekopoi : MainAPI() {
         var poster = fixUrlNull(document.selectFirst("div.nk-featured-img img, div.imgdesc img, div.thm img")?.attr("src"))
         if (poster == null) {
             val bgStyle = document.selectFirst("div.nk-thumb-crop, div.nk-post-thumb, div.nk-series-thumb")?.attr("style")
-            poster = fixUrlNull(Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1))
+            poster = fixUrlNull(Regex("""url\(['"]?([^'")]+)['"]?\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1))
         }
 
         val table = document.select("div.listinfo ul, div.konten")
