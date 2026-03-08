@@ -156,9 +156,9 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
     }
 }
 
-class Nekopoi : MainAPI() {
+class NekopoiProvider : MainAPI() {
     override var mainUrl = "https://nekopoi.care"
-    override var name = "Nekopoi"
+    override var name = "NekoPoi"
     override val hasMainPage = true
     override var lang = "id"
     
@@ -189,7 +189,7 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Episode Terbaru",
+        "$mainUrl/" to "Latest Update",
         "$mainUrl/category/hentai/" to "Hentai",
         "$mainUrl/category/jav/" to "Jav",
         "$mainUrl/category/3d-hentai/" to "3D Hentai",
@@ -252,12 +252,6 @@ class Nekopoi : MainAPI() {
             }
         }
 
-        // FIX: Handle nk-series-link (halaman kategori hentai / jav)
-        // Struktur: <li><a class="nk-series-link" href="...">
-        //               <div class="nk-hentai-thumb" style="background-image:url(...)"></div>
-        //               <div class="title">Judul</div>
-        //           </a></li>
-        // "div.title a" tidak match karena tidak ada <a> di dalam div.title — judul langsung ada di div.title
         val seriesLink = this.selectFirst("a.nk-series-link")
         if (seriesLink != null) {
             val title = seriesLink.selectFirst("div.title")?.text()?.trim()
@@ -336,25 +330,19 @@ class Nekopoi : MainAPI() {
         val duration = table.select("li:contains(Durasi), p:contains(Duration)").text().substringAfterLast(":")
             .filter { it.isDigit() }.toIntOrNull()
             
-        // Halaman episode: div.konten berisi <p><b>Sinopsis</b></p> lalu <p>teks...</p>
-        // Halaman series: mungkin struktur berbeda, pakai fallback bertingkat
         val description =
-            // 1. Coba adjacent sibling setelah <p> yang mengandung "Sinopsis"
             document.selectFirst("div.konten p:contains(Sinopsis) + p, div.listinfo p:contains(Sinopsis) + p")?.text()?.takeIf { it.isNotBlank() }
-            // 2. Ambil paragraf kedua di dalam div.konten (index 1) yang bukan separator/genre/durasi
             ?: document.select("div.konten > p:not(.separator)")
                 .firstOrNull { p ->
                     val t = p.text().trim()
                     t.isNotBlank()
-                        && !p.selectFirst("b") .let { it != null && it.text().length > 2 }  // bukan header bold
+                        && !p.selectFirst("b") .let { it != null && it.text().length > 2 }
                         && !t.startsWith("Genre") && !t.startsWith("Producer")
                         && !t.startsWith("Duration") && !t.startsWith("Durasi")
                         && !t.startsWith("Size") && !t.startsWith("Catatan")
                 }?.text()
-            // 3. Fallback ke og:description (selalu ada), strip prefix "Sinopsis "
             ?: document.selectFirst("meta[property=og:description]")?.attr("content")
                 ?.removePrefix("Sinopsis ")?.trim()?.takeIf { it.isNotBlank() }
-            // 4. Fallback terakhir ke span.desc
             ?: document.selectFirst("span.desc p")?.text()
 
         val mainContent = document.selectFirst("div.nk-main-content, div#nk-content, div#nk-wrap") ?: document
@@ -373,7 +361,6 @@ class Nekopoi : MainAPI() {
             mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
                 if (it.hasClass("nk-post-card")) {
                     val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
-                    // FIX: Bersihkan nama episode dari prefix tag situs dan suffix bahasa
                     val rawName = aTag.text().trim()
                         .removePrefix("[NEW Release] ")
                         .removePrefix("[NEW Release]")
@@ -417,15 +404,11 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
-                // Baca tab labels dari #nk-player-tabs untuk nama server (mis. "Server 1", "720p", dll)
                 val tabs = res.select("div#nk-player-tabs a").map { it.text().trim() }
 
-                // Proses tiap div.nk-player-frame secara terindeks agar bisa dipasangkan dengan tab-nya
                 res.select("div.nk-player-frame").forEachIndexed { index, frame ->
                     val tabLabel = tabs.getOrNull(index) ?: "Server ${index + 1}"
 
-                    // Coba ambil kualitas dari label tab dulu (jika admin menulis "720p" di tab)
-                    // Lalu fallback ke parsing catatan resolusi di halaman (mis. "Stream 2 -> 720P")
                     val quality = Regex("""(\d{3,4})[pP]""").find(tabLabel)
                         ?.groupValues?.get(1)?.let { getQualityFromName("${it}p") }
                         ?: parseStreamQuality(res, index + 1)
@@ -433,7 +416,6 @@ class Nekopoi : MainAPI() {
                     frame.select("iframe").amap { iframe ->
                         val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
                         withTimeoutOrNull(10_000) {
-                            // Bungkus callback agar quality ikut di-set untuk link non-M3U8
                             val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback) { link ->
                                 runBlocking {
                                     callback.invoke(
@@ -466,10 +448,6 @@ class Nekopoi : MainAPI() {
                     }
                     .filter { it.first != Qualities.P360.value }
                     .amap { qualityAndLink ->
-                        // FIX: Bungkus seluruh bypass chain dengan timeout 8 detik.
-                        // Penyebab utama stuck: bypassOuo memanggil getCaptchaToken() yang bisa
-                        // hang selamanya jika captcha tidak bisa diselesaikan, sehingga
-                        // runAllAsync tidak pernah selesai dan player terus stuck di Loading (1).
                         val bypassedAds = withTimeoutOrNull(8_000) {
                             bypassMirrored(bypassOuo(qualityAndLink.second))
                         } ?: return@amap
@@ -518,7 +496,6 @@ class Nekopoi : MainAPI() {
                 )
             ).text
 
-            // FIX: Hilangkan ']' berlebih di akhir setiap regex pattern (menyebabkan semua regex gagal match)
             val videoUrl =
                 Regex("""['"](https?://[^'"]+\.m3u8(?:[^'"]*)?)['"]""").find(html)?.groupValues?.get(1)
                 ?: Regex("""['"](https?://[^'"]+\.mp4(?:[^'"]*)?)['"]""").find(html)?.groupValues?.get(1)
@@ -537,7 +514,6 @@ class Nekopoi : MainAPI() {
                         if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     ) {
                         referer = iframeSrc
-                        // Gunakan quality dari parent caller; kalau M3U8 biarkan extractor yang tentukan
                         this.quality = if (isM3u8) Qualities.Unknown.value else quality
                         headers = mapOf("Referer" to iframeSrc)
                     }
@@ -545,7 +521,6 @@ class Nekopoi : MainAPI() {
                 return
             }
 
-            // FIX: Hilangkan ']' berlebih di akhir regex nested iframe
             val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]""").find(html)
                 ?.groupValues?.get(1)
             if (nestedSrc != null && nestedSrc != iframeSrc) {
@@ -576,15 +551,12 @@ class Nekopoi : MainAPI() {
                 if (res.headers["location"] != null) return@lit
                 val document = res.document
                 val nextUrl = document.select("form").attr("action")
-                // FIX: Ganti mapNotNull → map, karena Pair<String,String> tidak pernah null
-                // sehingga mapNotNull tidak pernah memfilter apapun
                 val data = document.select("form input").map {
                     it.attr("name") to it.attr("value")
                 }.toMap().toMutableMap()
                 val captchaKey =
                     document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
                         .attr("src").substringAfter("render=")
-                // FIX: Gunakan nextUrl (bukan url awal) agar reCAPTCHA token dibuat untuk halaman yang benar
                 val token = APIHolder.getCaptchaToken(nextUrl, captchaKey)
                 data["x-token"] = token ?: ""
                 res = session.post(
@@ -605,13 +577,9 @@ class Nekopoi : MainAPI() {
 
     private suspend fun bypassMirrored(url: String?): List<String?> {
         val request = session.get(url ?: return emptyList())
-        // FIX: Kurangi delay dari 2000ms → 500ms.
-        // 2 detik per link dikali banyak link = loading lambat kumulatif.
-        // 500ms sudah cukup untuk server mirrored.to merespons.
         delay(500)
         val mirrorUrl = request.selectMirror() ?: run {
             val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
-            // FIX: Ganti app.get() → session.get() agar JWT cookie ikut terkirim
             session.get(nextUrl).selectMirror()
         }
         return session.get(fixUrl(mirrorUrl ?: return emptyList(), mirroredHost)).document.select("table.hoverable tbody tr")
@@ -633,11 +601,6 @@ class Nekopoi : MainAPI() {
         return if (url.startsWith("//")) "https:$url" else if (url.startsWith('/')) "$domain$url" else "$domain/$url"
     }
 
-    // Parsing kualitas dari catatan di halaman, contoh:
-    // "Gunakan 'Stream 1' untuk 360P/480P, Gunakan 'Stream 2' untuk 720P"
-    // PENTING: semua info bisa ada dalam SATU elemen <h3>/<p>, jadi harus
-    // ekstrak segmen teks antara "stream N" dan "stream N+1" agar tidak
-    // salah ambil kualitas stream lain (mis. Stream 1 dapat 720p milik Stream 2)
     private fun parseStreamQuality(doc: org.jsoup.nodes.Document, streamNum: Int): Int {
         val keyword = "stream $streamNum"
         val nextKeyword = "stream ${streamNum + 1}"
@@ -647,7 +610,6 @@ class Nekopoi : MainAPI() {
                 && Regex("""\d{3,4}[pP]""").containsMatchIn(el.text())
         } ?: return Qualities.Unknown.value
 
-        // Ambil segmen teks dari "stream N" sampai sebelum "stream N+1" (atau akhir string)
         val fullText = noteEl.text().lowercase()
         val startIdx = fullText.indexOf(keyword).takeIf { it >= 0 } ?: return Qualities.Unknown.value
         val endIdx = fullText.indexOf(nextKeyword, startIdx).takeIf { it > startIdx } ?: fullText.length
@@ -658,7 +620,6 @@ class Nekopoi : MainAPI() {
             .filter { it in listOf(360, 480, 720, 1080, 1440, 2160) }
             .toList()
 
-        // Untuk stream yang punya range (mis. "360P/480P"), ambil yang tertinggi
         val best = qualities.maxOrNull() ?: return Qualities.Unknown.value
         return getQualityFromName("${best}p")
     }

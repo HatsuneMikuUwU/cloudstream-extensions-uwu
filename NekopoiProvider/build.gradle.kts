@@ -6,7 +6,7 @@ cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    // description = "Lorem Ipsum"
+    description = "NekoPoi — Streaming Hentai, Porn and JAV Subtitle Indonesia"
      authors = listOf("Miku")
 
     /**
