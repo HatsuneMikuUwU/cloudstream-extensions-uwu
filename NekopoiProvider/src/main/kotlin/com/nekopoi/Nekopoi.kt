@@ -569,7 +569,7 @@ class Nekopoi : MainAPI() {
         }
     }
 
-    private fun deliverVideo(
+    private suspend fun deliverVideo(
         videoUrl: String,
         iframeSrc: String,
         callback: (ExtractorLink) -> Unit
