@@ -7,7 +7,6 @@ import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.*
@@ -16,120 +15,10 @@ import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.Session
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.nodes.Element
 import java.net.URI
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-
-// ── WebView-based video URL extractor ─────────────────────────────────────────
-// Loads the iframe URL in a hidden WebView, intercepts every outgoing network
-// request, and captures the first URL that looks like a streamable video
-// (.m3u8 / .mp4 or contains common CDN video path patterns).
-object WebViewVideoExtractor {
-
-    private val VIDEO_REGEX = Regex(
-        """https?://[^\s'"<>]+\.(?:m3u8|mp4)(?:[?#][^\s'"<>]*)?""",
-        RegexOption.IGNORE_CASE
-    )
-
-    // Domains/paths that are definitely NOT video URLs (ads, trackers, etc.)
-    private val BLACKLIST = listOf(
-        "googlesyndication", "doubleclick", "google-analytics",
-        "facebook.com", "twitter.com", "cdn.tsyndicate", "histats",
-        "onesignal", "chatango", "cloudflareinsights"
-    )
-
-    /**
-     * Loads [iframeSrc] in a hidden WebView (on the main thread) and returns
-     * the first intercepted video URL within [timeoutSeconds], or null.
-     *
-     * @param referer  The page that embeds this iframe (used as Referer header).
-     */
-    @SuppressLint("SetJavaScriptEnabled")
-    fun extract(iframeSrc: String, referer: String, timeoutSeconds: Long = 15L): String? {
-        val context = AcraApplication.context ?: return null
-
-        var videoUrl: String? = null
-        val latch = CountDownLatch(1)
-        val handler = Handler(Looper.getMainLooper())
-        var webView: WebView? = null
-
-        handler.post {
-            try {
-                val wv = WebView(context)
-                webView = wv
-
-                val cookieManager = CookieManager.getInstance()
-                cookieManager.setAcceptCookie(true)
-                cookieManager.setAcceptThirdPartyCookies(wv, true)
-
-                wv.settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
-                }
-
-                wv.webChromeClient = WebChromeClient()
-                wv.webViewClient = object : WebViewClient() {
-                    @SuppressLint("WebViewClientOnReceivedSslError")
-                    override fun onReceivedSslError(view: WebView?, h: SslErrorHandler?, error: SslError?) {
-                        h?.proceed()
-                    }
-
-                    override fun shouldInterceptRequest(
-                        view: WebView?,
-                        request: WebResourceRequest?
-                    ): android.webkit.WebResourceResponse? {
-                        val url = request?.url?.toString() ?: return null
-
-                        // Skip known blacklisted domains
-                        if (BLACKLIST.any { url.contains(it, ignoreCase = true) }) {
-                            return null
-                        }
-
-                        // Check if URL matches a video pattern
-                        if (VIDEO_REGEX.containsMatchIn(url) && videoUrl == null) {
-                            videoUrl = VIDEO_REGEX.find(url)?.value
-                            latch.countDown()
-                        }
-
-                        return null // Let WebView proceed normally
-                    }
-                }
-
-                // Load with Referer header
-                wv.loadUrl(iframeSrc, mapOf("Referer" to referer))
-
-            } catch (e: Exception) {
-                e.printStackTrace()
-                latch.countDown()
-            }
-        }
-
-        // Block calling coroutine until video URL found or timeout
-        latch.await(timeoutSeconds, TimeUnit.SECONDS)
-
-        // Clean up WebView on main thread
-        handler.post {
-            try {
-                webView?.stopLoading()
-                webView?.destroy()
-                webView = null
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        return videoUrl
-    }
-}
-
 
 class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session") : Interceptor {
     @SuppressLint("SetJavaScriptEnabled")
@@ -223,7 +112,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 25 
+                val maxAttempts = 15
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
@@ -480,36 +369,34 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
-                // Streaming iframes — try standard extractor first, fallback to custom scraping
                 res.select("div.nk-player-frame iframe, div#show-stream iframe").amap { iframe ->
                     val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
                     val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
                     if (!loaded) {
-                        // Custom extraction for vidara.to, streampoi.com, etc.
                         extractCustomHost(src, subtitleCallback, callback)
                     }
                 }
             },
             {
-                res.select("div.nk-download-row, div.boxdownload div.liner").mapNotNull { ele ->
-                    val qualityStr = ele.selectFirst("div.nk-download-name, div.name")?.text()
-                    val quality = getIndexQuality(qualityStr)
+                res.select("div.nk-download-row, div.boxdownload div.liner")
+                    .mapNotNull { ele ->
+                        val qualityStr = ele.selectFirst("div.nk-download-name, div.name")?.text()
+                        val quality = getIndexQuality(qualityStr)
 
-                    val link = ele.select("a").firstOrNull { it.text().contains("Mirror", true) }?.attr("href")
-                        ?: ele.selectFirst("a[href*=ouo]")?.attr("href")
+                        val link = ele.select("a").firstOrNull { it.text().contains("Mirror", true) }?.attr("href")
+                            ?: ele.selectFirst("a[href*=ouo]")?.attr("href")
 
-                    if (link != null) quality to link else null
-                }.filter {
-                    it.first != Qualities.P360.value
-                }.map { qualityAndLink ->
-                    val bypassedAds = bypassMirrored(bypassOuo(qualityAndLink.second))
-                    bypassedAds.amap(ads@{ adsLink ->
-                        loadExtractor(
-                            fixEmbed(adsLink) ?: return@ads,
-                            "$mainUrl/",
-                            subtitleCallback,
-                        ) { link ->
-                            runBlocking {
+                        if (link != null) quality to link else null
+                    }
+                    .filter { it.first != Qualities.P360.value }
+                    .amap { qualityAndLink ->
+                        val bypassedAds = bypassMirrored(bypassOuo(qualityAndLink.second))
+                        bypassedAds.amap(ads@{ adsLink ->
+                            loadExtractor(
+                                fixEmbed(adsLink) ?: return@ads,
+                                "$mainUrl/",
+                                subtitleCallback,
+                            ) { link ->
                                 callback.invoke(
                                     newExtractorLink(
                                         link.name,
@@ -524,9 +411,8 @@ class Nekopoi : MainAPI() {
                                     }
                                 )
                             }
-                        }
-                    })
-                }
+                        })
+                    }
             }
         )
 
@@ -539,55 +425,47 @@ class Nekopoi : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            // ── Step 1: Try cheap HTTP scraping first ────────────────────────
             val html = fetch.get(
                 iframeSrc,
-                headers = mapOf("Referer" to mainUrl, "Origin" to mainUrl)
+                headers = mapOf(
+                    "Referer" to mainUrl,
+                    "Origin" to mainUrl
+                )
             ).text
 
             val videoUrl =
-                Regex("""['"]?(https?://[^'"<>\s]+\.m3u8(?:[?#][^'"<>\s]*)?)['"]?""").find(html)?.groupValues?.get(1)
-                ?: Regex("""['"]?(https?://[^'"<>\s]+\.mp4(?:[?#][^'"<>\s]*)?)['"]?""").find(html)?.groupValues?.get(1)
-                ?: Regex("""file\s*:\s*['"]( https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)?.trim()
+                Regex("""['"](https?://[^'"]+\.m3u8(?:[^'"]*)?)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""['"](https?://[^'"]+\.mp4(?:[^'"]*)?)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""file\s*:\s*['"](https?://[^'"]+)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""source\s+src=['"](https?://[^'"]+)['"]]""").find(html)?.groupValues?.get(1)
                 ?: Regex(""""url"\s*:\s*"(https?://[^"]+\.(?:m3u8|mp4)[^"]*)"""").find(html)?.groupValues?.get(1)
 
             if (videoUrl != null) {
-                deliverVideo(videoUrl, iframeSrc, callback)
+                val isM3u8 = videoUrl.contains(".m3u8", ignoreCase = true)
+                val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "Stream" }
+                callback.invoke(
+                    newExtractorLink(
+                        hostName,
+                        hostName,
+                        videoUrl,
+                        if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    ) {
+                        referer = iframeSrc
+                        quality = Qualities.Unknown.value
+                        headers = mapOf("Referer" to iframeSrc)
+                    }
+                )
                 return
             }
 
-            // ── Step 2: Fallback to WebView (handles JS-rendered / token-based players) ──
-            val wvUrl = runBlocking {
-                WebViewVideoExtractor.extract(iframeSrc, referer = mainUrl)
+            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]]""").find(html)
+                ?.groupValues?.get(1)
+            if (nestedSrc != null && nestedSrc != iframeSrc) {
+                loadExtractor(nestedSrc, iframeSrc, subtitleCallback, callback)
             }
-            if (wvUrl != null) {
-                deliverVideo(wvUrl, iframeSrc, callback)
-            }
-
         } catch (e: Exception) {
             e.printStackTrace()
         }
-    }
-
-    private suspend fun deliverVideo(
-        videoUrl: String,
-        iframeSrc: String,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val isM3u8 = videoUrl.contains(".m3u8", ignoreCase = true)
-        val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "Stream" }
-        callback.invoke(
-            newExtractorLink(
-                hostName,
-                hostName,
-                videoUrl,
-                if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-            ) {
-                referer = iframeSrc
-                quality = Qualities.Unknown.value
-                headers = mapOf("Referer" to iframeSrc)
-            }
-        )
     }
 
     private fun fixEmbed(url: String?): String? {
