@@ -135,16 +135,20 @@ class IndoMax21Provider : MainAPI() {
                         
                     val seasonNum = Regex("(?i)s(\\d+)").find(epsName)?.groupValues?.get(1)?.toIntOrNull()
                         
-                    Episode(
-                        data = epsUrl,
-                        name = epsName,
-                        season = seasonNum,
-                        episode = epsNum
-                    )
+                    newEpisode(data = epsUrl) {
+                        this.name = epsName
+                        this.season = seasonNum
+                        this.episode = epsNum
+                    }
                 } else null
             }
 
-            val finalEpisodes = if (episodes.isNotEmpty()) episodes else listOf(Episode(data = url, name = "Episode 1", episode = 1))
+            val finalEpisodes = if (episodes.isNotEmpty()) episodes else listOf(
+                newEpisode(data = url) {
+                    this.name = "Episode 1"
+                    this.episode = 1
+                }
+            )
 
             return newTvSeriesLoadResponse(title, url, TvType.TvSeries, finalEpisodes.distinctBy { it.data }) {
                 this.posterUrl = poster
@@ -242,10 +246,11 @@ class IndoMax21Provider : MainAPI() {
                         source = name,
                         name = "Pyrox",
                         url = videoUrl,
-                        referer = iframeSrc,
-                        quality = Qualities.Unknown.value,
                         type = if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
-                    )
+                    ) {
+                        this.referer = iframeSrc
+                        this.quality = Qualities.Unknown.value
+                    }
                 )
             }
         } catch (e: Exception) {
@@ -288,10 +293,11 @@ class IndoMax21Provider : MainAPI() {
                                 source = name,
                                 name = "4MePlayer",
                                 url = m3u8Url,
-                                referer = iframeSrc,
-                                quality = Qualities.Unknown.value,
                                 type = ExtractorLinkType.M3U8
-                            )
+                            ) {
+                                this.referer = iframeSrc
+                                this.quality = Qualities.Unknown.value
+                            }
                         )
                         return
                     }
@@ -312,15 +318,17 @@ class IndoMax21Provider : MainAPI() {
 
             (m3u8Regex.find(unpackedText) ?: m3u8Regex.find(iframeHtml))?.let { match ->
                 val m3u8Url = match.groupValues[1].replace("\\/", "/")
+                
                 callback.invoke(
                     newExtractorLink(
                         source = name,
                         name = "ImaxStreams",
                         url = m3u8Url,
-                        referer = iframeSrc,
-                        quality = Qualities.Unknown.value,
                         type = ExtractorLinkType.M3U8
-                    )
+                    ) {
+                        this.referer = iframeSrc
+                        this.quality = Qualities.Unknown.value
+                    }
                 )
             }
         } catch (e: Exception) {
