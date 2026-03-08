@@ -298,9 +298,9 @@ class Nekopoi : MainAPI() {
             ?: document.selectFirst("span.desc p")?.text()
 
         val mainContent = document.selectFirst("div.nk-main-content, div#nk-content") ?: document
-        val episodeElements = mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card")
-
-        var episodes = episodeElements.mapNotNull {
+        
+        // Perbaikan distinctBy: Kita filter manual agar compiler tidak bingung dengan tipe data Lambda
+        val rawEpisodes = mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
             if (it.hasClass("nk-post-card")) {
                 val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
                 newEpisode(aTag.attr("href")) { this.name = aTag.text().trim() }
@@ -309,18 +309,21 @@ class Nekopoi : MainAPI() {
                 val link = fixUrlNull(it.attr("href").takeIf { href -> href.isNotBlank() } ?: it.selectFirst("a")?.attr("href"))
                 if (link != null) newEpisode(link) { this.name = name } else null
             }
-        }.distinctBy { it.url }
-
-        if (episodes.isEmpty()) {
-            episodes = listOf(newEpisode(url) { this.name = title })
         }
+        
+        // Menggunakan Set untuk menghapus duplikat berdasarkan URL
+        val episodes = rawEpisodes.distinctBy { ep -> ep.data }
+
+        val finalEpisodes = if (episodes.isEmpty()) {
+            listOf(newEpisode(url) { this.name = title })
+        } else episodes
 
         return newAnimeLoadResponse(title, url, TvType.NSFW) {
             engName = title
             posterUrl = poster
             this.year = year
             this.duration = duration
-            addEpisodes(DubStatus.Subbed, episodes)
+            addEpisodes(DubStatus.Subbed, finalEpisodes)
             showStatus = status
             plot = description
             this.tags = tags
