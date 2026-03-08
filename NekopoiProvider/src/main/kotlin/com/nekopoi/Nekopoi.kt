@@ -16,6 +16,7 @@ import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.Session
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.jsoup.nodes.Element
@@ -188,7 +189,7 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "New Update",
+        "$mainUrl/" to "Latest Update",
         "$mainUrl/category/hentai/" to "Hentai",
         "$mainUrl/category/jav/" to "Jav",
         "$mainUrl/category/3d-hentai/" to "3D Hentai",
@@ -370,11 +371,13 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
-                res.select("div.nk-player-frame iframe, div#show-stream iframe").amap { iframe ->
+                res.select("div.nk-player-frame iframe, div#show-stream iframe, div.nk-player iframe, div.player-embed iframe, iframe[src*=http]").amap { iframe ->
                     val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
-                    val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
-                    if (!loaded) {
-                        extractCustomHost(src, subtitleCallback, callback)
+                    withTimeoutOrNull(10_000) {
+                        val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
+                        if (!loaded) {
+                            extractCustomHost(src, subtitleCallback, callback)
+                        }
                     }
                 }
             },
@@ -391,7 +394,9 @@ class Nekopoi : MainAPI() {
                     }
                     .filter { it.first != Qualities.P360.value }
                     .amap { qualityAndLink ->
-                        val bypassedAds = bypassMirrored(bypassOuo(qualityAndLink.second))
+                        val bypassedAds = withTimeoutOrNull(8_000) {
+                            bypassMirrored(bypassOuo(qualityAndLink.second))
+                        } ?: return@amap
                         bypassedAds.amap(ads@{ adsLink ->
                             loadExtractor(
                                 fixEmbed(adsLink) ?: return@ads,
@@ -517,7 +522,7 @@ class Nekopoi : MainAPI() {
 
     private suspend fun bypassMirrored(url: String?): List<String?> {
         val request = session.get(url ?: return emptyList())
-        delay(2000)
+        delay(500)
         val mirrorUrl = request.selectMirror() ?: run {
             val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
             session.get(nextUrl).selectMirror()
