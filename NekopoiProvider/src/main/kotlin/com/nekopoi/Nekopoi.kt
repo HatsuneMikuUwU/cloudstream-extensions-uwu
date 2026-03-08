@@ -1,9 +1,11 @@
 package com.nekopoi
 
 import android.annotation.SuppressLint
+import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -25,7 +27,9 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
+        
         val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
 
         val standardUserAgent = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
@@ -64,26 +68,47 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                         val newWebView = WebView(context)
                         webView = newWebView
 
+                        cookieManager.setAcceptThirdPartyCookies(newWebView, true)
+
                         newWebView.settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
                             databaseEnabled = true
                             useWideViewPort = true
                             loadWithOverviewMode = true
+                            // Paksa izinkan HTTP di dalam HTTPS
+                            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            // Jangan gunakan cache, paksa download script baru
+                            cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                             userAgentString = standardUserAgent
                         }
                         
-                        newWebView.webChromeClient = WebChromeClient()
+                        // Bersihkan cache dan history lama yang mungkin membuat WAF error
+                        newWebView.clearCache(true)
+                        newWebView.clearHistory()
                         
+                        newWebView.webChromeClient = WebChromeClient()
                         newWebView.webViewClient = object : WebViewClient() {
+                            // ABAIKAN SEMUA ERROR SSL (Ini sering jadi biang kerok script pihak ketiga gagal diload di WebView)
+                            @SuppressLint("WebViewClientOnReceivedSslError")
+                            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                                handler?.proceed() 
+                            }
+
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
-                                if (checkCookies.contains(targetCookie)) {
+                                if (checkCookies.contains(targetCookie) && checkCookies.contains("sl_jwt_sign")) {
                                     isResolved = true
                                 }
                             }
                         }
+
+                        val safeLineCookies = listOf("sl-challenge-jwt", "sl-challenge-server", "sl-session", "sl_jwt_session", "sl_jwt_sign", "comentario_commenter_session")
+                        safeLineCookies.forEach { cookie ->
+                            cookieManager.setCookie(domainUrl, "$cookie=; Max-Age=0")
+                        }
+                        cookieManager.flush()
 
                         newWebView.loadUrl(url)
                     } catch (e: Exception) {
@@ -92,12 +117,12 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 15
+                val maxAttempts = 25 // Beri waktu ekstra karena kita clear cache
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
 
-                    if (checkCookies.contains(targetCookie) || isResolved) {
+                    if ((checkCookies.contains(targetCookie) && checkCookies.contains("sl_jwt_sign")) || isResolved) {
                         cookieManager.flush()
                         break
                     }
@@ -115,6 +140,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
             }
 
             currentCookies = cookieManager.getCookie(domainUrl) ?: ""
+            
             val newRequestBuilder = originalRequest.newBuilder()
                 .removeHeader("User-Agent")
                 .addHeader("User-Agent", standardUserAgent)
@@ -147,8 +173,6 @@ class Nekopoi : MainAPI() {
     override val supportedTypes = setOf(
         TvType.NSFW,
     )
-    
-    override val vpnStatus = VPNStatus.MightBeNeeded
 
     companion object {
         val interceptor = JwtSessionInterceptor("sl_jwt_session")
