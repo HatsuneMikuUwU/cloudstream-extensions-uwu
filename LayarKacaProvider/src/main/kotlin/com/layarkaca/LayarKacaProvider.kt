@@ -10,7 +10,7 @@ import java.net.URI
 
 class LayarKacaProvider : MainAPI() {
 
-    override var mainUrl = "https://tv8.lk21official.cc"
+    override var mainUrl = "https://tv9.lk21official.cc"
     private var seriesUrl = "https://tv3.nontondrama.my"
     private var searchurl= "https://gudangvape.com"
 
