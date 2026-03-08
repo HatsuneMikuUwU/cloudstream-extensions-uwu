@@ -74,7 +74,9 @@ class LayarKacaProvider : MainAPI() {
             newMovieSearchResponse(title, href, TvType.Movie) {
                 this.posterUrl = posterUrl
                 this.posterHeaders = posterheaders
-                addQuality(quality)
+                if (!quality.isNullOrBlank()) {
+                    addQuality(quality)
+                }
             }
         }
     }
@@ -201,7 +203,6 @@ class LayarKacaProvider : MainAPI() {
                 val referer = getSafeBaseUrl(url)
                 Log.d("LayarkacaLinks", url)
                 loadExtractor(url, referer, subtitleCallback, callback)
-                
             } catch (e: Exception) {
                 e.printStackTrace()
             }
