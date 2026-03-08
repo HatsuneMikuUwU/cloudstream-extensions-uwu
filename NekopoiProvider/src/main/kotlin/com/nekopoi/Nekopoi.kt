@@ -76,20 +76,16 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                             databaseEnabled = true
                             useWideViewPort = true
                             loadWithOverviewMode = true
-                            // Paksa izinkan HTTP di dalam HTTPS
                             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            // Jangan gunakan cache, paksa download script baru
                             cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                             userAgentString = standardUserAgent
                         }
                         
-                        // Bersihkan cache dan history lama yang mungkin membuat WAF error
                         newWebView.clearCache(true)
                         newWebView.clearHistory()
                         
                         newWebView.webChromeClient = WebChromeClient()
                         newWebView.webViewClient = object : WebViewClient() {
-                            // ABAIKAN SEMUA ERROR SSL (Ini sering jadi biang kerok script pihak ketiga gagal diload di WebView)
                             @SuppressLint("WebViewClientOnReceivedSslError")
                             override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
                                 handler?.proceed() 
@@ -117,7 +113,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 25 // Beri waktu ekstra karena kita clear cache
+                val maxAttempts = 25 
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
@@ -236,7 +232,8 @@ class Nekopoi : MainAPI() {
                 .substringBefore("-episode-")
                 .removePrefix("new-release-")
                 .removePrefix("uncensored-")
-            "$mainUrl/hentai/$title"
+            // Ditambahkan slash (/) di belakang agar tidak 404 / redirect looping
+            "$mainUrl/hentai/$title/"
         } else {
             uri
         }
@@ -245,13 +242,14 @@ class Nekopoi : MainAPI() {
     private fun Element.toSearchResult(): AnimeSearchResponse? {
         val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title, h2 a") ?: return null
         val title = titleElement.text().trim()
-        val href = getProperAnimeLink(titleElement.attr("href") ?: this.selectFirst("a")?.attr("href") ?: return null)
+        val rawHref = titleElement.attr("href").takeIf { it.isNotBlank() } ?: this.selectFirst("a")?.attr("href") ?: return null
+        val href = getProperAnimeLink(rawHref)
         
         var posterUrl: String? = null
         val bgImageElement = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb")
         if (bgImageElement != null) {
             val bgStyle = bgImageElement.attr("style")
-            posterUrl = Regex("""url\('([^']+)'\)""").find(bgStyle)?.groupValues?.getOrNull(1)
+            posterUrl = Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
         }
         
         if (posterUrl == null) {
@@ -278,13 +276,23 @@ class Nekopoi : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = fetch.get(url).document
 
-        val title = document.selectFirst("div.nk-post-header h1, span.desc b, div.eroinfo h1")?.text()?.trim() ?: ""
-        val poster = fixUrlNull(document.selectFirst("div.nk-featured-img img, div.imgdesc img, div.thm img")?.attr("src"))
+        // Mengamankan Selector Title dengan Fallback ke tag <title>
+        val title = document.selectFirst("div.nk-post-header h1, div.nk-series-header h1, span.desc b, div.eroinfo h1")?.text()?.trim() 
+            ?: document.selectFirst("title")?.text()?.substringBefore(" – ")?.trim() 
+            ?: "Unknown Title"
+
+        // Mengamankan Selector Poster
+        var poster = fixUrlNull(document.selectFirst("div.nk-featured-img img, div.imgdesc img, div.thm img")?.attr("src"))
+        if (poster == null) {
+            val bgStyle = document.selectFirst("div.nk-thumb-crop, div.nk-post-thumb, div.nk-series-thumb")?.attr("style")
+            poster = fixUrlNull(Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1))
+        }
+
         val table = document.select("div.listinfo ul, div.konten")
         
         val tags = table.select("li:contains(Genres) a").map { it.text() }.takeIf { it.isNotEmpty() }
             ?: table.select("p:contains(Genre)").text().substringAfter(":").split(",")
-                .map { it.trim() }
+                .map { it.trim() }.filter { it.isNotBlank() }
                 
         val year = document.selectFirst("li:contains(Tayang)")?.text()?.substringAfterLast(",")
             ?.filter { it.isDigit() }?.toIntOrNull()
@@ -299,11 +307,25 @@ class Nekopoi : MainAPI() {
         val description = table.select("p:contains(Sinopsis) + p").text().takeIf { it.isNotBlank() } 
             ?: document.selectFirst("span.desc p")?.text()
 
-        val episodes = document.select("div.episodelist ul li, div.nk-episode-nav a").mapNotNull {
-            val name = it.text() ?: it.selectFirst("span")?.text()
-            val link = fixUrlNull(it.attr("href").takeIf { href -> href.isNotBlank() } ?: it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
-            newEpisode(link) { this.name = name }
-        }.takeIf { it.isNotEmpty() } ?: listOf(newEpisode(url) { this.name = title })
+        // Membatasi pencarian episode hanya di Main Content (agar tidak mengambil random widget dari Sidebar)
+        val mainContent = document.selectFirst("div.nk-main-content, div#nk-content") ?: document
+        val episodeElements = mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card")
+
+        var episodes = episodeElements.mapNotNull {
+            if (it.hasClass("nk-post-card")) {
+                val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
+                newEpisode(aTag.attr("href")) { this.name = aTag.text().trim() }
+            } else {
+                val name = it.text().trim()
+                val link = fixUrlNull(it.attr("href").takeIf { href -> href.isNotBlank() } ?: it.selectFirst("a")?.attr("href"))
+                if (link != null) newEpisode(link) { this.name = name } else null
+            }
+        }.distinctBy { it.url }
+
+        // Mencegah Crash akibat Empty Episodes
+        if (episodes.isEmpty()) {
+            episodes = listOf(newEpisode(url) { this.name = title })
+        }
 
         return newAnimeLoadResponse(title, url, TvType.NSFW) {
             engName = title
