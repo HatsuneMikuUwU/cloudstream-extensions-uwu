@@ -28,7 +28,7 @@ class LayarKacaProvider : MainAPI() {
         "$mainUrl/rating/page/" to "Movies Based on IMDb Rating",
         "$mainUrl/most-commented/page/" to "Films With the Most Comments",
         "$seriesUrl/latest-series/page/" to "Latest Series",
-        "$seriesUrl/series/asian/page/" to "Latest Asian Movies",
+        "$seriesUrl/series/asian/page/" to "Latest Asian Series",
         "$mainUrl/latest/page/" to "Latest Uploaded Movies",
     )
 
