@@ -27,19 +27,20 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
         val cookieManager = CookieManager.getInstance()
 
-        var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
-        var userAgent = originalRequest.header("User-Agent") ?: ""
+        val standardUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 
+        var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
         var needsRefresh = false
         var initialResponse: Response? = null
 
         if (currentCookies.contains(targetCookie)) {
             val requestBuilder = originalRequest.newBuilder()
+                .header("User-Agent", standardUserAgent)
                 .header("Cookie", currentCookies)
 
             initialResponse = chain.proceed(requestBuilder.build())
 
-            if (initialResponse.code == 403 || initialResponse.code == 503) {
+            if (initialResponse.code in listOf(403, 503, 202)) {
                 needsRefresh = true
                 initialResponse.close()
             } else {
@@ -54,6 +55,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
             if (context != null) {
                 val handler = Handler(Looper.getMainLooper())
                 var webView: WebView? = null
+                var isResolved = false
 
                 handler.post {
                     try {
@@ -63,13 +65,33 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                         newWebView.settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
-                            userAgentString = userAgent.ifBlank { userAgentString }
+                            databaseEnabled = true
+                            useWideViewPort = true
+                            loadWithOverviewMode = true
+                            userAgentString = standardUserAgent
                         }
-                        userAgent = newWebView.settings.userAgentString ?: userAgent
 
-                        newWebView.webViewClient = WebViewClient()
+                        newWebView.webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                super.onPageFinished(view, url)
+                                val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
+                                if (checkCookies.contains(targetCookie) && checkCookies.contains("sl_jwt_sign")) {
+                                    isResolved = true
+                                }
+                            }
+                        }
 
-                        cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
+                        val safeLineCookies = listOf(
+                            "sl-challenge-jwt", 
+                            "sl-challenge-server", 
+                            "sl-session", 
+                            "sl_jwt_session", 
+                            "sl_jwt_sign",
+                            "comentario_commenter_session"
+                        )
+                        safeLineCookies.forEach { cookie ->
+                            cookieManager.setCookie(domainUrl, "$cookie=; Max-Age=0")
+                        }
                         cookieManager.flush()
 
                         newWebView.loadUrl(url)
@@ -79,12 +101,12 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 15
+                val maxAttempts = 20
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
 
-                    if (checkCookies.contains(targetCookie)) {
+                    if ((checkCookies.contains(targetCookie) && checkCookies.contains("sl_jwt_sign")) || isResolved) {
                         cookieManager.flush()
                         break
                     }
@@ -102,14 +124,19 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
             }
 
             currentCookies = cookieManager.getCookie(domainUrl) ?: ""
+            
             val newRequestBuilder = originalRequest.newBuilder()
-                .header("User-Agent", userAgent)
+                .header("User-Agent", standardUserAgent)
                 .header("Cookie", currentCookies)
 
             return chain.proceed(newRequestBuilder.build())
         }
 
-        return initialResponse ?: chain.proceed(originalRequest)
+        val finalRequest = originalRequest.newBuilder()
+            .header("User-Agent", standardUserAgent)
+            .build()
+            
+        return initialResponse ?: chain.proceed(finalRequest)
     }
 }
 
