@@ -189,7 +189,7 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Latest Update",
+        "$mainUrl/" to "Episode Terbaru",
         "$mainUrl/category/hentai/" to "Hentai",
         "$mainUrl/category/jav/" to "Jav",
         "$mainUrl/category/3d-hentai/" to "3D Hentai",
@@ -634,22 +634,31 @@ class Nekopoi : MainAPI() {
     }
 
     // Parsing kualitas dari catatan di halaman, contoh:
-    // "Gunakan 'Stream 2' Untuk Resolusi '720P'"
-    // "Stream 1 untuk 360P/480P"
-    // Mengambil kualitas tertinggi yang disebut bersama "Stream N"
+    // "Gunakan 'Stream 1' untuk 360P/480P, Gunakan 'Stream 2' untuk 720P"
+    // PENTING: semua info bisa ada dalam SATU elemen <h3>/<p>, jadi harus
+    // ekstrak segmen teks antara "stream N" dan "stream N+1" agar tidak
+    // salah ambil kualitas stream lain (mis. Stream 1 dapat 720p milik Stream 2)
     private fun parseStreamQuality(doc: org.jsoup.nodes.Document, streamNum: Int): Int {
         val keyword = "stream $streamNum"
-        val noteEl = doc.select("p, h3, h4, div.entry-content *").firstOrNull { el ->
-            val t = el.text().lowercase()
-            t.contains(keyword) && Regex("""\d{3,4}[pP]""").containsMatchIn(el.text())
+        val nextKeyword = "stream ${streamNum + 1}"
+
+        val noteEl = doc.select("p, h3, h4").firstOrNull { el ->
+            el.text().lowercase().contains(keyword)
+                && Regex("""\d{3,4}[pP]""").containsMatchIn(el.text())
         } ?: return Qualities.Unknown.value
 
-        val qualities = Regex("""(\d{3,4})[pP]""").findAll(noteEl.text())
+        // Ambil segmen teks dari "stream N" sampai sebelum "stream N+1" (atau akhir string)
+        val fullText = noteEl.text().lowercase()
+        val startIdx = fullText.indexOf(keyword).takeIf { it >= 0 } ?: return Qualities.Unknown.value
+        val endIdx = fullText.indexOf(nextKeyword, startIdx).takeIf { it > startIdx } ?: fullText.length
+        val segment = noteEl.text().substring(startIdx, endIdx)
+
+        val qualities = Regex("""(\d{3,4})[pP]""").findAll(segment)
             .mapNotNull { it.groupValues[1].toIntOrNull() }
             .filter { it in listOf(360, 480, 720, 1080, 1440, 2160) }
             .toList()
 
-        // Ambil kualitas tertinggi yang disebut untuk server ini
+        // Untuk stream yang punya range (mis. "360P/480P"), ambil yang tertinggi
         val best = qualities.maxOrNull() ?: return Qualities.Unknown.value
         return getQualityFromName("${best}p")
     }
