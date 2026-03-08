@@ -114,7 +114,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 25 
+                val maxAttempts = 15
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
@@ -252,6 +252,21 @@ class Nekopoi : MainAPI() {
             }
         }
 
+        val seriesLink = this.selectFirst("a.nk-series-link")
+        if (seriesLink != null) {
+            val title = seriesLink.selectFirst("div.title")?.text()?.trim()
+                ?: seriesLink.text().trim().takeIf { it.isNotBlank() }
+                ?: return null
+            val href = getProperAnimeLink(seriesLink.attr("href").takeIf { it.isNotBlank() } ?: return null)
+            val bgStyle = seriesLink.selectFirst("div.nk-hentai-thumb, div.nk-thumb-crop, div.nk-grid-thumb")?.attr("style")
+            val posterUrl = Regex("""url\(['"]?([^'"()]+)['"]?\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
+            val epNum = Regex("Episode\s?(\d+)").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            return newAnimeSearchResponse(title, href, TvType.NSFW) {
+                this.posterUrl = posterUrl
+                addSub(epNum)
+            }
+        }
+
         val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title a, h2 a, h3 a, .entry-title a")
             ?: return null
         val title = titleElement.text().trim().takeIf { it.isNotBlank() } ?: return null
@@ -315,7 +330,19 @@ class Nekopoi : MainAPI() {
         val duration = table.select("li:contains(Durasi), p:contains(Duration)").text().substringAfterLast(":")
             .filter { it.isDigit() }.toIntOrNull()
             
-        val description = table.select("p:contains(Sinopsis) + p").text().takeIf { it.isNotBlank() } 
+        val description =
+            document.selectFirst("div.konten p:contains(Sinopsis) + p, div.listinfo p:contains(Sinopsis) + p")?.text()?.takeIf { it.isNotBlank() }
+            ?: document.select("div.konten > p:not(.separator)")
+                .firstOrNull { p ->
+                    val t = p.text().trim()
+                    t.isNotBlank()
+                        && !p.selectFirst("b") .let { it != null && it.text().length > 2 }
+                        && !t.startsWith("Genre") && !t.startsWith("Producer")
+                        && !t.startsWith("Duration") && !t.startsWith("Durasi")
+                        && !t.startsWith("Size") && !t.startsWith("Catatan")
+                }?.text()
+            ?: document.selectFirst("meta[property=og:description]")?.attr("content")
+                ?.removePrefix("Sinopsis ")?.trim()?.takeIf { it.isNotBlank() }
             ?: document.selectFirst("span.desc p")?.text()
 
         val mainContent = document.selectFirst("div.nk-main-content, div#nk-content, div#nk-wrap") ?: document
@@ -334,7 +361,13 @@ class Nekopoi : MainAPI() {
             mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
                 if (it.hasClass("nk-post-card")) {
                     val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
-                    newEpisode(aTag.attr("href")) { this.name = aTag.text().trim() }
+                    val rawName = aTag.text().trim()
+                        .removePrefix("[NEW Release] ")
+                        .removePrefix("[NEW Release]")
+                        .replace(Regex("""(?i)^\[(?:NEW Release|3D|L2D|VR)\]\s*"""), "")
+                        .replace(Regex("""(?i)\s+Subtitle Indonesia$"""), "")
+                        .trim()
+                    newEpisode(aTag.attr("href")) { this.name = rawName }
                 } else {
                     val name = it.text().trim()
                     val link = fixUrlNull(it.attr("href").takeIf { h -> h.isNotBlank() } ?: it.selectFirst("a")?.attr("href"))
@@ -371,12 +404,33 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
-                res.select("div.nk-player-frame iframe, div#show-stream iframe, div.nk-player iframe, div.player-embed iframe, iframe[src*=http]").amap { iframe ->
-                    val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
-                    withTimeoutOrNull(10_000) {
-                        val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
-                        if (!loaded) {
-                            extractCustomHost(src, subtitleCallback, callback)
+                val tabs = res.select("div#nk-player-tabs a").map { it.text().trim() }
+
+                res.select("div.nk-player-frame").forEachIndexed { index, frame ->
+                    val tabLabel = tabs.getOrNull(index) ?: "Server ${index + 1}"
+
+                    val quality = Regex("""(\d{3,4})[pP]""").find(tabLabel)
+                        ?.groupValues?.get(1)?.let { getQualityFromName("${it}p") }
+                        ?: parseStreamQuality(res, index + 1)
+
+                    frame.select("iframe").amap { iframe ->
+                        val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
+                        withTimeoutOrNull(10_000) {
+                            val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback) { link ->
+                                runBlocking {
+                                    callback.invoke(
+                                        newExtractorLink(link.name, link.name, link.url, link.type) {
+                                            referer = link.referer
+                                            this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                                            headers = link.headers
+                                            extractorData = link.extractorData
+                                        }
+                                    )
+                                }
+                            }
+                            if (!loaded) {
+                                extractCustomHost(src, subtitleCallback, callback, quality)
+                            }
                         }
                     }
                 }
@@ -430,7 +484,8 @@ class Nekopoi : MainAPI() {
     private suspend fun extractCustomHost(
         iframeSrc: String,
         subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
+        callback: (ExtractorLink) -> Unit,
+        quality: Int = Qualities.Unknown.value
     ) {
         try {
             val html = fetch.get(
@@ -459,7 +514,7 @@ class Nekopoi : MainAPI() {
                         if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                     ) {
                         referer = iframeSrc
-                        quality = Qualities.Unknown.value
+                        this.quality = if (isM3u8) Qualities.Unknown.value else quality
                         headers = mapOf("Referer" to iframeSrc)
                     }
                 )
@@ -544,6 +599,22 @@ class Nekopoi : MainAPI() {
         if (url.startsWith("http")) return url
         if (url.isEmpty()) return ""
         return if (url.startsWith("//")) "https:$url" else if (url.startsWith('/')) "$domain$url" else "$domain/$url"
+    }
+
+    private fun parseStreamQuality(doc: org.jsoup.nodes.Document, streamNum: Int): Int {
+        val keyword = "stream $streamNum"
+        val noteEl = doc.select("p, h3, h4, div.entry-content *").firstOrNull { el ->
+            val t = el.text().lowercase()
+            t.contains(keyword) && Regex("""\d{3,4}[pP]""").containsMatchIn(el.text())
+        } ?: return Qualities.Unknown.value
+
+        val qualities = Regex("""(\d{3,4})[pP]""").findAll(noteEl.text())
+            .mapNotNull { it.groupValues[1].toIntOrNull() }
+            .filter { it in listOf(360, 480, 720, 1080, 1440, 2160) }
+            .toList()
+
+        val best = qualities.maxOrNull() ?: return Qualities.Unknown.value
+        return getQualityFromName("${best}p")
     }
 
     private fun getIndexQuality(str: String?): Int {
