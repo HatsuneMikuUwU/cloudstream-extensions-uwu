@@ -4,6 +4,9 @@ import com.lagradost.cloudstream3.* import com.lagradost.cloudstream3.LoadRespon
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore  
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer  
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.jsoup.nodes.Element
 import java.net.URI
 import org.jsoup.Jsoup
