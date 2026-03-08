@@ -27,12 +27,11 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
-
+        
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
 
-        val standardUserAgent =
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+        val standardUserAgent = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
         var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
         var needsRefresh = false
@@ -81,19 +80,15 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                             cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                             userAgentString = standardUserAgent
                         }
-
+                        
                         newWebView.clearCache(true)
                         newWebView.clearHistory()
-
+                        
                         newWebView.webChromeClient = WebChromeClient()
                         newWebView.webViewClient = object : WebViewClient() {
                             @SuppressLint("WebViewClientOnReceivedSslError")
-                            override fun onReceivedSslError(
-                                view: WebView?,
-                                handler: SslErrorHandler?,
-                                error: SslError?
-                            ) {
-                                handler?.proceed()
+                            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                                handler?.proceed() 
                             }
 
                             override fun onPageFinished(view: WebView?, url: String?) {
@@ -105,14 +100,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                             }
                         }
 
-                        val safeLineCookies = listOf(
-                            "sl-challenge-jwt",
-                            "sl-challenge-server",
-                            "sl-session",
-                            "sl_jwt_session",
-                            "sl_jwt_sign",
-                            "comentario_commenter_session"
-                        )
+                        val safeLineCookies = listOf("sl-challenge-jwt", "sl-challenge-server", "sl-session", "sl_jwt_session", "sl_jwt_sign", "comentario_commenter_session")
                         safeLineCookies.forEach { cookie ->
                             cookieManager.setCookie(domainUrl, "$cookie=; Max-Age=0")
                         }
@@ -125,7 +113,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 15
+                val maxAttempts = 25 
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
@@ -148,7 +136,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
             }
 
             currentCookies = cookieManager.getCookie(domainUrl) ?: ""
-
+            
             val newRequestBuilder = originalRequest.newBuilder()
                 .removeHeader("User-Agent")
                 .addHeader("User-Agent", standardUserAgent)
@@ -162,7 +150,7 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
             .removeHeader("User-Agent")
             .addHeader("User-Agent", standardUserAgent)
             .build()
-
+            
         return initialResponse ?: chain.proceed(finalRequest)
     }
 }
@@ -172,20 +160,18 @@ class Nekopoi : MainAPI() {
     override var name = "Nekopoi"
     override val hasMainPage = true
     override var lang = "id"
-
-    private val jwtInterceptor = JwtSessionInterceptor("sl_jwt_session")
-    private val fetch by lazy {
-        Session(app.baseClient.newBuilder().addInterceptor(jwtInterceptor).build())
+    
+    private val fetch by lazy { 
+        Session(app.baseClient.newBuilder().addInterceptor(JwtSessionInterceptor()).build()) 
     }
-
+    
     override val supportedTypes = setOf(
         TvType.NSFW,
     )
 
     companion object {
-        val interceptor = JwtSessionInterceptor("sl_jwt_session")
-        val session = Session(Requests().baseClient.newBuilder().addInterceptor(interceptor).build())
-
+        val session = Session(Requests().baseClient.newBuilder().addInterceptor(JwtSessionInterceptor()).build())
+        
         val mirrorBlackList = arrayOf(
             "MegaupNet",
             "DropApk",
@@ -208,17 +194,28 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/category/hentai/" to "Hentai",
-        "$mainUrl/category/jav/" to "Jav",
-        "$mainUrl/category/3d-hentai/" to "3D Hentai",
-        "$mainUrl/category/jav-cosplay/" to "Jav Cosplay",
+        "$mainUrl/page/" to "Episode Terbaru",
+        "$mainUrl/category/hentai/page/" to "Hentai",
+        "$mainUrl/category/jav/page/" to "Jav",
+        "$mainUrl/category/3d-hentai/page/" to "3D Hentai",
+        "$mainUrl/category/jav-cosplay/page/" to "Jav Cosplay",
     )
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = fetch.get("${request.data}/page/$page").document
-        val home = document.select("div.result ul li").mapNotNull {
+    override suspend fun getMainPage(
+        page: Int,
+        request: MainPageRequest
+    ): HomePageResponse {
+        val url = if (request.name == "Episode Terbaru") {
+            if (page == 1) mainUrl else "${mainUrl}/page/$page/"
+        } else {
+            "${request.data}$page"
+        }
+
+        val document = fetch.get(url).document
+        val home = document.select("div.nk-post-card, div.nk-hentai-grid ul li, div.result ul li").mapNotNull {
             it.toSearchResult()
         }
+        
         return newHomePageResponse(
             list = HomePageList(
                 name = request.name,
@@ -230,20 +227,32 @@ class Nekopoi : MainAPI() {
     }
 
     private fun getProperAnimeLink(uri: String): String {
-        return if (uri.contains("-episode-")) {
+        return if (uri.contains("-episode-") && !uri.contains("/hentai/")) {
             val title = uri.substringAfter("$mainUrl/").substringBefore("-episode-")
                 .removePrefix("new-release-").removePrefix("uncensored-")
-            "$mainUrl/hentai/$title"
+            "$mainUrl/hentai/$title/"
         } else {
             uri
         }
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        val title = this.selectFirst("h2 a")?.text()?.trim() ?: return null
-        val href = getProperAnimeLink(this.selectFirst("a")?.attr("href") ?: return null)
-        val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
-        val epNum = this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }?.toIntOrNull()
+        val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title, h2 a") ?: return null
+        val title = titleElement.text().trim()
+        val rawHref = titleElement.attr("href").takeIf { it.isNotBlank() } ?: this.selectFirst("a")?.attr("href") ?: return null
+        val href = getProperAnimeLink(rawHref)
+        
+        var posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+        if (posterUrl == null) {
+            val bgStyle = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb")?.attr("style")
+            posterUrl = Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
+        }
+
+        val epNumStr = Regex("Episode\\s?(\\d+)").find(title)?.groupValues?.getOrNull(1) 
+            ?: this.selectFirst("i.dot")?.text()?.filter { it.isDigit() }
+            
+        val epNum = epNumStr?.toIntOrNull()
+        
         return newAnimeSearchResponse(title, href, TvType.NSFW) {
             this.posterUrl = posterUrl
             addSub(epNum)
@@ -251,22 +260,29 @@ class Nekopoi : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        return fetch.get("$mainUrl/search/$query").document.select("div.result ul li")
-            .mapNotNull {
-                it.toSearchResult()
-            }
+        return fetch.get("$mainUrl/?s=$query&post_type=anime").document
+            .select("div.nk-post-card, div.nk-hentai-grid ul li, div.result ul li")
+            .mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
         val document = fetch.get(url).document
 
-        val title = document.selectFirst("span.desc b, div.eroinfo h1")?.text()?.trim() ?: ""
-        val poster = fixUrlNull(document.selectFirst("div.imgdesc img, div.thm img")?.attr("src"))
+        val title = document.selectFirst("div.nk-post-header h1, div.nk-series-header h1, span.desc b, div.eroinfo h1")?.text()?.trim() 
+            ?: document.selectFirst("title")?.text()?.substringBefore(" – ")?.trim() 
+            ?: ""
+
+        var poster = fixUrlNull(document.selectFirst("div.nk-featured-img img, div.imgdesc img, div.thm img")?.attr("src"))
+        if (poster == null) {
+            val bgStyle = document.selectFirst("div.nk-thumb-crop, div.nk-post-thumb, div.nk-series-thumb")?.attr("style")
+            poster = fixUrlNull(Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1))
+        }
+
         val table = document.select("div.listinfo ul, div.konten")
         
         val tags = table.select("li:contains(Genres) a").map { it.text() }.takeIf { it.isNotEmpty() }
             ?: table.select("p:contains(Genre)").text().substringAfter(":").split(",")
-                .map { it.trim() }
+                .map { it.trim() }.filter { it.isNotBlank() }
                 
         val year = document.selectFirst("li:contains(Tayang)")?.text()?.substringAfterLast(",")
             ?.filter { it.isDigit() }?.toIntOrNull()
@@ -275,16 +291,29 @@ class Nekopoi : MainAPI() {
             document.selectFirst("li:contains(Status)")?.text()?.substringAfter(":")?.trim()
         )
         
-        val duration = document.selectFirst("li:contains(Durasi)")?.text()?.substringAfterLast(":")
-            ?.filter { it.isDigit() }?.toIntOrNull()
+        val duration = table.select("li:contains(Durasi), p:contains(Duration)").text().substringAfterLast(":")
+            .filter { it.isDigit() }.toIntOrNull()
             
-        val description = document.selectFirst("span.desc p")?.text()
+        val description = table.select("p:contains(Sinopsis) + p").text().takeIf { it.isNotBlank() } 
+            ?: document.selectFirst("span.desc p")?.text()
 
-        val episodes = document.select("div.episodelist ul li").mapNotNull {
-            val name = it.selectFirst("a")?.text()
-            val link = fixUrlNull(it.selectFirst("a")?.attr("href")) ?: return@mapNotNull null
-            newEpisode(link) { this.name = name }
-        }.takeIf { it.isNotEmpty() } ?: listOf(newEpisode(url) { this.name = title })
+        val mainContent = document.selectFirst("div.nk-main-content, div#nk-content") ?: document
+        val episodeElements = mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card")
+
+        var episodes = episodeElements.mapNotNull {
+            if (it.hasClass("nk-post-card")) {
+                val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
+                newEpisode(aTag.attr("href")) { this.name = aTag.text().trim() }
+            } else {
+                val name = it.text().trim()
+                val link = fixUrlNull(it.attr("href").takeIf { href -> href.isNotBlank() } ?: it.selectFirst("a")?.attr("href"))
+                if (link != null) newEpisode(link) { this.name = name } else null
+            }
+        }.distinctBy { it.url }
+
+        if (episodes.isEmpty()) {
+            episodes = listOf(newEpisode(url) { this.name = title })
+        }
 
         return newAnimeLoadResponse(title, url, TvType.NSFW) {
             engName = title
@@ -304,50 +333,55 @@ class Nekopoi : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+
         val res = fetch.get(data).document
 
         runAllAsync(
             {
-                res.select("div#show-stream iframe").amap { iframe ->
+                res.select("div.nk-player-frame iframe, div#show-stream iframe").amap { iframe ->
                     loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
                 }
             },
             {
-                res.select("div.boxdownload div.liner").map { ele ->
-                    val quality = getIndexQuality(ele.select("div.name").text())
-                    val ouoLink = ele.selectFirst("a:contains(ouo)")?.attr("href")
-                    quality to ouoLink
-                }.filter { it.first != Qualities.P360.value }.amap { (quality, ouoLink) ->
-                    val bypassedAds = bypassMirrored(bypassOuo(ouoLink))
+                res.select("div.nk-download-row, div.boxdownload div.liner").mapNotNull { ele ->
+                    val qualityStr = ele.selectFirst("div.nk-download-name, div.name")?.text()
+                    val quality = getIndexQuality(qualityStr)
                     
-                    bypassedAds.amap { adsLink ->
-                        val embedUrl = fixEmbed(adsLink) ?: return@amap
+                    val link = ele.select("a").firstOrNull { it.text().contains("Mirror", true) }?.attr("href")
+                        ?: ele.selectFirst("a[href*=ouo]")?.attr("href")
                         
-                        loadExtractor(
-                            embedUrl,
-                            "$mainUrl/",
-                            subtitleCallback,
-                        ) { link ->
-                            runBlocking {
-                                callback.invoke(
-                                    newExtractorLink(
-                                        link.name,
-                                        link.name,
-                                        link.url,
-                                        link.type
-                                    ) {
-                                        referer = link.referer
-                                        this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
-                                        headers = link.headers
-                                        extractorData = link.extractorData
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    if (link != null) quality to link else null
+                }.filter { 
+                    it.first != Qualities.P360.value 
+                }.map { qualityAndLink ->
+                    val bypassedAds = bypassMirrored(bypassOuo(qualityAndLink.second))
+                    bypassedAds.amap(ads@{ adsLink ->
+                                        loadExtractor(
+                                            fixEmbed(adsLink) ?: return@ads,
+                                            "$mainUrl/",
+                                            subtitleCallback,
+                                        ) { link ->
+                                            runBlocking {
+                                                callback.invoke(
+                                                    newExtractorLink(
+                                                        link.name,
+                                                        link.name,
+                                                        link.url,
+                                                        link.type
+                                                    ) {
+                                                        referer = link.referer
+                                                        quality = if (link.type == ExtractorLinkType.M3U8) link.quality else qualityAndLink.first
+                                                        headers = link.headers
+                                                        extractorData = link.extractorData
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    })
                 }
             }
         )
+
         return true
     }
 
@@ -368,27 +402,26 @@ class Nekopoi : MainAPI() {
 
     private suspend fun bypassOuo(url: String?): String? {
         var res = session.get(url ?: return null)
-        
-        for (i in 1..2) {
-            if (res.headers["location"] != null) break
-            val document = res.document
-            val nextUrl = document.select("form").attr("action")
-            val data = document.select("form input").mapNotNull {
-                it.attr("name") to it.attr("value")
-            }.toMap().toMutableMap()
-            
-            val captchaKey = document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
-                .attr("src").substringAfter("render=")
-                
-            val token = APIHolder.getCaptchaToken(url, captchaKey)
-            data["x-token"] = token ?: ""
-            
-            res = session.post(
-                nextUrl,
-                data = data,
-                headers = mapOf("content-type" to "application/x-www-form-urlencoded"),
-                allowRedirects = false
-            )
+        run lit@{
+            (1..2).forEach { _ ->
+                if (res.headers["location"] != null) return@lit
+                val document = res.document
+                val nextUrl = document.select("form").attr("action")
+                val data = document.select("form input").mapNotNull {
+                    it.attr("name") to it.attr("value")
+                }.toMap().toMutableMap()
+                val captchaKey =
+                    document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
+                        .attr("src").substringAfter("render=")
+                val token = APIHolder.getCaptchaToken(url, captchaKey)
+                data["x-token"] = token ?: ""
+                res = session.post(
+                    nextUrl,
+                    data = data,
+                    headers = mapOf("content-type" to "application/x-www-form-urlencoded"),
+                    allowRedirects = false
+                )
+            }
         }
 
         return res.headers["location"]
@@ -399,25 +432,30 @@ class Nekopoi : MainAPI() {
             ?.substringAfter("\"GET\", \"")?.substringBefore("\"")
     }
 
-    private suspend fun bypassMirrored(url: String?): List<String> {
+    private suspend fun bypassMirrored(url: String?): List<String?> {
         val request = session.get(url ?: return emptyList())
         delay(2000)
-        
         val mirrorUrl = request.selectMirror() ?: run {
             val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
             app.get(nextUrl).selectMirror()
         }
-        
-        return session.get(fixUrl(mirrorUrl ?: return emptyList(), mirroredHost))
-            .document.select("table.hoverable tbody tr")
-            .filter { mirror ->
-                !mirrorIsBlackList(mirror.selectFirst("img")?.attr("alt"))
-            }.amap {
+        return session.get(
+                fixUrl(
+                    mirrorUrl ?: return emptyList(),
+                    mirroredHost
+                )
+            ).document.select("table.hoverable tbody tr")
+                .filter { mirror ->
+                    !mirrorIsBlackList(mirror.selectFirst("img")?.attr("alt"))
+                }.amap {
                 val fileLink = it.selectFirst("a")?.attr("href")
                 session.get(
-                    fixUrl(fileLink ?: return@amap null, mirroredHost)
+                    fixUrl(
+                        fileLink ?: return@amap null,
+                        mirroredHost
+                    )
                 ).document.selectFirst("div.code_wrap code")?.text()
-            }.filterNotNull()
+            }
     }
 
     private fun mirrorIsBlackList(host: String?): Boolean {
@@ -425,18 +463,27 @@ class Nekopoi : MainAPI() {
     }
 
     private fun fixUrl(url: String, domain: String): String {
-        if (url.startsWith("http")) return url
-        if (url.isEmpty()) return ""
+        if (url.startsWith("http")) {
+            return url
+        }
+        if (url.isEmpty()) {
+            return ""
+        }
 
-        return if (url.startsWith("//")) {
-            "https:$url"
+        val startsWithNoHttp = url.startsWith("//")
+        if (startsWithNoHttp) {
+            return "https:$url"
         } else {
-            if (url.startsWith('/')) domain + url else "$domain/$url"
+            if (url.startsWith('/')) {
+                return domain + url
+            }
+            return "$domain/$url"
         }
     }
 
     private fun getIndexQuality(str: String?): Int {
-        return when (val quality = Regex("""(?i)\[(\d+[pk])]""").find(str ?: "")?.groupValues?.getOrNull(1)?.lowercase()) {
+        return when (val quality =
+            Regex("""(?i)\[(\d+[pk])]""").find(str ?: "")?.groupValues?.getOrNull(1)?.lowercase()) {
             "2k" -> Qualities.P1440.value
             else -> getQualityFromName(quality)
         }
