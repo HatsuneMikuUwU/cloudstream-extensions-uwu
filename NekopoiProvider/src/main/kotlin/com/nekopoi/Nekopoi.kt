@@ -14,7 +14,6 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.Session
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -522,7 +521,6 @@ class Nekopoi : MainAPI() {
 
     private suspend fun bypassMirrored(url: String?): List<String?> {
         val request = session.get(url ?: return emptyList())
-        delay(1000)
         val mirrorUrl = request.selectMirror() ?: run {
             val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
             app.get(nextUrl).selectMirror()
