@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.*
@@ -23,11 +24,10 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
-
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
         val cookieManager = CookieManager.getInstance()
 
-        val standardUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        val standardUserAgent = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
         var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
         var needsRefresh = false
@@ -35,8 +35,10 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
 
         if (currentCookies.contains(targetCookie)) {
             val requestBuilder = originalRequest.newBuilder()
-                .header("User-Agent", standardUserAgent)
-                .header("Cookie", currentCookies)
+                .removeHeader("User-Agent")
+                .addHeader("User-Agent", standardUserAgent)
+                .removeHeader("Cookie")
+                .addHeader("Cookie", currentCookies)
 
             initialResponse = chain.proceed(requestBuilder.build())
 
@@ -70,29 +72,18 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                             loadWithOverviewMode = true
                             userAgentString = standardUserAgent
                         }
-
+                        
+                        newWebView.webChromeClient = WebChromeClient()
+                        
                         newWebView.webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
-                                if (checkCookies.contains(targetCookie) && checkCookies.contains("sl_jwt_sign")) {
+                                if (checkCookies.contains(targetCookie)) {
                                     isResolved = true
                                 }
                             }
                         }
-
-                        val safeLineCookies = listOf(
-                            "sl-challenge-jwt", 
-                            "sl-challenge-server", 
-                            "sl-session", 
-                            "sl_jwt_session", 
-                            "sl_jwt_sign",
-                            "comentario_commenter_session"
-                        )
-                        safeLineCookies.forEach { cookie ->
-                            cookieManager.setCookie(domainUrl, "$cookie=; Max-Age=0")
-                        }
-                        cookieManager.flush()
 
                         newWebView.loadUrl(url)
                     } catch (e: Exception) {
@@ -101,12 +92,12 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
                 }
 
                 var attempts = 0
-                val maxAttempts = 20
+                val maxAttempts = 15
                 while (attempts < maxAttempts) {
                     Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
 
-                    if ((checkCookies.contains(targetCookie) && checkCookies.contains("sl_jwt_sign")) || isResolved) {
+                    if (checkCookies.contains(targetCookie) || isResolved) {
                         cookieManager.flush()
                         break
                     }
@@ -124,16 +115,18 @@ class JwtSessionInterceptor(private val targetCookie: String = "sl_jwt_session")
             }
 
             currentCookies = cookieManager.getCookie(domainUrl) ?: ""
-            
             val newRequestBuilder = originalRequest.newBuilder()
-                .header("User-Agent", standardUserAgent)
-                .header("Cookie", currentCookies)
+                .removeHeader("User-Agent")
+                .addHeader("User-Agent", standardUserAgent)
+                .removeHeader("Cookie")
+                .addHeader("Cookie", currentCookies)
 
             return chain.proceed(newRequestBuilder.build())
         }
 
         val finalRequest = originalRequest.newBuilder()
-            .header("User-Agent", standardUserAgent)
+            .removeHeader("User-Agent")
+            .addHeader("User-Agent", standardUserAgent)
             .build()
             
         return initialResponse ?: chain.proceed(finalRequest)
@@ -154,6 +147,8 @@ class Nekopoi : MainAPI() {
     override val supportedTypes = setOf(
         TvType.NSFW,
     )
+    
+    override val vpnStatus = VPNStatus.MightBeNeeded
 
     companion object {
         val interceptor = JwtSessionInterceptor("sl_jwt_session")
