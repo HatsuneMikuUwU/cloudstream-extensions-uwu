@@ -237,11 +237,10 @@ class Nekopoi : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        // Handle: <a class="nk-search-item" href="..."><div class="nk-search-thumb" style="..."><div class="nk-search-info"><h2>Title</h2>...
+        // Handle category pages: <a class="nk-search-item" href="..."><h2>Title</h2>
         val searchItem = this.selectFirst("a.nk-search-item")
         if (searchItem != null) {
-            val title = searchItem.selectFirst("h2, h3")?.text()?.trim()
-                ?: return null
+            val title = searchItem.selectFirst("h2, h3")?.text()?.trim() ?: return null
             val rawHref = searchItem.attr("href").takeIf { it.isNotBlank() } ?: return null
             val href = getProperAnimeLink(rawHref)
             val bgStyle = searchItem.selectFirst("div.nk-search-thumb")?.attr("style")
@@ -253,7 +252,7 @@ class Nekopoi : MainAPI() {
             }
         }
 
-        // Handle: nk-post-card and other standard layouts
+        // Handle standard layouts: nk-post-card, etc.
         val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title a, h2 a, h3 a, .entry-title a")
             ?: return null
         val title = titleElement.text().trim().takeIf { it.isNotBlank() } ?: return null
@@ -320,16 +319,30 @@ class Nekopoi : MainAPI() {
         val description = table.select("p:contains(Sinopsis) + p").text().takeIf { it.isNotBlank() } 
             ?: document.selectFirst("span.desc p")?.text()
 
-        val mainContent = document.selectFirst("div.nk-main-content, div#nk-content") ?: document
+        val mainContent = document.selectFirst("div.nk-main-content, div#nk-content, div#nk-wrap") ?: document
+
+        // Priority 1: nk-episode-grid (new layout) → <a class="nk-episode-card" href="...">
+        val episodeGridItems = mainContent.select("div.nk-episode-grid ul li a.nk-episode-card")
         
-        val rawEpisodes = mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
-            if (it.hasClass("nk-post-card")) {
-                val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
-                newEpisode(aTag.attr("href")) { this.name = aTag.text().trim() }
-            } else {
-                val name = it.text().trim()
-                val link = fixUrlNull(it.attr("href").takeIf { h -> h.isNotBlank() } ?: it.selectFirst("a")?.attr("href"))
-                if (link != null) newEpisode(link) { this.name = name } else null
+        val rawEpisodes = if (episodeGridItems.isNotEmpty()) {
+            episodeGridItems.mapNotNull { a ->
+                val link = fixUrlNull(a.attr("href").takeIf { it.isNotBlank() }) ?: return@mapNotNull null
+                val name = a.selectFirst("span.nk-episode-card-title")?.text()?.trim()
+                    ?: a.selectFirst("span.nk-episode-badge")?.text()?.trim()
+                    ?: a.text().trim()
+                newEpisode(link) { this.name = name }
+            }
+        } else {
+            // Fallback: old layouts
+            mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
+                if (it.hasClass("nk-post-card")) {
+                    val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
+                    newEpisode(aTag.attr("href")) { this.name = aTag.text().trim() }
+                } else {
+                    val name = it.text().trim()
+                    val link = fixUrlNull(it.attr("href").takeIf { h -> h.isNotBlank() } ?: it.selectFirst("a")?.attr("href"))
+                    if (link != null) newEpisode(link) { this.name = name } else null
+                }
             }
         }
         
