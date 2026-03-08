@@ -14,6 +14,7 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.Session
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -187,7 +188,7 @@ class Nekopoi : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Episode Terbaru",
+        "$mainUrl/" to "New Update",
         "$mainUrl/category/hentai/" to "Hentai",
         "$mainUrl/category/jav/" to "Jav",
         "$mainUrl/category/3d-hentai/" to "3D Hentai",
@@ -263,7 +264,7 @@ class Nekopoi : MainAPI() {
                 ?: this.selectFirst("img")?.attr("src")
         )
         if (posterUrl == null) {
-            val bgStyle = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb, div.nk-post-thumb")?.attr("style")
+            val bgStyle = this.selectFirst("div.nk-thumb-crop, div.nk-hentai-thumb, div.nk-grid-thumb")?.attr("style")
             posterUrl = Regex("""url\(['"]?([^'"()]+)['"]?\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
         }
 
@@ -369,12 +370,10 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
-                // Streaming iframes — try standard extractor first, fallback to custom scraping
                 res.select("div.nk-player-frame iframe, div#show-stream iframe").amap { iframe ->
                     val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
                     val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
                     if (!loaded) {
-                        // Custom extraction for vidara.to, streampoi.com, etc.
                         extractCustomHost(src, subtitleCallback, callback)
                     }
                 }
@@ -391,7 +390,6 @@ class Nekopoi : MainAPI() {
                         if (link != null) quality to link else null
                     }
                     .filter { it.first != Qualities.P360.value }
-                    // FIX 1: .map → .amap supaya semua bypass jalan paralel, bukan antri satu-satu
                     .amap { qualityAndLink ->
                         val bypassedAds = bypassMirrored(bypassOuo(qualityAndLink.second))
                         bypassedAds.amap(ads@{ adsLink ->
@@ -438,12 +436,11 @@ class Nekopoi : MainAPI() {
                 )
             ).text
 
-            // Look for direct m3u8 / mp4 sources in JS
             val videoUrl =
-                Regex("""['"](https?://[^'"]+\.m3u8(?:[^'"]*)?)['"]]""").find(html)?.groupValues?.get(1)
-                ?: Regex("""['"](https?://[^'"]+\.mp4(?:[^'"]*)?)['"]]""").find(html)?.groupValues?.get(1)
-                ?: Regex("""file\s*:\s*['"](https?://[^'"]+)['"]]""").find(html)?.groupValues?.get(1)
-                ?: Regex("""source\s+src=['"](https?://[^'"]+)['"]]""").find(html)?.groupValues?.get(1)
+                Regex("""['"](https?://[^'"]+\.m3u8(?:[^'"]*)?)['"]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""['"](https?://[^'"]+\.mp4(?:[^'"]*)?)['"]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""file\s*:\s*['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""source\s+src=['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)
                 ?: Regex(""""url"\s*:\s*"(https?://[^"]+\.(?:m3u8|mp4)[^"]*)"""").find(html)?.groupValues?.get(1)
 
             if (videoUrl != null) {
@@ -464,8 +461,7 @@ class Nekopoi : MainAPI() {
                 return
             }
 
-            // If no direct URL found, look for nested iframe and recurse once
-            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]]""").find(html)
+            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]""").find(html)
                 ?.groupValues?.get(1)
             if (nestedSrc != null && nestedSrc != iframeSrc) {
                 loadExtractor(nestedSrc, iframeSrc, subtitleCallback, callback)
@@ -495,13 +491,13 @@ class Nekopoi : MainAPI() {
                 if (res.headers["location"] != null) return@lit
                 val document = res.document
                 val nextUrl = document.select("form").attr("action")
-                val data = document.select("form input").mapNotNull {
+                val data = document.select("form input").map {
                     it.attr("name") to it.attr("value")
                 }.toMap().toMutableMap()
                 val captchaKey =
                     document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
                         .attr("src").substringAfter("render=")
-                val token = APIHolder.getCaptchaToken(url, captchaKey)
+                val token = APIHolder.getCaptchaToken(nextUrl, captchaKey)
                 data["x-token"] = token ?: ""
                 res = session.post(
                     nextUrl,
@@ -521,9 +517,10 @@ class Nekopoi : MainAPI() {
 
     private suspend fun bypassMirrored(url: String?): List<String?> {
         val request = session.get(url ?: return emptyList())
+        delay(2000)
         val mirrorUrl = request.selectMirror() ?: run {
             val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
-            app.get(nextUrl).selectMirror()
+            session.get(nextUrl).selectMirror()
         }
         return session.get(fixUrl(mirrorUrl ?: return emptyList(), mirroredHost)).document.select("table.hoverable tbody tr")
                 .filter { mirror ->
