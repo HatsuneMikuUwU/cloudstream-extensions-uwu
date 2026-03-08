@@ -237,7 +237,6 @@ class Nekopoi : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
-        // Handle category pages: <a class="nk-search-item" href="..."><h2>Title</h2>
         val searchItem = this.selectFirst("a.nk-search-item")
         if (searchItem != null) {
             val title = searchItem.selectFirst("h2, h3")?.text()?.trim() ?: return null
@@ -252,7 +251,6 @@ class Nekopoi : MainAPI() {
             }
         }
 
-        // Handle standard layouts: nk-post-card, etc.
         val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title a, h2 a, h3 a, .entry-title a")
             ?: return null
         val title = titleElement.text().trim().takeIf { it.isNotBlank() } ?: return null
@@ -321,9 +319,8 @@ class Nekopoi : MainAPI() {
 
         val mainContent = document.selectFirst("div.nk-main-content, div#nk-content, div#nk-wrap") ?: document
 
-        // Priority 1: nk-episode-grid (new layout) → <a class="nk-episode-card" href="...">
-        val episodeGridItems = mainContent.select("div.nk-episode-grid ul li a.nk-episode-card")
-        
+        val episodeGridItems = document.select("div.nk-episode-grid ul li a.nk-episode-card")
+
         val rawEpisodes = if (episodeGridItems.isNotEmpty()) {
             episodeGridItems.mapNotNull { a ->
                 val link = fixUrlNull(a.attr("href").takeIf { it.isNotBlank() }) ?: return@mapNotNull null
@@ -333,7 +330,6 @@ class Nekopoi : MainAPI() {
                 newEpisode(link) { this.name = name }
             }
         } else {
-            // Fallback: old layouts
             mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
                 if (it.hasClass("nk-post-card")) {
                     val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
@@ -374,51 +370,108 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
+                // Streaming iframes — try standard extractor first, fallback to custom scraping
                 res.select("div.nk-player-frame iframe, div#show-stream iframe").amap { iframe ->
-                    loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
+                    val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
+                    val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback, callback)
+                    if (!loaded) {
+                        // Custom extraction for vidara.to, streampoi.com, etc.
+                        extractCustomHost(src, subtitleCallback, callback)
+                    }
                 }
             },
             {
                 res.select("div.nk-download-row, div.boxdownload div.liner").mapNotNull { ele ->
                     val qualityStr = ele.selectFirst("div.nk-download-name, div.name")?.text()
                     val quality = getIndexQuality(qualityStr)
-                    
+
                     val link = ele.select("a").firstOrNull { it.text().contains("Mirror", true) }?.attr("href")
                         ?: ele.selectFirst("a[href*=ouo]")?.attr("href")
-                        
+
                     if (link != null) quality to link else null
-                }.filter { 
-                    it.first != Qualities.P360.value 
+                }.filter {
+                    it.first != Qualities.P360.value
                 }.map { qualityAndLink ->
                     val bypassedAds = bypassMirrored(bypassOuo(qualityAndLink.second))
                     bypassedAds.amap(ads@{ adsLink ->
-                                        loadExtractor(
-                                            fixEmbed(adsLink) ?: return@ads,
-                                            "$mainUrl/",
-                                            subtitleCallback,
-                                        ) { link ->
-                                            runBlocking {
-                                                callback.invoke(
-                                                    newExtractorLink(
-                                                        link.name,
-                                                        link.name,
-                                                        link.url,
-                                                        link.type
-                                                    ) {
-                                                        referer = link.referer
-                                                        quality = if (link.type == ExtractorLinkType.M3U8) link.quality else qualityAndLink.first
-                                                        headers = link.headers
-                                                        extractorData = link.extractorData
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    })
+                        loadExtractor(
+                            fixEmbed(adsLink) ?: return@ads,
+                            "$mainUrl/",
+                            subtitleCallback,
+                        ) { link ->
+                            runBlocking {
+                                callback.invoke(
+                                    newExtractorLink(
+                                        link.name,
+                                        link.name,
+                                        link.url,
+                                        link.type
+                                    ) {
+                                        referer = link.referer
+                                        quality = if (link.type == ExtractorLinkType.M3U8) link.quality else qualityAndLink.first
+                                        headers = link.headers
+                                        extractorData = link.extractorData
+                                    }
+                                )
+                            }
+                        }
+                    })
                 }
             }
         )
 
         return true
+    }
+
+    private suspend fun extractCustomHost(
+        iframeSrc: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        try {
+            val html = fetch.get(
+                iframeSrc,
+                headers = mapOf(
+                    "Referer" to mainUrl,
+                    "Origin" to mainUrl
+                )
+            ).text
+
+            // Look for direct m3u8 / mp4 sources in JS
+            val videoUrl =
+                Regex("""['"](https?://[^'"]+\.m3u8(?:[^'"]*)?)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""['"](https?://[^'"]+\.mp4(?:[^'"]*)?)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""file\s*:\s*['"](https?://[^'"]+)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex("""source\s+src=['"](https?://[^'"]+)['"]]""").find(html)?.groupValues?.get(1)
+                ?: Regex(""""url"\s*:\s*"(https?://[^"]+\.(?:m3u8|mp4)[^"]*)"""").find(html)?.groupValues?.get(1)
+
+            if (videoUrl != null) {
+                val isM3u8 = videoUrl.contains(".m3u8", ignoreCase = true)
+                val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "Stream" }
+                callback.invoke(
+                    newExtractorLink(
+                        hostName,
+                        hostName,
+                        videoUrl,
+                        if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
+                    ) {
+                        referer = iframeSrc
+                        quality = Qualities.Unknown.value
+                        headers = mapOf("Referer" to iframeSrc)
+                    }
+                )
+                return
+            }
+
+            // If no direct URL found, look for nested iframe and recurse once
+            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]]""").find(html)
+                ?.groupValues?.get(1)
+            if (nestedSrc != null && nestedSrc != iframeSrc) {
+                loadExtractor(nestedSrc, iframeSrc, subtitleCallback, callback)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun fixEmbed(url: String?): String? {
