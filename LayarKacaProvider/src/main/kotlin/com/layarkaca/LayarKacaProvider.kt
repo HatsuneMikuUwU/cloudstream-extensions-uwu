@@ -66,7 +66,7 @@ class LayarKacaProvider : MainAPI() {
         return if (type == TvType.TvSeries) {
             val episode = this.selectFirst("span.episode strong")?.text()?.filter { it.isDigit() }
                 ?.toIntOrNull()
-            newAnimeSearchResponse(title, href, TvType.TvSeries) {
+            newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
                 this.posterUrl = posterUrl
                 this.posterHeaders = posterheaders
                 addSub(episode)
