@@ -69,7 +69,6 @@ class LayarKacaProvider : MainAPI() {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
                 this.posterUrl = posterUrl
                 this.posterHeaders = posterheaders
-                addSub(episode)
             }
         } else {
             val quality = this.select("div.quality").text().trim()
