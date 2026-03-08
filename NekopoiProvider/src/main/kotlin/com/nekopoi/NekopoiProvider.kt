@@ -189,7 +189,6 @@ class NekopoiProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Latest Update",
         "$mainUrl/category/hentai/" to "Hentai",
         "$mainUrl/category/jav/" to "Jav",
         "$mainUrl/category/3d-hentai/" to "3D Hentai",
