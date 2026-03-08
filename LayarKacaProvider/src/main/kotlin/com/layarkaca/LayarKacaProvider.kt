@@ -74,7 +74,7 @@ class LayarKacaProvider : MainAPI() {
             newMovieSearchResponse(title, href, TvType.Movie) {
                 this.posterUrl = posterUrl
                 this.posterHeaders = posterheaders
-                addQuality(quality)
+                quality?.let { addQuality(it) }
             }
         }
     }
@@ -169,7 +169,7 @@ class LayarKacaProvider : MainAPI() {
                 this.tags = tags
                 this.score = Score.from10(rating)
                 this.recommendations = recommendations
-                addTrailer(trailer)
+                trailer?.let { addTrailer(it) }
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, url) {
@@ -180,7 +180,7 @@ class LayarKacaProvider : MainAPI() {
                 this.tags = tags
                 this.score = Score.from10(rating)
                 this.recommendations = recommendations
-                addTrailer(trailer)
+                trailer?.let { addTrailer(it) }
             }
         }
     }
