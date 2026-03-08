@@ -207,20 +207,26 @@ class Nekopoi : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = fetch.get(url).document
 
-        val title = document.selectFirst("span.desc b, div.eroinfo h1")?.text()?.trim() ?: ""
-        val poster = fixUrlNull(document.selectFirst("div.imgdesc img, div.thm img")?.attr("src"))
+        val title = document.selectFirst("div.nk-post-header h1, span.desc b, div.eroinfo h1")?.text()?.trim() ?: ""
+        val poster = fixUrlNull(document.selectFirst("div.nk-featured-img img, div.imgdesc img, div.thm img")?.attr("src"))
         val table = document.select("div.listinfo ul, div.konten")
+        
         val tags = table.select("li:contains(Genres) a").map { it.text() }.takeIf { it.isNotEmpty() }
             ?: table.select("p:contains(Genre)").text().substringAfter(":").split(",")
                 .map { it.trim() }
+                
         val year = document.selectFirst("li:contains(Tayang)")?.text()?.substringAfterLast(",")
             ?.filter { it.isDigit() }?.toIntOrNull()
+            
         val status = getStatus(
             document.selectFirst("li:contains(Status)")?.text()?.substringAfter(":")?.trim()
         )
-        val duration = document.selectFirst("li:contains(Durasi)")?.text()?.substringAfterLast(":")
-            ?.filter { it.isDigit() }?.toIntOrNull()
-        val description = document.selectFirst("span.desc p")?.text()
+        
+        val duration = table.select("li:contains(Durasi), p:contains(Duration)").text().substringAfterLast(":")
+            .filter { it.isDigit() }.toIntOrNull()
+            
+        val description = table.select("p:contains(Sinopsis) + p").text().takeIf { it.isNotBlank() } 
+            ?: document.selectFirst("span.desc p")?.text()
 
         val episodes = document.select("div.episodelist ul li").mapNotNull {
             val name = it.selectFirst("a")?.text()
@@ -250,13 +256,19 @@ class Nekopoi : MainAPI() {
 
         runAllAsync(
             {
-                res.select("div#show-stream iframe").amap { iframe ->
+                res.select("div.nk-player-frame iframe, div#show-stream iframe").amap { iframe ->
                     loadExtractor(iframe.attr("src"), "$mainUrl/", subtitleCallback, callback)
                 }
             },
             {
-                res.select("div.boxdownload div.liner").map { ele ->
-                    getIndexQuality(ele.select("div.name").text()) to ele.selectFirst("a:contains(ouo)")?.attr("href")
+                res.select("div.nk-download-row, div.boxdownload div.liner").mapNotNull { ele ->
+                    val qualityStr = ele.selectFirst("div.nk-download-name, div.name")?.text()
+                    val quality = getIndexQuality(qualityStr)
+                    
+                    val link = ele.select("a").firstOrNull { it.text().contains("Mirror", true) }?.attr("href")
+                        ?: ele.selectFirst("a[href*=ouo]")?.attr("href")
+                        
+                    if (link != null) quality to link else null
                 }.filter { 
                     it.first != Qualities.P360.value 
                 }.map { qualityAndLink ->
