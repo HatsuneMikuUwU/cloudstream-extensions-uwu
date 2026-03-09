@@ -294,12 +294,10 @@ class KuramanimeProvider : MainAPI() {
             val src = vid.attr("abs:src").ifBlank { vid.attr("abs:data-src") }
             if (src.isNotBlank()) callback(
                 newExtractorLink(
-                    source  = name,
-                    name    = name,
-                    url     = src,
-                    referer = data,
-                    quality = Qualities.Unknown.value,
-                    isM3u8  = src.contains(".m3u8"),
+                    source = name,
+                    name   = name,
+                    url    = src,
+                    type   = if (src.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO,
                 )
             )
         }
@@ -331,12 +329,10 @@ class KuramanimeProvider : MainAPI() {
                 if (isDirectMedia(src)) {
                     callback(
                         newExtractorLink(
-                            source  = name,
-                            name    = "$name ${SERVER_NAMES[server] ?: server} ${source.label ?: ""}".trim(),
-                            url     = src,
-                            referer = referer,
-                            quality = source.label.toQuality(),
-                            isM3u8  = src.contains(".m3u8"),
+                            source = name,
+                            name   = "$name ${SERVER_NAMES[server] ?: server} ${source.label ?: ""}".trim(),
+                            url    = src,
+                            type   = if (src.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO,
                         )
                     )
                 } else {
@@ -352,12 +348,10 @@ class KuramanimeProvider : MainAPI() {
                 if (isDirectMedia(src)) {
                     callback(
                         newExtractorLink(
-                            source  = name,
-                            name    = "$name ${SERVER_NAMES[server] ?: server}",
-                            url     = src,
-                            referer = referer,
-                            quality = Qualities.Unknown.value,
-                            isM3u8  = src.contains(".m3u8"),
+                            source = name,
+                            name   = "$name ${SERVER_NAMES[server] ?: server}",
+                            url    = src,
+                            type   = if (src.contains(".m3u8")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO,
                         )
                     )
                 } else {
