@@ -180,7 +180,7 @@ class AnimeInWebProvider : MainAPI() {
             when (server.type?.lowercase()) {
                 "direct" -> {
                     callback(
-                        ExtractorLink(
+                        newExtractorLink(
                             source  = name,
                             name    = label,
                             url     = link,
