@@ -169,6 +169,8 @@ class NekopoiProvider : MainAPI() {
     override val supportedTypes = setOf(
         TvType.NSFW,
     )
+    
+    override val vpnStatus = VPNStatus.MightBeNeeded
 
     companion object {
         val session = Session(Requests().baseClient.newBuilder().addInterceptor(JwtSessionInterceptor()).build())
