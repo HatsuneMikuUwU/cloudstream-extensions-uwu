@@ -2,6 +2,7 @@ package com.animeinweb
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 
 class AnimeInWebProvider : MainAPI() {
     override var mainUrl     = "https://animeinweb.com"
@@ -26,24 +27,30 @@ class AnimeInWebProvider : MainAPI() {
         "Accept"     to "application/json",
         "User-Agent" to "AnimeInWeb/$apkVer Android",
     )
-    private val baseParams get() = mapOf(
-        "id_user"    to idUser,
-        "key_client" to keyClient,
-        "apk_ver"    to apkVer,
-    )
 
-    private suspend fun apiGet(path: String, extra: Map<String, String> = emptyMap()): NiceResponse {
-        val params = (baseParams + extra).entries.joinToString("&") { "${it.key}=${it.value}" }
-        return app.get("$apiBase/$path?$params", referer = mainUrl, headers = defaultHeaders)
+    private fun buildParams(extra: Map<String, String> = emptyMap()): String {
+        val base = mapOf(
+            "id_user"    to idUser,
+            "key_client" to keyClient,
+            "apk_ver"    to apkVer,
+        )
+        return (base + extra).entries.joinToString("&") { "${it.key}=${it.value}" }
     }
 
-    /** Fix relative image path → absolute URL */
+    private suspend fun apiGet(path: String, extra: Map<String, String> = emptyMap()): String {
+        return app.get(
+            "$apiBase/$path?${buildParams(extra)}",
+            referer = mainUrl,
+            headers = defaultHeaders,
+        ).text
+    }
+
     private fun String?.fixImage(): String? {
         if (this.isNullOrEmpty()) return null
         return if (startsWith("http")) this else "$cdnBase$this"
     }
 
-    // ─── Type / Status ────────────────────────────────────────────────────────
+    // ─── Helpers ──────────────────────────────────────────────────────────────
     companion object {
         fun getType(t: String): TvType = when {
             t.equals("OVA",   ignoreCase = true) -> TvType.OVA
@@ -54,6 +61,13 @@ class AnimeInWebProvider : MainAPI() {
             s.equals("ONGOING",  ignoreCase = true) -> ShowStatus.Ongoing
             s.equals("FINISHED", ignoreCase = true) -> ShowStatus.Completed
             else -> ShowStatus.Completed
+        }
+        fun parseQuality(q: String): Int = when {
+            q.contains("1080") -> Qualities.P1080.value
+            q.contains("720")  -> Qualities.P720.value
+            q.contains("480")  -> Qualities.P480.value
+            q.contains("360")  -> Qualities.P360.value
+            else               -> Qualities.Unknown.value
         }
     }
 
@@ -68,28 +82,26 @@ class AnimeInWebProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val resp  = apiGet(request.data, extra = mapOf("limit" to "24", "page" to "$page", "genre_in" to ""))
-        val items = resp.parsedSafe<ApiListResponse>()?.data?.allItems() ?: emptyList()
+        val json  = apiGet(request.data, extra = mapOf("limit" to "24", "page" to "$page", "genre_in" to ""))
+        val items = parseJson<ApiListResponse>(json).data?.allItems() ?: emptyList()
         return newHomePageResponse(request.name, items.map { it.toSearchResponse() })
     }
 
     // ─── Search ───────────────────────────────────────────────────────────────
     override suspend fun search(query: String): List<SearchResponse> {
-        val resp = apiGet("search", extra = mapOf("q" to query, "limit" to "30"))
-        return resp.parsedSafe<ApiListResponse>()?.data?.allItems()
+        val json = apiGet("search", extra = mapOf("q" to query, "limit" to "30"))
+        return parseJson<ApiListResponse>(json).data?.allItems()
             ?.map { it.toSearchResponse() } ?: emptyList()
     }
 
     // ─── Load Detail ──────────────────────────────────────────────────────────
     // Endpoint: GET /3/2/movie/detail/{id}
-    // Response: { data: { movie, episode (latest), season[] } }
     override suspend fun load(url: String): LoadResponse? {
         val movieId = url.substringAfterLast("/")
-
-        val detail = apiGet("movie/detail/$movieId")
-            .parsedSafe<ApiDetailResponse>()?.data ?: return null
-        val movie   = detail.movie   ?: return null
-        val seasons = detail.season  ?: emptyList()
+        val json    = apiGet("movie/detail/$movieId")
+        val detail  = parseJson<ApiDetailResponse>(json).data ?: return null
+        val movie   = detail.movie ?: return null
+        val seasons = detail.season ?: emptyList()
 
         val episodes = buildEpisodeList(movieId)
 
@@ -111,14 +123,10 @@ class AnimeInWebProvider : MainAPI() {
             year                = movie.year?.toIntOrNull()
             duration            = movie.duration?.toIntOrNull()
 
-            movie.studio?.takeIf { it.isNotEmpty() }?.let {
-                this.actors = listOf(ActorData(Actor(it)))
-            }
-
             if (seasons.size > 1) {
                 this.recommendations = seasons
-                    .filter { it.id != movieId }
-                    .map { it.toSearchResponse() }
+                    .filter { season -> season.id != movieId }
+                    .map { season -> season.toSearchResponse() }
             }
 
             addEpisodes(DubStatus.Subbed, episodes)
@@ -126,18 +134,14 @@ class AnimeInWebProvider : MainAPI() {
     }
 
     private suspend fun buildEpisodeList(movieId: String): List<Episode> {
-        val resp = apiGet(
-            "movie/$movieId/episode",
-            extra = mapOf("limit" to "999", "sort" to "asc")
-        )
-        val list = resp.parsedSafe<ApiEpisodeListResponse>()?.data?.allItems()
-            ?: return emptyList()
+        val json = apiGet("movie/$movieId/episode", extra = mapOf("limit" to "999", "sort" to "asc"))
+        val list = parseJson<ApiEpisodeListResponse>(json).data?.allItems() ?: return emptyList()
 
         return list.mapIndexed { idx, ep ->
             val epNum = ep.index?.toIntOrNull() ?: ep.number ?: (idx + 1)
-            // data = episodeId  (that's all we need for streamnew)
+            val epTitle = if (!ep.title.isNullOrBlank()) ep.title else "Episode $epNum"
             newEpisode(ep.id ?: "") {
-                this.name      = ep.title?.takeIf { it.isNotBlank() } ?: "Episode $epNum"
+                this.name      = epTitle
                 this.episode   = epNum
                 this.posterUrl = ep.image.fixImage()
                 this.addDate(ep.key_time ?: ep.aired)
@@ -147,50 +151,39 @@ class AnimeInWebProvider : MainAPI() {
 
     // ─── Load Links ───────────────────────────────────────────────────────────
     // Confirmed endpoint: GET /3/2/episode/streamnew/{episodeId}
-    // Response: { data: { episode, episode_next, server: [ {link, quality, type, name} ] } }
+    // server[].link  = direct MP4 on storages.animein.net
+    // server[].quality = "360p" | "480p" | "720p" | "1080p"
+    // server[].type    = "direct" | "embed"
     override suspend fun loadLinks(
-        data: String,   // = episodeId  e.g. "313448"
+        data: String,   // episodeId e.g. "313448"
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val episodeId = data.ifEmpty { return false }
+        if (data.isEmpty()) return false
 
-        val resp = apiGet("episode/streamnew/$episodeId")
-        val servers = resp.parsedSafe<ApiStreamResponse>()?.data?.server
-            ?: return false
+        val json    = apiGet("episode/streamnew/$data")
+        val servers = parseJson<ApiStreamResponse>(json).data?.server ?: return false
 
         servers.forEach { server ->
-            val link    = server.link?.ifEmpty { null } ?: return@forEach
+            val link    = server.link ?: return@forEach
             val quality = server.quality ?: ""
-            val label   = buildString {
-                append(server.name ?: "Server")
-                if (quality.isNotEmpty()) append(" $quality")
-            }
+            val label   = "${server.name ?: "Server"} $quality".trim()
 
             when (server.type?.lowercase()) {
                 "direct" -> {
-                    // Direct MP4 from storages.animein.net — confirmed
                     callback(
-                        newExtractorLink(
-                            source = name,
-                            name   = label,
-                            url    = link,
-                            type   = ExtractorLinkType.VIDEO,
-                        ) {
-                            this.quality = when (quality) {
-                                "1080p" -> Qualities.P1080.value
-                                "720p"  -> Qualities.P720.value
-                                "480p"  -> Qualities.P480.value
-                                "360p"  -> Qualities.P360.value
-                                else    -> Qualities.Unknown.value
-                            }
-                            this.isM3u8 = false
-                        }
+                        ExtractorLink(
+                            source  = name,
+                            name    = label,
+                            url     = link,
+                            referer = mainUrl,
+                            quality = parseQuality(quality),
+                            isM3u8  = false,
+                        )
                     )
                 }
                 else -> {
-                    // Embed / iframe server
                     loadExtractor(link, mainUrl, subtitleCallback, callback)
                 }
             }
@@ -202,7 +195,6 @@ class AnimeInWebProvider : MainAPI() {
 
 // ─── Data Classes ─────────────────────────────────────────────────────────────
 
-// LIST (home/search)
 data class ApiListResponse(
     val status: Int?      = null,
     val error:  Boolean?  = null,
@@ -238,18 +230,20 @@ data class AnimeItem(
     val total_episode:  Int?    = null,
     val latest_episode: Int?    = null,
 ) {
-    fun toSearchResponse() = newAnimeSearchResponse(
-        name = title ?: "Unknown",
-        url  = "https://animeinweb.com/anime/$id",
-        type = AnimeInWebProvider.getType(type ?: "SERIES")
-    ) {
-        posterUrl = if (image_poster?.startsWith("http") == true) image_poster
-                    else "https://xyz-api.animein.net$image_poster"
-        addSub(latest_episode ?: total_episode)
+    fun toSearchResponse(): AnimeSearchResponse {
+        val poster = if (image_poster?.startsWith("http") == true) image_poster
+                     else "https://xyz-api.animein.net$image_poster"
+        return newAnimeSearchResponse(
+            name = title ?: "Unknown",
+            url  = "https://animeinweb.com/anime/$id",
+            type = AnimeInWebProvider.getType(type ?: "SERIES"),
+        ) {
+            posterUrl = poster
+            addSub(latest_episode ?: total_episode)
+        }
     }
 }
 
-// DETAIL  →  { data: { movie, episode, season[] } }
 data class ApiDetailResponse(
     val status: Int?        = null,
     val error:  Boolean?    = null,
@@ -261,7 +255,6 @@ data class DetailData(
     val season:  List<AnimeItem>? = null,
 )
 
-// EPISODE LIST  →  { data: { episode[] } }
 data class ApiEpisodeListResponse(
     val status: Int?             = null,
     val data:   EpisodeListData? = null,
@@ -274,37 +267,32 @@ data class EpisodeListData(
 data class EpisodeItem(
     val id:             String? = null,
     val title:          String? = null,
-    val index:          String? = null,   // "1", "2", ...
+    val index:          String? = null,
     val number:         Int?    = null,
-    val episode_number: Int?    = null,
     val views:          String? = null,
     val id_movie:       String? = null,
-    val key_time:       String? = null,   // "12 Jan 2026"
+    val key_time:       String? = null,
     val aired:          String? = null,
-    val image:          String? = null,   // may be relative
-    val thumbnail:      String? = null,
+    val image:          String? = null,
 )
 
-// STREAM  →  GET /episode/streamnew/{id}
-// { data: { episode, episode_next, server: [{id, link, quality, type, name, ...}] } }
 data class ApiStreamResponse(
     val status: Int?       = null,
     val error:  Boolean?   = null,
     val data:   StreamData? = null,
 )
 data class StreamData(
-    val episode:      EpisodeItem?       = null,
-    val episode_next: EpisodeItem?       = null,
+    val episode:      EpisodeItem?        = null,
+    val episode_next: EpisodeItem?        = null,
     val server:       List<StreamServer>? = null,
 )
 data class StreamServer(
-    val id:            String? = null,
-    val link:          String? = null,   // confirmed: direct MP4 URL
-    val quality:       String? = null,   // "360p" | "480p" | "720p" | "1080p"
-    val key_file_size: String? = null,
-    val name:          String? = null,   // e.g. "RAPSODI"
-    val type:          String? = null,   // "direct" | "embed"
-    val domain:        String? = null,
-    val username:      String? = null,
-    val server_id:     String? = null,
+    val id:        String? = null,
+    val link:      String? = null,
+    val quality:   String? = null,
+    val name:      String? = null,
+    val type:      String? = null,
+    val domain:    String? = null,
+    val username:  String? = null,
+    val server_id: String? = null,
 )
