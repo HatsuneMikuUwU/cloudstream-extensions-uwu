@@ -41,8 +41,8 @@ class NimegamiProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        ""                       to "Latest Anime",
-        "anime-terbaru-sub-indo" to "Updated Anime",
+        ""                       to "Latest Anime",   // Homepage: nimegami.id/
+        "anime-terbaru-sub-indo" to "Updated Anime",  // Jadwal ongoing
         "/type/tv"               to "Anime",
         "/type/movie"            to "Movie",
         "/type/ona"              to "ONA",
@@ -54,6 +54,7 @@ class NimegamiProvider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         val isOngoing  = request.data == "anime-terbaru-sub-indo"
+        // Homepage WordPress: halaman 1 = "nimegami.id/", selanjutnya "nimegami.id/page/N/"
         val isHomepage = request.data.isEmpty()
 
         val url = when {
@@ -64,6 +65,8 @@ class NimegamiProvider : MainAPI() {
 
         val document = app.get(url).document
 
+        // Halaman ongoing memakai div.wrapper-3-a > article,
+        // halaman homepage & archive memakai div.post-article article atau div.archive article.
         val selector = if (isOngoing) {
             "div.wrapper-3-a article"
         } else {
@@ -87,12 +90,15 @@ class NimegamiProvider : MainAPI() {
     private fun Element.toSearchResult(): AnimeSearchResponse? {
         val href = fixUrl(this.selectFirst("a")!!.attr("href"))
 
+        // Halaman archive memakai h2 a, halaman ongoing memakai h3 a
         val title = (this.selectFirst("h2 a") ?: this.selectFirst("h3 a"))
             ?.text() ?: return null
 
         val posterUrl = (this.selectFirst("noscript img") ?: this.selectFirst("img"))
             ?.attr("src")
 
+        // Halaman archive: "ul li:contains(Episode)" atau "div.eps-archive"
+        // Halaman ongoing: "div.eps_ongo"
         val episode = this
             .selectFirst("ul li:contains(Episode), div.eps-archive, div.eps_ongo")
             ?.ownText()
@@ -135,6 +141,7 @@ class NimegamiProvider : MainAPI() {
 
         val episodes = document.select("div.list_eps_stream li")
             .mapNotNull {
+                // getOrNull(1) untuk ambil capture group angka, bukan full match
                 val episode = Regex("Episode\\s?(\\d+)").find(it.text())?.groupValues?.getOrNull(1)
                     ?.toIntOrNull()
                 val link = it.attr("data")
@@ -177,28 +184,37 @@ class NimegamiProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        tryParseJson<ArrayList<Sources>>(base64Decode(data))?.forEach { sources ->
+        tryParseJson<ArrayList<Sources>>(base64Decode(data))?.amap { sources ->
             sources.url?.amap { rawUrl ->
-                val resolvedUrl = try {
-                    app.get(
-                        rawUrl,
-                        referer = "$mainUrl/",
-                        headers = mapOf("User-Agent" to "Mozilla/5.0")
-                    ).url
-                } catch (e: Exception) {
+                // Format baru: dl.berkasdrive.com/streaming/?id=BASE64(real_url)
+                // → decode base64 id untuk dapat URL mitedrive/berkasdrive asli
+                // Format lama: dl.berkasdrive.com/new/streaming.php?id=XXX  (direct MP4)
+                //              dlgan.space/streaming.php?id=XXX              (direct MP4)
+                val videoUrl = if (rawUrl.contains("/streaming/?id=")) {
+                    try {
+                        val encoded = rawUrl.substringAfter("?id=")
+                        base64Decode(encoded) // dapat URL asli (mitedrive, dll)
+                    } catch (e: Exception) { rawUrl }
+                } else {
                     rawUrl
                 }
-                callback.invoke(
-                    newExtractorLink(
-                        name,
-                        "$name (${sources.format ?: ""})",
-                        resolvedUrl,
-                        ExtractorLinkType.VIDEO
-                    ) {
-                        this.referer = "$mainUrl/"
-                        this.quality = getQualityFromName(sources.format)
-                    }
-                )
+
+                // Coba loadExtractor dulu (mitedrive, gdrive, dll)
+                // Jika tidak ada extractor yang cocok, fallback ke direct link
+                val loaded = loadExtractor(videoUrl, "$mainUrl/", subtitleCallback, callback)
+                if (!loaded) {
+                    callback.invoke(
+                        newExtractorLink(
+                            name,
+                            "$name (${sources.format ?: ""})",
+                            videoUrl,
+                            ExtractorLinkType.VIDEO
+                        ) {
+                            this.referer = "$mainUrl/"
+                            this.quality = getQualityFromName(sources.format)
+                        }
+                    )
+                }
             }
         }
         return true
