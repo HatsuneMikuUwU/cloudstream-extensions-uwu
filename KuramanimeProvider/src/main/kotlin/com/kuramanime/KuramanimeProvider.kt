@@ -297,11 +297,10 @@ class KuramanimeProvider : MainAPI() {
                     source  = name,
                     name    = name,
                     url     = src,
-                ) {
-                    this.referer = data
-                    this.quality = Qualities.Unknown.value
-                    this.isM3u8  = src.contains(".m3u8")
-                }
+                    referer = data,
+                    quality = Qualities.Unknown.value,
+                    isM3u8  = src.contains(".m3u8"),
+                )
             )
         }
 
@@ -332,14 +331,13 @@ class KuramanimeProvider : MainAPI() {
                 if (isDirectMedia(src)) {
                     callback(
                         newExtractorLink(
-                            source = name,
-                            name   = "$name ${SERVER_NAMES[server] ?: server} ${source.label ?: ""}".trim(),
-                            url    = src,
-                        ) {
-                            this.referer = referer
-                            this.quality = source.label.toQuality()
-                            this.isM3u8  = src.contains(".m3u8")
-                        }
+                            source  = name,
+                            name    = "$name ${SERVER_NAMES[server] ?: server} ${source.label ?: ""}".trim(),
+                            url     = src,
+                            referer = referer,
+                            quality = source.label.toQuality(),
+                            isM3u8  = src.contains(".m3u8"),
+                        )
                     )
                 } else {
                     loadExtractor(src, referer, subtitleCallback, callback)
@@ -354,14 +352,13 @@ class KuramanimeProvider : MainAPI() {
                 if (isDirectMedia(src)) {
                     callback(
                         newExtractorLink(
-                            source = name,
-                            name   = "$name ${SERVER_NAMES[server] ?: server}",
-                            url    = src,
-                        ) {
-                            this.referer = referer
-                            this.quality = Qualities.Unknown.value
-                            this.isM3u8  = src.contains(".m3u8")
-                        }
+                            source  = name,
+                            name    = "$name ${SERVER_NAMES[server] ?: server}",
+                            url     = src,
+                            referer = referer,
+                            quality = Qualities.Unknown.value,
+                            isM3u8  = src.contains(".m3u8"),
+                        )
                     )
                 } else {
                     loadExtractor(src, referer, subtitleCallback, callback)
