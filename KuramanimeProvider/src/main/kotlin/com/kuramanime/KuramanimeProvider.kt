@@ -176,7 +176,7 @@ class KuramanimeProvider : MainAPI() {
                     }
                     val label  = el.text().trim().ifBlank { "Episode ${idx + 1}" }
                     val epNum  = Regex("(\\d+)").find(label)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: (idx + 1)
-                    Episode(data = epHref, name = label, episode = epNum)
+                    newEpisode(epHref) { name = label; episode = epNum }
                 }
         } else {
             // Strategy B: div#animeEpisodes a.ep-button (player page DOM — also works on detail page as fallback)
@@ -185,7 +185,7 @@ class KuramanimeProvider : MainAPI() {
                     val epHref = el.attr("abs:href").ifBlank { "$mainUrl${el.attr("href")}" }
                     val label  = el.ownText().trim().ifBlank { "Episode ${idx + 1}" }
                     val epNum  = Regex("(\\d+)").find(label)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: (idx + 1)
-                    Episode(data = epHref, name = label, episode = epNum)
+                    newEpisode(epHref) { name = label; episode = epNum }
                 }
         }
 
@@ -293,14 +293,15 @@ class KuramanimeProvider : MainAPI() {
         doc.select("video source[src], video[src]").forEach { vid ->
             val src = vid.attr("abs:src").ifBlank { vid.attr("abs:data-src") }
             if (src.isNotBlank()) callback(
-                ExtractorLink(
+                newExtractorLink(
                     source  = name,
                     name    = name,
                     url     = src,
-                    referer = data,
-                    quality = Qualities.Unknown.value,
-                    isM3u8  = src.contains(".m3u8"),
-                )
+                ) {
+                    this.referer = data
+                    this.quality = Qualities.Unknown.value
+                    this.isM3u8  = src.contains(".m3u8")
+                }
             )
         }
 
@@ -330,14 +331,15 @@ class KuramanimeProvider : MainAPI() {
             if (src.startsWith("http")) {
                 if (isDirectMedia(src)) {
                     callback(
-                        ExtractorLink(
-                            source  = name,
-                            name    = "$name ${SERVER_NAMES[server] ?: server} ${source.label ?: ""}".trim(),
-                            url     = src,
-                            referer = referer,
-                            quality = source.label.toQuality(),
-                            isM3u8  = src.contains(".m3u8"),
-                        )
+                        newExtractorLink(
+                            source = name,
+                            name   = "$name ${SERVER_NAMES[server] ?: server} ${source.label ?: ""}".trim(),
+                            url    = src,
+                        ) {
+                            this.referer = referer
+                            this.quality = source.label.toQuality()
+                            this.isM3u8  = src.contains(".m3u8")
+                        }
                     )
                 } else {
                     loadExtractor(src, referer, subtitleCallback, callback)
@@ -351,14 +353,15 @@ class KuramanimeProvider : MainAPI() {
             if (src.startsWith("http")) {
                 if (isDirectMedia(src)) {
                     callback(
-                        ExtractorLink(
-                            source  = name,
-                            name    = "$name ${SERVER_NAMES[server] ?: server}",
-                            url     = src,
-                            referer = referer,
-                            quality = Qualities.Unknown.value,
-                            isM3u8  = src.contains(".m3u8"),
-                        )
+                        newExtractorLink(
+                            source = name,
+                            name   = "$name ${SERVER_NAMES[server] ?: server}",
+                            url    = src,
+                        ) {
+                            this.referer = referer
+                            this.quality = Qualities.Unknown.value
+                            this.isM3u8  = src.contains(".m3u8")
+                        }
                     )
                 } else {
                     loadExtractor(src, referer, subtitleCallback, callback)
