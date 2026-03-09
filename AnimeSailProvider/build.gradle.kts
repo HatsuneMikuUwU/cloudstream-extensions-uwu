@@ -1,12 +1,12 @@
 // use an integer for version numbers
-version = 1
+version = 5
 
 
 cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    // description = "Lorem Ipsum"
+    description = "AnimeSail — Streaming Anime, Donghua Subtitle Indonesia"
      authors = listOf("Miku")
 
     /**
@@ -19,9 +19,9 @@ cloudstream {
     status = 1 // will be 3 if unspecified
     tvTypes = listOf(
         "AnimeMovie",
-        "OVA",
         "Anime",
+        "OVA",
     )
 
-    iconUrl = "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://v1.animasu.top&size=%size%"
+    iconUrl = "https://aghanim.xyz/wp-content/themes/animesail/assets/images/ico.png"
 }
