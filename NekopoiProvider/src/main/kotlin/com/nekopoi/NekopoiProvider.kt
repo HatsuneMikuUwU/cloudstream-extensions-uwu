@@ -430,7 +430,10 @@ class NekopoiProvider : MainAPI() {
             {
                 res.select("div.nk-download-row").amap { row ->
                     val qualityStr = row.selectFirst("div.nk-download-name")?.text()
-                    val quality = getIndexQuality(qualityStr)
+                    val qualityInt = getIndexQuality(qualityStr)
+                    
+                    val rawQuality = Regex("""(?i)\[(\d+[pk])]""").find(qualityStr ?: "")?.groupValues?.getOrNull(1)?.uppercase()
+                    val qualitySuffix = if (!rawQuality.isNullOrBlank()) " - $rawQuality" else ""
 
                     row.select("div.nk-download-links a").amap { a ->
                         val linkName = a.text().trim()
@@ -446,9 +449,9 @@ class NekopoiProvider : MainAPI() {
                                     loadExtractor(fixedEmbed, "$mainUrl/", subtitleCallback) { link ->
                                         runBlocking {
                                             callback.invoke(
-                                                newExtractorLink(link.name, link.name, link.url, link.type) {
+                                                newExtractorLink(link.name, "${link.name}$qualitySuffix", link.url, link.type) {
                                                     referer = link.referer
-                                                    this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                                                    this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else qualityInt
                                                     headers = link.headers
                                                     extractorData = link.extractorData
                                                 }
@@ -460,9 +463,9 @@ class NekopoiProvider : MainAPI() {
                                 loadExtractor(realUrl, "$mainUrl/", subtitleCallback) { link ->
                                     runBlocking {
                                         callback.invoke(
-                                            newExtractorLink(link.name, link.name, link.url, link.type) {
+                                            newExtractorLink(link.name, "${link.name}$qualitySuffix", link.url, link.type) {
                                                 referer = link.referer
-                                                this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                                                this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else qualityInt
                                                 headers = link.headers
                                                 extractorData = link.extractorData
                                             }
