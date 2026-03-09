@@ -49,12 +49,11 @@ class Animasu : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "anime-sedang-tayang-terbaru" to "Ongoing",
-        "status=&tipe=&urutan=update" to "Latest updated",
-        "status=&tipe=&urutan=baru" to "Latest Added",
-        "status=completed&tipe=&urutan=default" to "Completed",
+        "status=ongoing&tipe=&urutan=update" to "Ongoing",
         "status=&tipe=&urutan=populer" to "Most Popular",
         "status=&tipe=&urutan=rating" to "Highest Rating",
+        "genre%5B%5D=donghua&status=&tipe=&urutan=update" to "Donghua",
+        "status=completed&tipe=&urutan=publikasi" to "Completed",
         "status=&tipe=Movie&urutan=update" to "Latest Movies",
         "status=&tipe=Movie&urutan=populer" to "Most Popular Movies"
     )
