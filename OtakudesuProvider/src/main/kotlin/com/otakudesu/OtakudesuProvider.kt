@@ -238,15 +238,10 @@ class OtakudesuProvider : MainAPI() {
 
         runAllAsync(
             {
-                val scriptData = document.select("script:containsData(__x__nonce)").firstOrNull()?.data()
-                    ?: document.select("script:containsData(mirrorstream)").firstOrNull()?.data()
-                    ?: document.select("script:containsData(admin-ajax)").lastOrNull()?.data()
-                    ?: ""
-
+                val scriptData = document.select("script:containsData(action:)").lastOrNull()?.data() ?: ""
+                
                 val nonceAction = Regex("""data:\{action:"([^"]+)"""").find(scriptData)?.groupValues?.getOrNull(1)
-                    ?: Regex("""action:\s*"([a-f0-9]{32})"""").find(scriptData)?.groupValues?.getOrNull(1)
                 val embedAction = Regex("""nonce:[^,]+,action:"([^"]+)"""").find(scriptData)?.groupValues?.getOrNull(1)
-                    ?: Regex("""nonce[^,]*,\s*action:\s*"([a-f0-9]{32})"""").find(scriptData)?.groupValues?.getOrNull(1)
 
                 if (nonceAction != null && embedAction != null) {
                     val nonceResp = app.post("$mainUrl/wp-admin/admin-ajax.php", data = mapOf("action" to nonceAction))
