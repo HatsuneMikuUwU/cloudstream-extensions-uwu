@@ -404,77 +404,75 @@ class NekopoiProvider : MainAPI() {
 
         runAllAsync(
             {
-                val tabs = res.select("div#nk-player-tabs a").map { it.text().trim() }
-
-                res.select("div.nk-player-frame").forEachIndexed { index, frame ->
-                    val tabLabel = tabs.getOrNull(index) ?: "Server ${index + 1}"
-
-                    val quality = Regex("""(\d{3,4})[pP]""").find(tabLabel)
-                        ?.groupValues?.get(1)?.let { getQualityFromName("${it}p") }
-                        ?: parseStreamQuality(res, index + 1)
-
-                    frame.select("iframe").amap { iframe ->
-                        val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
-                        withTimeoutOrNull(10_000) {
-                            val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback) { link ->
-                                runBlocking {
-                                    callback.invoke(
-                                        newExtractorLink(link.name, link.name, link.url, link.type) {
-                                            referer = link.referer
-                                            this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
-                                            headers = link.headers
-                                            extractorData = link.extractorData
-                                        }
-                                    )
-                                }
+                res.select("div.nk-player-frame iframe").amap { iframe ->
+                    val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
+                    
+                    withTimeoutOrNull(15_000) {
+                        val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback) { link ->
+                            runBlocking {
+                                callback.invoke(
+                                    newExtractorLink(link.name, link.name, link.url, link.type) {
+                                        referer = link.referer
+                                        this.quality = link.quality
+                                        headers = link.headers
+                                        extractorData = link.extractorData
+                                    }
+                                )
                             }
-                            if (!loaded) {
-                                extractCustomHost(src, subtitleCallback, callback, quality)
-                            }
+                        }
+                        
+                        if (!loaded) {
+                            extractCustomHost(src, subtitleCallback, callback, Qualities.Unknown.value)
                         }
                     }
                 }
             },
             {
-                res.select("div.nk-download-row, div.boxdownload div.liner")
-                    .mapNotNull { ele ->
-                        val qualityStr = ele.selectFirst("div.nk-download-name, div.name")?.text()
-                        val quality = getIndexQuality(qualityStr)
+                res.select("div.nk-download-row").amap { row ->
+                    val qualityStr = row.selectFirst("div.nk-download-name")?.text()
+                    val quality = getIndexQuality(qualityStr)
 
-                        val link = ele.select("a").firstOrNull { it.text().contains("Mirror", true) }?.attr("href")
-                            ?: ele.selectFirst("a[href*=ouo]")?.attr("href")
+                    row.select("div.nk-download-links a").amap { a ->
+                        val linkName = a.text().trim()
+                        val ouoUrl = a.attr("href")
 
-                        if (link != null) quality to link else null
-                    }
-                    .filter { it.first != Qualities.P360.value }
-                    .amap { qualityAndLink ->
-                        val bypassedAds = withTimeoutOrNull(8_000) {
-                            bypassMirrored(bypassOuo(qualityAndLink.second))
-                        } ?: return@amap
-                        bypassedAds.amap(ads@{ adsLink ->
-                            loadExtractor(
-                                fixEmbed(adsLink) ?: return@ads,
-                                "$mainUrl/",
-                                subtitleCallback,
-                            ) { link ->
-                                runBlocking {
-                                    callback.invoke(
-                                        newExtractorLink(
-                                            link.name,
-                                            link.name,
-                                            link.url,
-                                            link.type
-                                        ) {
-                                            referer = link.referer
-                                            quality = if (link.type == ExtractorLinkType.M3U8) link.quality else qualityAndLink.first
-                                            headers = link.headers
-                                            extractorData = link.extractorData
+                        if (ouoUrl.contains("ouo.io") || ouoUrl.contains("ouo.press")) {
+                            val realUrl = withTimeoutOrNull(15_000) { bypassOuo(ouoUrl) } ?: return@amap
+                            
+                            if (linkName.equals("Mirror", ignoreCase = true)) {
+                                val bypassedAds = withTimeoutOrNull(15_000) { bypassMirrored(realUrl) } ?: return@amap
+                                bypassedAds.amap ads@{ adsLink ->
+                                    val fixedEmbed = fixEmbed(adsLink) ?: return@ads
+                                    loadExtractor(fixedEmbed, "$mainUrl/", subtitleCallback) { link ->
+                                        runBlocking {
+                                            callback.invoke(
+                                                newExtractorLink(link.name, link.name, link.url, link.type) {
+                                                    referer = link.referer
+                                                    this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                                                    headers = link.headers
+                                                    extractorData = link.extractorData
+                                                }
+                                            )
                                         }
-                                    )
+                                    }
+                                }
+                            } else {
+                                loadExtractor(realUrl, "$mainUrl/", subtitleCallback) { link ->
+                                    runBlocking {
+                                        callback.invoke(
+                                            newExtractorLink(link.name, link.name, link.url, link.type) {
+                                                referer = link.referer
+                                                this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality
+                                                headers = link.headers
+                                                extractorData = link.extractorData
+                                            }
+                                        )
+                                    }
                                 }
                             }
-                        })
+                        }
                     }
+                }
             }
         )
 
@@ -492,20 +490,18 @@ class NekopoiProvider : MainAPI() {
                 iframeSrc,
                 headers = mapOf(
                     "Referer" to mainUrl,
-                    "Origin" to mainUrl
+                    "Accept-Language" to "en-US,en;q=0.5"
                 )
             ).text
 
-            val videoUrl =
-                Regex("""['"](https?://[^'"]+\.m3u8(?:[^'"]*)?)['"]""").find(html)?.groupValues?.get(1)
-                ?: Regex("""['"](https?://[^'"]+\.mp4(?:[^'"]*)?)['"]""").find(html)?.groupValues?.get(1)
-                ?: Regex("""file\s*:\s*['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)
-                ?: Regex("""source\s+src=['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)
-                ?: Regex(""""url"\s*:\s*"(https?://[^"]+\.(?:m3u8|mp4)[^"]*)"""").find(html)?.groupValues?.get(1)
+            val videoUrl = 
+                Regex("""(?i)(?:source|file|src|url)["']?\s*[:=]\s*["'](https?://[^"']+\.(?:m3u8|mp4)[^"']*)["']""").find(html)?.groupValues?.get(1)
+                ?: Regex("""(https?://[^"']+\.(?:m3u8|mp4)[^"']*)""").find(html)?.groupValues?.get(1)
 
             if (videoUrl != null) {
                 val isM3u8 = videoUrl.contains(".m3u8", ignoreCase = true)
-                val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "Stream" }
+                val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "CustomServer" }
+                
                 callback.invoke(
                     newExtractorLink(
                         hostName,
@@ -521,8 +517,7 @@ class NekopoiProvider : MainAPI() {
                 return
             }
 
-            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]""").find(html)
-                ?.groupValues?.get(1)
+            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)
             if (nestedSrc != null && nestedSrc != iframeSrc) {
                 loadExtractor(nestedSrc, iframeSrc, subtitleCallback, callback)
             }
@@ -545,29 +540,57 @@ class NekopoiProvider : MainAPI() {
     }
 
     private suspend fun bypassOuo(url: String?): String? {
-        var res = session.get(url ?: return null)
-        run lit@{
-            (1..2).forEach { _ ->
-                if (res.headers["location"] != null) return@lit
-                val document = res.document
-                val nextUrl = document.select("form").attr("action")
-                val data = document.select("form input").map {
-                    it.attr("name") to it.attr("value")
-                }.toMap().toMutableMap()
-                val captchaKey =
-                    document.select("script[src*=https://www.google.com/recaptcha/api.js?render=]")
-                        .attr("src").substringAfter("render=")
-                val token = APIHolder.getCaptchaToken(nextUrl, captchaKey)
-                data["x-token"] = token ?: ""
-                res = session.post(
-                    nextUrl,
-                    data = data,
-                    headers = mapOf("content-type" to "application/x-www-form-urlencoded"),
-                    allowRedirects = false
-                )
+        if (url.isNullOrBlank()) return null
+        var res: NiceResponse? = null
+        try {
+            res = session.get(url)
+            
+            if (res.headers["location"] != null) return res.headers["location"]
+
+            run lit@{
+                (1..2).forEach { _ ->
+                    val document = res?.document ?: return@lit
+                    val form = document.selectFirst("form") ?: return@lit
+                    
+                    var nextUrl = form.attr("action")
+                    if (!nextUrl.startsWith("http")) {
+                        val uri = URI(res?.url ?: url)
+                        nextUrl = "${uri.scheme}://${uri.host}$nextUrl"
+                    }
+
+                    val data = form.select("input").associate {
+                        it.attr("name") to it.attr("value")
+                    }.toMutableMap()
+
+                    val captchaKey = document.selectFirst("script[src*=https://www.google.com/recaptcha/api.js?render=]")
+                        ?.attr("src")?.substringAfter("render=")
+                    
+                    if (captchaKey != null) {
+                        val token = APIHolder.getCaptchaToken(nextUrl, captchaKey)
+                        data["x-token"] = token ?: ""
+                    }
+
+                    res = session.post(
+                        nextUrl,
+                        data = data,
+                        headers = mapOf(
+                            "Content-Type" to "application/x-www-form-urlencoded",
+                            "Referer" to (res?.url ?: url),
+                            "Origin" to "https://ouo.io"
+                        ),
+                        allowRedirects = false
+                    )
+                    
+                    if (res?.headers?.get("location") != null) {
+                        return res?.headers?.get("location")
+                    }
+                }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        return res.headers["location"]
+        
+        return res?.headers?.get("location")
     }
 
     private fun NiceResponse.selectMirror(): String? {
