@@ -330,20 +330,24 @@ class NekopoiProvider : MainAPI() {
         val duration = table.select("li:contains(Durasi), p:contains(Duration)").text().substringAfterLast(":")
             .filter { it.isDigit() }.toIntOrNull()
             
-        val description =
-            document.selectFirst("div.konten p:contains(Sinopsis) + p, div.listinfo p:contains(Sinopsis) + p")?.text()?.takeIf { it.isNotBlank() }
-            ?: document.select("div.konten > p:not(.separator)")
-                .firstOrNull { p ->
-                    val t = p.text().trim()
-                    t.isNotBlank()
-                        && !p.selectFirst("b") .let { it != null && it.text().length > 2 }
-                        && !t.startsWith("Genre") && !t.startsWith("Producer")
-                        && !t.startsWith("Duration") && !t.startsWith("Durasi")
-                        && !t.startsWith("Size") && !t.startsWith("Catatan")
-                }?.text()
-            ?: document.selectFirst("meta[property=og:description]")?.attr("content")
+        val allText = document.select("div.konten p, div.listinfo p")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+            
+        val description = if (allText.contains("Sinopsis", ignoreCase = true)) {
+            allText.substringAfter("Sinopsis")
+                .replaceFirst(Regex("""^[\s:]+"""), "")
+                .substringBefore("\n\nGenre")
+                .substringBefore("\n\nAnime")
+                .substringBefore("\n\nProducers")
+                .substringBefore("\n\nDurasi")
+                .trim()
+        } else {
+            document.selectFirst("meta[property=og:description]")?.attr("content")
                 ?.removePrefix("Sinopsis ")?.trim()?.takeIf { it.isNotBlank() }
-            ?: document.selectFirst("span.desc p")?.text()
+                ?: document.selectFirst("span.desc p")?.text()
+        }
 
         val mainContent = document.selectFirst("div.nk-main-content, div#nk-content, div#nk-wrap") ?: document
 
