@@ -178,12 +178,21 @@ class NimegamiProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         tryParseJson<ArrayList<Sources>>(base64Decode(data))?.forEach { sources ->
-            sources.url?.forEach { url ->
+            sources.url?.amap { rawUrl ->
+                val resolvedUrl = try {
+                    app.get(
+                        rawUrl,
+                        referer = "$mainUrl/",
+                        headers = mapOf("User-Agent" to "Mozilla/5.0")
+                    ).url
+                } catch (e: Exception) {
+                    rawUrl
+                }
                 callback.invoke(
                     newExtractorLink(
                         name,
                         "$name (${sources.format ?: ""})",
-                        url,
+                        resolvedUrl,
                         ExtractorLinkType.VIDEO
                     ) {
                         this.referer = "$mainUrl/"
