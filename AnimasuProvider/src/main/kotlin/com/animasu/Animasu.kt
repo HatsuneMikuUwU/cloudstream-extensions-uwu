@@ -140,7 +140,7 @@ class Animasu : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
 
-        document.select(".mobius > .mirror > option").mapNotNull {
+        document.select(".mobius .mirror option").mapNotNull {
             val value = it.attr("value")
             if (value.isBlank()) return@mapNotNull null
 
@@ -158,23 +158,22 @@ class Animasu : MainAPI() {
     private fun applyPlayerUrlFix(url: String): String {
         var fixed = url
 
-        if (fixed.contains("uservideo.in"))
-            fixed = fixed.replace(".in", ".xyz")
+        if (fixed.contains("uservideo.nanime.in"))
+            fixed = fixed.replace("uservideo.nanime.in", "uservideo.xyz")
+
+        else if (fixed.contains("uservideo.in"))
+            fixed = fixed.replace("uservideo.in", "uservideo.xyz")
 
         if (fixed.contains("short.ink"))
-            fixed = fixed.replace(".ink", ".icu")
-
-        if (fixed.contains("uservideo.nanime.in"))
-            fixed = fixed.replace(".nanime.in", ".xyz")
-
-        if (fixed.contains("uservideo.xyz") && !fixed.contains("new.uservideo.xyz")) {
-            fixed = fixed.replace(".", "-")
-            fixed = fixed.replace("uservideo-xyz", "new.uservideo.xyz")
-            fixed = fixed.replace("?embed=true", "/embed/?")
-        }
+            fixed = fixed.replace("short.ink", "short.icu")
 
         if (fixed.contains("nanime.yt"))
-            fixed = fixed.replace(".yt", ".in")
+            fixed = fixed.replace("nanime.yt", "nanime.in")
+
+        if (fixed.contains("uservideo.xyz") && !fixed.contains("new.uservideo.xyz")) {
+            fixed = fixed.replace("uservideo.xyz", "new.uservideo.xyz")
+            fixed = fixed.replace("?embed=true", "/embed/?")
+        }
 
         return fixed
     }
@@ -196,11 +195,12 @@ class Animasu : MainAPI() {
                         link.type
                     ) {
                         this.referer = link.referer
-                        this.quality =
-                            if (link.type == ExtractorLinkType.M3U8 || link.name == "Uservideo")
-                                link.quality
-                            else
-                                getIndexQuality(quality)
+                        val parsedQuality = getIndexQuality(quality)
+                        this.quality = when {
+                            link.quality != Qualities.Unknown.value -> link.quality
+                            parsedQuality != Qualities.Unknown.value -> parsedQuality
+                            else -> Qualities.Unknown.value
+                        }
                         this.headers = link.headers
                         this.extractorData = link.extractorData
                     }
