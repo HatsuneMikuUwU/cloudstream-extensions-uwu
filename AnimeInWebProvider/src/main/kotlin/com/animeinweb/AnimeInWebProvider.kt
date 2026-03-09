@@ -50,7 +50,6 @@ class AnimeInWebProvider : MainAPI() {
         return if (startsWith("http")) this else "$cdnBase$this"
     }
 
-    // Pindahkan ke dalam MainAPI agar bisa mengakses mainUrl & newAnimeSearchResponse
     private fun AnimeItem.toSearchResponse(): AnimeSearchResponse {
         return newAnimeSearchResponse(
             name = title ?: "Unknown",
@@ -181,13 +180,14 @@ class AnimeInWebProvider : MainAPI() {
                 "direct" -> {
                     callback(
                         newExtractorLink(
-                            source  = name,
-                            name    = label,
-                            url     = link,
-                            referer = mainUrl,
-                            quality = parseQuality(quality),
-                            isM3u8  = false,
-                        )
+                            source = name,
+                            name   = label,
+                            url    = link,
+                            type   = ExtractorLinkType.VIDEO
+                        ) {
+                            this.referer = mainUrl
+                            this.quality = parseQuality(quality)
+                        }
                     )
                 }
                 else -> {
