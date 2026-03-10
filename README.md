@@ -25,6 +25,7 @@
 | **CineMax21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **Donghub** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
 | **Drakor** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
+| **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series | ✅ Active |
 | **Dutamovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **HidoriStream** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **Idlix** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |

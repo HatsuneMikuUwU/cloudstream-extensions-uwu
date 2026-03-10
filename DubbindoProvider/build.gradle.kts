@@ -5,8 +5,8 @@ cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    // description = "Lorem Ipsum"
-     authors = listOf("Miku")
+    description = "Dubbindo — Streaming Anime, Movie and TV Series"
+    authors = listOf("Miku")
 
     /**
      * Status int as the following:
@@ -23,5 +23,16 @@ cloudstream {
         "Anime",
     )
 
-    iconUrl = "https://www.google.com/s2/favicons?domain=www.dubbindo.xyz&sz=%size%"
+    iconUrl = "https://www.google.com/s2/favicons?domain=www.dubbindo.site&sz=%size%"
+}
+
+android {
+    buildFeatures {
+        buildConfig = true
+    }
+    
+    defaultConfig {
+        val githubPassword = System.getenv("DUBBINDO_PASSWORD") ?: ""
+        buildConfigField("String", "DUBBINDO_PASSWORD", "\"$githubPassword\"")
+    }
 }

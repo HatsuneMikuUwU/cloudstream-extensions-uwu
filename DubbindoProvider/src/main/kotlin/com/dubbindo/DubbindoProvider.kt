@@ -10,8 +10,9 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import com.dubbindo.BuildConfig
 
-class Dubbindo : MainAPI() {
+class DubbindoProvider : MainAPI() {
     override var mainUrl = "https://www.dubbindo.site"
     override var name = "Dubbindo"
     override val hasMainPage = true
@@ -25,11 +26,9 @@ class Dubbindo : MainAPI() {
         TvType.Anime,
     )
 
-    // ── Kredensial ────────────────────────────────────────────────────────────
     private val USERNAME = "HatsuneMikuUwU"
-    private val PASSWORD = "weeabooifyprojects123456789"
+    private val PASSWORD = BuildConfig.DUBBINDO_PASSWORD
 
-    // ── Session ───────────────────────────────────────────────────────────────
     private var sessionCookie = ""
 
     private val baseHeaders get() = mapOf(
@@ -41,8 +40,6 @@ class Dubbindo : MainAPI() {
         baseHeaders + mapOf("Cookie" to sessionCookie)
     else baseHeaders
 
-    // ── Login ─────────────────────────────────────────────────────────────────
-
     private fun parseCookiePair(header: String): Pair<String, String>? {
         val part = header.split(";").firstOrNull()?.trim() ?: return null
         val eq   = part.indexOf('=')
@@ -51,7 +48,6 @@ class Dubbindo : MainAPI() {
     }
 
     private suspend fun doLogin(): Boolean {
-        // Step 1 – GET /login untuk PHPSESSID awal
         val getResp     = app.get("$mainUrl/login", headers = baseHeaders)
         val initCookies = getResp.headers
             .filter { it.first.equals("set-cookie", ignoreCase = true) }
@@ -60,7 +56,6 @@ class Dubbindo : MainAPI() {
 
         val phpSessId = initCookies["PHPSESSID"].orEmpty()
 
-        // Step 2 – POST kredensial
         val postResp = app.post(
             "$mainUrl/login",
             data = mapOf(
@@ -93,15 +88,7 @@ class Dubbindo : MainAPI() {
         doLogin()
     }
 
-    // ── Subscribe ─────────────────────────────────────────────────────────────
-
-    /**
-     * Ambil channel ID dari halaman, lalu POST ke /aj/subscribe.
-     * Mengambil main_session dari halaman untuk header Referer yang benar.
-     * Return true jika berhasil menemukan channel ID dan mengirim request.
-     */
     private suspend fun subscribeChannel(document: Document, pageUrl: String): Boolean {
-        // Cari channel ID — coba beberapa selector sekaligus
         val channelId = document
             .selectFirst("button.btn-subscribe[data-id]")?.attr("data-id")?.trim()
             ?: document.selectFirst(".subscribe-btn-container button[data-id]")?.attr("data-id")?.trim()
@@ -113,12 +100,10 @@ class Dubbindo : MainAPI() {
 
         if (channelId.isBlank()) return false
 
-        // main_session adalah CSRF token yang dibutuhkan endpoint /aj/
         val mainSession = document
             .selectFirst("input.main_session")?.attr("value")?.trim()
             .orEmpty()
 
-        // URL subscribe dengan hash jika tersedia
         val subscribeUrl = if (mainSession.isNotBlank())
             "$mainUrl/aj/subscribe?hash=$mainSession"
         else
@@ -135,10 +120,27 @@ class Dubbindo : MainAPI() {
             )
         )
 
-        return resp.isSuccessful
+        if (!resp.isSuccessful) return false
+
+        val muteUrl = if (mainSession.isNotBlank())
+            "$mainUrl/aj/user/notify?hash=$mainSession"
+        else
+            "$mainUrl/aj/user/notify"
+
+        app.post(
+            muteUrl,
+            data    = mapOf("user_id" to channelId),
+            headers = authedHeaders + mapOf(
+                "Content-Type"     to "application/x-www-form-urlencoded",
+                "X-Requested-With" to "XMLHttpRequest",
+                "Referer"          to pageUrl,
+                "Origin"           to mainUrl
+            )
+        )
+
+        return true
     }
 
-    /** Deteksi apakah halaman masih terkunci (subscribe wall). */
     private fun isSubscribeWall(document: Document): Boolean {
         val playerArea = document.selectFirst("div.video-processing, div.video-player")
             ?.text().orEmpty()
@@ -146,13 +148,13 @@ class Dubbindo : MainAPI() {
                document.select("video#my-video source, video source").isEmpty()
     }
 
-    // ── Main page ─────────────────────────────────────────────────────────────
     override val mainPage = mainPageOf(
-        "$mainUrl/videos/category/1"     to "Movie",
+        "$mainUrl/videos/trending"         to "Trending",
+        "$mainUrl/videos/category/1"      to "Movie",
         "$mainUrl/videos/category/3"     to "TV Series",
         "$mainUrl/videos/category/5"     to "Anime Series",
         "$mainUrl/videos/category/4"     to "Anime Movie",
-        "$mainUrl/videos/category/other" to "Other",
+        "$mainUrl/videos/category/other" to "Other"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -165,7 +167,6 @@ class Dubbindo : MainAPI() {
         )
     }
 
-    // ── Element helpers ───────────────────────────────────────────────────────
     private fun Element.toCategoryResult(): TvSeriesSearchResponse? {
         val title = selectFirst("div.video-title h4")?.text()?.trim() ?: return null
         if (title.isEmpty()) return null
@@ -200,7 +201,6 @@ class Dubbindo : MainAPI() {
         }
     }
 
-    // ── Search ────────────────────────────────────────────────────────────────
     override suspend fun search(query: String): List<SearchResponse> {
         ensureSession()
         val results = mutableListOf<SearchResponse>()
@@ -215,8 +215,6 @@ class Dubbindo : MainAPI() {
         return results
     }
 
-    // ── Load ──────────────────────────────────────────────────────────────────
-
     private fun parseVideoSources(doc: Document): List<Video> =
         doc.select("video#my-video source, video source").mapNotNull { el ->
             val src = el.attr("src").trim().ifEmpty { return@mapNotNull null }
@@ -227,19 +225,12 @@ class Dubbindo : MainAPI() {
             )
         }
 
-    /**
-     * Ambil video sources dari URL, dengan logika:
-     * 1. Load halaman
-     * 2. Jika kena subscribe wall → subscribe → reload
-     * 3. Jika masih wall → sesi expired → login ulang → subscribe → reload
-     */
     private suspend fun fetchVideoSources(url: String): Pair<Document, List<Video>> {
         var doc    = app.get(url, headers = authedHeaders).document
         var videos = parseVideoSources(doc)
 
         if (videos.isNotEmpty()) return doc to videos
 
-        // Kena subscribe wall — coba subscribe lalu reload
         if (isSubscribeWall(doc)) {
             subscribeChannel(doc, url)
             doc    = app.get(url, headers = authedHeaders).document
@@ -248,14 +239,11 @@ class Dubbindo : MainAPI() {
 
         if (videos.isNotEmpty()) return doc to videos
 
-        // Masih kosong — mungkin sesi expired, login ulang
         sessionCookie = ""
         if (doLogin()) {
-            // Muat ulang halaman dengan sesi baru
             doc    = app.get(url, headers = authedHeaders).document
             videos = parseVideoSources(doc)
 
-            // Masih kena wall setelah re-login → subscribe ulang dengan sesi baru
             if (videos.isEmpty() && isSubscribeWall(doc)) {
                 subscribeChannel(doc, url)
                 doc    = app.get(url, headers = authedHeaders).document
@@ -269,7 +257,6 @@ class Dubbindo : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         ensureSession()
 
-        // Load halaman pertama untuk ambil metadata + tombol subscribe
         val document = app.get(url, headers = authedHeaders).document
 
         val title = (document.selectFirst("meta[name=title]")?.attr("content")
@@ -295,11 +282,8 @@ class Dubbindo : MainAPI() {
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
 
-            // Subscribe langsung saat buka halaman detail,
-            // tidak perlu tunggu video gagal load terlebih dahulu.
             subscribeChannel(document, url)
 
-            // Ambil video sources (dengan retry login + re-subscribe jika masih wall)
             val (_, videos) = fetchVideoSources(url)
 
             newMovieLoadResponse(title, url, TvType.Movie, videos.toJson()) {
@@ -309,28 +293,15 @@ class Dubbindo : MainAPI() {
         }
     }
 
-    // ── Load links ────────────────────────────────────────────────────────────
-
-    /**
-     * Wasabi / AWS S3 pre-signed URL sudah punya credentials di query string
-     * (X-Amz-Signature, X-Amz-Credential, dll).
-     * Menambahkan Cookie atau Referer justru bisa menyebabkan SignatureDoesNotMatch.
-     * URL seperti ini harus dikirim tanpa header tambahan.
-     */
     private fun isPresignedS3(url: String) =
         url.contains("X-Amz-Signature", ignoreCase = true) ||
         url.contains("X-Amz-Credential", ignoreCase = true) ||
         url.contains("wasabisys.com", ignoreCase = true) ||
         url.contains("amazonaws.com", ignoreCase = true)
 
-    /**
-     * Resolve redirect dari s3.dubbindo.my.id → Wasabi pre-signed URL.
-     * Pre-signed URL bisa diputar langsung tanpa Cookie/Referer.
-     * Jika tidak ada redirect, kembalikan URL aslinya.
-     */
     private suspend fun resolveVideoUrl(src: String): String {
-        if (isPresignedS3(src)) return src           // sudah Wasabi, tidak perlu resolve
-        if (!src.contains("s3.dubbindo.my.id")) return src  // bukan CDN dubbindo, skip
+        if (isPresignedS3(src)) return src
+        if (!src.contains("s3.dubbindo.my.id")) return src
 
         return try {
             val resp = app.get(
@@ -338,13 +309,12 @@ class Dubbindo : MainAPI() {
                 headers  = authedHeaders,
                 allowRedirects = false
             )
-            // Ambil header Location dari 301/302 redirect
             val location = resp.headers
                 .firstOrNull { it.first.equals("location", ignoreCase = true) }
                 ?.second
             if (!location.isNullOrBlank()) location else src
         } catch (e: Exception) {
-            src  // fallback ke URL asli jika gagal
+            src
         }
     }
 
@@ -360,7 +330,6 @@ class Dubbindo : MainAPI() {
         if (videos != null) {
             videos.forEach { video ->
                 val rawSrc = video.src ?: return@forEach
-                // Resolve redirect s3.dubbindo.my.id → Wasabi pre-signed URL
                 val src = resolveVideoUrl(rawSrc)
 
                 if (src.endsWith(".m3u8") || video.type.orEmpty().startsWith("video/")
@@ -368,8 +337,6 @@ class Dubbindo : MainAPI() {
                     callback.invoke(
                         newExtractorLink(name, name, src, INFER_TYPE) {
                             quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
-                            // Pre-signed Wasabi/S3: tanpa header (signature hanya untuk "host")
-                            // URL lain: pakai Cookie + Referer
                             headers = if (isPresignedS3(src)) emptyMap() else streamHeaders
                         }
                     )

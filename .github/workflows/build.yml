@@ -48,6 +48,8 @@ jobs:
 
       - name: Build Plugins
         working-directory: ${{ github.workspace }}/src
+        env:
+          DUBBINDO_PASSWORD: ${{ secrets.DUBBINDO_PASS }}
         run: |
           chmod +x gradlew
           ./gradlew make makePluginsJson
