@@ -107,7 +107,7 @@ class Dubbindo : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url).document
+        val document = app.get(url, headers = mapOf("Referer" to mainUrl)).document
 
         val title = (document.selectFirst("meta[name=title]")?.attr("content")
             ?: document.title())
@@ -180,19 +180,23 @@ class Dubbindo : MainAPI() {
         val videos = tryParseJson<List<Video>>(data)
         if (videos != null) {
             videos.map { video ->
+                val src = video.src ?: return@map
                 if (video.type == "video/mp4" || video.type == "video/x-msvideo" || video.type == "video/x-matroska") {
+                    // FIX: Tambah Referer header — s3.dubbindo.my.id pakai hotlink protection
                     callback.invoke(
                         newExtractorLink(
                             this.name,
                             this.name,
-                            video.src ?: return@map,
+                            src,
                             INFER_TYPE
                         ) {
                             this.quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
+                            this.headers = mapOf("Referer" to "https://www.dubbindo.site")
                         }
                     )
                 } else {
-                    loadExtractor(video.src ?: return@map, "", subtitleCallback, callback)
+                    // Eksternal extractor: kirim referer dubbindo.site
+                    loadExtractor(src, "https://www.dubbindo.site", subtitleCallback, callback)
                 }
             }
             return true
@@ -203,7 +207,7 @@ class Dubbindo : MainAPI() {
         if (urls != null) {
             urls.forEach { videoUrl ->
                 if (videoUrl.isNotBlank()) {
-                    loadExtractor(videoUrl, "", subtitleCallback, callback)
+                    loadExtractor(videoUrl, "https://www.dubbindo.site", subtitleCallback, callback)
                 }
             }
             return true
