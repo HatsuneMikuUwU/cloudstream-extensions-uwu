@@ -101,17 +101,31 @@ class Dubbindo : MainAPI() {
      * Return true jika berhasil menemukan channel ID dan mengirim request.
      */
     private suspend fun subscribeChannel(document: Document, pageUrl: String): Boolean {
-        // Cari channel ID dari tombol subscribe di halaman watch/channel
+        // Cari channel ID — coba beberapa selector sekaligus
         val channelId = document
-            .selectFirst("button.btn-subscribe[data-id], .subscribe-btn-container button[data-id]")
-            ?.attr("data-id")?.trim()
+            .selectFirst("button.btn-subscribe[data-id]")?.attr("data-id")?.trim()
+            ?: document.selectFirst(".subscribe-btn-container button[data-id]")?.attr("data-id")?.trim()
+            ?: document.selectFirst("button[onclick*=PT_Subscribe]")
+                ?.attr("onclick")
+                ?.let { Regex("""PT_Subscribe\((\d+)""").find(it)?.groupValues?.get(1) }
             ?: document.selectFirst("input#profile-id")?.attr("value")?.trim()
             ?: return false
 
         if (channelId.isBlank()) return false
 
+        // main_session adalah CSRF token yang dibutuhkan endpoint /aj/
+        val mainSession = document
+            .selectFirst("input.main_session")?.attr("value")?.trim()
+            .orEmpty()
+
+        // URL subscribe dengan hash jika tersedia
+        val subscribeUrl = if (mainSession.isNotBlank())
+            "$mainUrl/aj/subscribe?hash=$mainSession"
+        else
+            "$mainUrl/aj/subscribe"
+
         val resp = app.post(
-            "$mainUrl/aj/subscribe",
+            subscribeUrl,
             data    = mapOf("user_id" to channelId),
             headers = authedHeaders + mapOf(
                 "Content-Type"     to "application/x-www-form-urlencoded",
