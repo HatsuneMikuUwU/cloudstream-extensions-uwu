@@ -71,6 +71,7 @@ class Dubbindo : MainAPI() {
 
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
             this.posterUrl = posterUrl
+            this.posterHeaders = mapOf("Referer" to "https://www.dubbindo.site")
         }
     }
 
@@ -89,6 +90,7 @@ class Dubbindo : MainAPI() {
 
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
             this.posterUrl = posterUrl
+            this.posterHeaders = mapOf("Referer" to "https://www.dubbindo.site")
         }
     }
 
@@ -164,6 +166,7 @@ class Dubbindo : MainAPI() {
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
             this.posterUrl = posterUrl
+            this.posterHeaders = mapOf("Referer" to "https://www.dubbindo.site")
         }
     }
 
