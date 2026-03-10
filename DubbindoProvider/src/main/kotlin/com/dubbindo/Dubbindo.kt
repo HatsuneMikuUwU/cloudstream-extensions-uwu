@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class Dubbindo : MainAPI() {
@@ -24,29 +25,107 @@ class Dubbindo : MainAPI() {
         TvType.Anime,
     )
 
-    // ── Cookies sesi ────────────────────────────────────────────────────────
-    // Video source ada langsung di watch page saat request dengan cookie valid.
-    // Tidak perlu embed iframe sama sekali.
-    private val sessionCookies = mapOf(
-        "user_id"        to "f87445d728dc4569f8795891589260aeefc8df0c1773168951fc41dd6bf552a442846634d941ead607",
-        "next_up_videos" to "%5B%2227969%22%2C%22142%22%2C%2227988%22%2C%2227943%22%2C%2227976%22%5D",
-        "v_shorts"       to "%5B%22bkviD7Qw7omhVRD%22%5D",
-        "r"              to "c3RyaW5n",
-        "mode"           to "night",
-        "_uads"          to "a%3A2%3A%7Bs%3A4%3A%26quot%3Bdate%26quot%3B%3Bi%3A1773242984%3Bs%3A5%3A%26quot%3Buaid_%26quot%3B%3Ba%3A0%3A%7B%7D%7D",
-        "auto"           to "",
-        "PHPSESSID"      to "t52rria3q613o666lt9g4dtism",
+    // ── Kredensial ────────────────────────────────────────────────────────────
+    private val USERNAME = "HatsuneMikuUwU"
+    private val PASSWORD = "weeabooifyprojects123456789"
+
+    // ── Session ───────────────────────────────────────────────────────────────
+    private var sessionCookie = ""
+
+    // Track channel ID yang sudah disubscribe agar tidak kirim request berulang
+    private val subscribedChannels = mutableSetOf<String>()
+
+    private val baseHeaders get() = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
+        "Referer"    to "$mainUrl/"
     )
 
-    private val cookieHeader: String
-        get() = sessionCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+    private val authedHeaders get() = if (sessionCookie.isNotBlank())
+        baseHeaders + mapOf("Cookie" to sessionCookie)
+    else baseHeaders
 
-    private val defaultHeaders
-        get() = mapOf(
-            "Cookie"     to cookieHeader,
-            "Referer"    to "$mainUrl/",
-            "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36"
+    // ── Login ─────────────────────────────────────────────────────────────────
+
+    private fun parseCookiePair(header: String): Pair<String, String>? {
+        val part = header.split(";").firstOrNull()?.trim() ?: return null
+        val eq   = part.indexOf('=')
+        if (eq < 0) return null
+        return part.substring(0, eq).trim() to part.substring(eq + 1).trim()
+    }
+
+    private suspend fun doLogin(): Boolean {
+        // Step 1 – GET /login untuk PHPSESSID awal
+        val getResp    = app.get("$mainUrl/login", headers = baseHeaders)
+        val initCookies = getResp.headers
+            .filter { it.first.equals("set-cookie", ignoreCase = true) }
+            .mapNotNull { parseCookiePair(it.second) }
+            .toMap().toMutableMap()
+
+        val phpSessId = initCookies["PHPSESSID"].orEmpty()
+
+        // Step 2 – POST kredensial
+        val postResp = app.post(
+            "$mainUrl/login",
+            data = mapOf(
+                "username"        to USERNAME,
+                "password"        to PASSWORD,
+                "remember_device" to "on"
+            ),
+            headers = baseHeaders + mapOf(
+                "Cookie"       to if (phpSessId.isNotBlank()) "PHPSESSID=$phpSessId" else "",
+                "Content-Type" to "application/x-www-form-urlencoded",
+                "Origin"       to mainUrl,
+                "Referer"      to "$mainUrl/login"
+            ),
+            allowRedirects = false
         )
+
+        val allCookies = initCookies + postResp.headers
+            .filter { it.first.equals("set-cookie", ignoreCase = true) }
+            .mapNotNull { parseCookiePair(it.second) }
+            .toMap()
+
+        return if (!allCookies["user_id"].isNullOrBlank()) {
+            sessionCookie = allCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+            true
+        } else false
+    }
+
+    private suspend fun ensureSession() {
+        if (sessionCookie.isNotBlank()) return
+        doLogin()
+    }
+
+    // ── Auto-subscribe ────────────────────────────────────────────────────────
+
+    /**
+     * Cek apakah ada tombol Subscribe di halaman, lalu POST ke /aj/subscribe.
+     * Dipanggil setiap load() agar video dari channel berlangganan bisa diakses.
+     *
+     * Selector: <button class="btn-subscribe" data-id="CHANNEL_ID">
+     * atau:     <input id="profile-id" value="CHANNEL_ID">
+     */
+    private suspend fun autoSubscribe(document: Document) {
+        val channelId = document.selectFirst("button.btn-subscribe[data-id]")
+            ?.attr("data-id")?.trim()
+            ?: document.selectFirst("input#profile-id")
+                ?.attr("value")?.trim()
+            ?: return
+
+        if (channelId.isBlank() || subscribedChannels.contains(channelId)) return
+
+        app.post(
+            "$mainUrl/aj/subscribe",
+            data    = mapOf("user_id" to channelId),
+            headers = authedHeaders + mapOf(
+                "Content-Type" to "application/x-www-form-urlencoded",
+                "X-Requested-With" to "XMLHttpRequest",
+                "Referer"      to "$mainUrl/"
+            )
+        )
+
+        subscribedChannels.add(channelId)
+    }
 
     // ── Main page ─────────────────────────────────────────────────────────────
     override val mainPage = mainPageOf(
@@ -58,7 +137,8 @@ class Dubbindo : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("${request.data}?page_id=$page", headers = defaultHeaders).document
+        ensureSession()
+        val document = app.get("${request.data}?page_id=$page", headers = authedHeaders).document
         val home = document.select("div.video-wrapper").mapNotNull { it.toCategoryResult() }
         return newHomePageResponse(
             list = HomePageList(name = request.name, list = home, isHorizontalImages = true),
@@ -66,16 +146,15 @@ class Dubbindo : MainAPI() {
         )
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Element helpers ───────────────────────────────────────────────────────
     private fun Element.toCategoryResult(): TvSeriesSearchResponse? {
         val title = selectFirst("div.video-title h4")?.text()?.trim() ?: return null
         if (title.isEmpty()) return null
         val href = selectFirst("div.video-thumb a")?.attr("href")
             ?: selectFirst("a")?.attr("href") ?: return null
-        val posterUrl = fixUrlNull(selectFirst("div.video-thumb img")?.attr("src"))
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            this.posterUrl = posterUrl
-            this.posterHeaders = mapOf("Referer" to mainUrl)
+            posterUrl    = fixUrlNull(selectFirst("div.video-thumb img")?.attr("src"))
+            posterHeaders = mapOf("Referer" to mainUrl)
         }
     }
 
@@ -85,10 +164,9 @@ class Dubbindo : MainAPI() {
         if (title.isEmpty()) return null
         val href = selectFirst("div.video-list-image a")?.attr("href")
             ?: selectFirst("a")?.attr("href") ?: return null
-        val posterUrl = fixUrlNull(selectFirst("img")?.attr("src"))
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            this.posterUrl = posterUrl
-            this.posterHeaders = mapOf("Referer" to mainUrl)
+            posterUrl    = fixUrlNull(selectFirst("img")?.attr("src"))
+            posterHeaders = mapOf("Referer" to mainUrl)
         }
     }
 
@@ -97,22 +175,21 @@ class Dubbindo : MainAPI() {
             ?: selectFirst("a")?.text()?.trim() ?: return null
         val href = selectFirst("div.ra-thumb a")?.attr("href")
             ?: selectFirst("a")?.attr("href") ?: return null
-        val posterUrl = fixUrlNull(selectFirst("img")?.attr("src"))
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            this.posterUrl = posterUrl
-            this.posterHeaders = mapOf("Referer" to mainUrl)
+            posterUrl    = fixUrlNull(selectFirst("img")?.attr("src"))
+            posterHeaders = mapOf("Referer" to mainUrl)
         }
     }
 
     // ── Search ────────────────────────────────────────────────────────────────
     override suspend fun search(query: String): List<SearchResponse> {
+        ensureSession()
         val results = mutableListOf<SearchResponse>()
         for (i in 1..10) {
-            val doc = app.get(
+            val page = app.get(
                 "$mainUrl/search?keyword=$query&page_id=$i",
-                headers = defaultHeaders
-            ).document
-            val page = doc.select("div.video-list").mapNotNull { it.toSearchResult() }
+                headers = authedHeaders
+            ).document.select("div.video-list").mapNotNull { it.toSearchResult() }
             results.addAll(page)
             if (page.isEmpty()) break
         }
@@ -120,8 +197,22 @@ class Dubbindo : MainAPI() {
     }
 
     // ── Load ──────────────────────────────────────────────────────────────────
+
+    /** Ekstrak semua <source> dari elemen video di halaman. */
+    private fun parseVideoSources(doc: Document): List<Video> =
+        doc.select("video#my-video source, video source").mapNotNull { el ->
+            val src = el.attr("src").trim().ifEmpty { return@mapNotNull null }
+            Video(
+                src  = src,
+                res  = el.attr("res").ifBlank { el.attr("data-quality").replace(Regex("[^0-9]"), "") },
+                type = el.attr("type").ifBlank { "video/mp4" }
+            )
+        }
+
     override suspend fun load(url: String): LoadResponse? {
-        val document = app.get(url, headers = defaultHeaders).document
+        ensureSession()
+
+        var document = app.get(url, headers = authedHeaders).document
 
         val title = (document.selectFirst("meta[name=title]")?.attr("content")
             ?: document.title()).replace(" | UVideo", "").trim()
@@ -131,55 +222,42 @@ class Dubbindo : MainAPI() {
         val tags   = document.select("div.pt_categories li a").map { it.text() }
 
         return if (url.contains("/articles/read/")) {
-            // ── Halaman artikel ───────────────────────────────────────────────
             val description = document.selectFirst("div.read-article-description article")?.text()
             val videoLinks  = document.select("div.read-article-text a")
                 .map { it.attr("href") }.filter { it.isNotBlank() }
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
-
             newMovieLoadResponse(title, url, TvType.Movie, videoLinks.toJson()) {
                 posterUrl = poster; plot = description
                 this.tags = tags; this.recommendations = recommendations
             }
         } else {
-            // ── Halaman watch ─────────────────────────────────────────────────
             val description = document.select("div.watch-video-description p")
                 .text().replace("\u2063", "").trim()
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
 
-            // Video source tersedia langsung di <video#my-video source> saat
-            // halaman di-request dengan cookie valid.
-            // Struktur: <source src="URL" res="720" type="video/mp4">
-            val videos = document.select("video#my-video source").mapNotNull { el ->
-                val src = el.attr("src").trim()
-                if (src.isEmpty()) return@mapNotNull null
-                Video(
-                    src  = src,
-                    res  = el.attr("res").ifBlank { el.attr("data-quality").replace(Regex("[^0-9]"), "") },
-                    type = el.attr("type").ifBlank { "video/mp4" }
-                )
-            }
+            var videos = parseVideoSources(document)
 
-            // Fallback 1: <video> lain (tanpa id spesifik)
-            val finalVideos = if (videos.isNotEmpty()) videos else {
-                document.select("video source").mapNotNull { el ->
-                    val src = el.attr("src").trim()
-                    if (src.isEmpty()) return@mapNotNull null
-                    Video(src = src, res = el.attr("res"), type = el.attr("type").ifBlank { "video/mp4" })
+            if (videos.isEmpty()) {
+                // Video kosong → subscribe ke channel lalu reload
+                autoSubscribe(document)
+                document = app.get(url, headers = authedHeaders).document
+                videos   = parseVideoSources(document)
+
+                // Masih kosong → sesi expired, login ulang
+                if (videos.isEmpty()) {
+                    sessionCookie = ""
+                    if (doLogin()) {
+                        // Subscribe ulang setelah login baru
+                        autoSubscribe(document)
+                        document = app.get(url, headers = authedHeaders).document
+                        videos   = parseVideoSources(document)
+                    }
                 }
             }
 
-            val dataJson = if (finalVideos.isNotEmpty()) finalVideos.toJson()
-                           else {
-                               // Fallback 2: jika kosong (belum login / wall), coba embed
-                               val embedUrl = document.selectFirst("iframe[src*=/embed/]")?.attr("src")
-                                   ?: document.selectFirst("iframe[src*=dubbindo]")?.attr("src")
-                               listOfNotNull(embedUrl).toJson()
-                           }
-
-            newMovieLoadResponse(title, url, TvType.Movie, dataJson) {
+            newMovieLoadResponse(title, url, TvType.Movie, videos.toJson()) {
                 posterUrl = poster; plot = description
                 this.tags = tags; this.recommendations = recommendations
             }
@@ -193,45 +271,31 @@ class Dubbindo : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val authedHeaders = mapOf(
-            "Cookie"  to cookieHeader,
-            "Referer" to mainUrl
-        )
+        val streamHeaders = authedHeaders + mapOf("Referer" to mainUrl)
 
         val videos = tryParseJson<List<Video>>(data)
         if (videos != null) {
             videos.forEach { video ->
                 val src = video.src ?: return@forEach
-                when {
-                    src.endsWith(".m3u8") || video.type == "application/x-mpegURL" ->
-                        callback.invoke(
-                            newExtractorLink(this.name, this.name, src, INFER_TYPE) {
-                                this.quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
-                                this.headers = authedHeaders
-                            }
-                        )
-                    video.type.orEmpty().startsWith("video/") ->
-                        callback.invoke(
-                            newExtractorLink(this.name, this.name, src, INFER_TYPE) {
-                                this.quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
-                                this.headers = authedHeaders
-                            }
-                        )
-                    else ->
-                        loadExtractor(src, mainUrl, subtitleCallback, callback)
+                if (src.endsWith(".m3u8") || video.type.orEmpty().startsWith("video/")
+                    || video.type == "application/x-mpegURL") {
+                    callback.invoke(
+                        newExtractorLink(name, name, src, INFER_TYPE) {
+                            quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
+                            headers = streamHeaders
+                        }
+                    )
+                } else {
+                    loadExtractor(src, mainUrl, subtitleCallback, callback)
                 }
             }
-            return true
+            return videos.isNotEmpty()
         }
 
-        // Fallback: List<String> dari halaman artikel atau embed URL
         val urls = tryParseJson<List<String>>(data)
         if (urls != null) {
-            urls.forEach { videoUrl ->
-                if (videoUrl.isNotBlank())
-                    loadExtractor(videoUrl, mainUrl, subtitleCallback, callback)
-            }
-            return true
+            urls.forEach { if (it.isNotBlank()) loadExtractor(it, mainUrl, subtitleCallback, callback) }
+            return urls.isNotEmpty()
         }
 
         return false
