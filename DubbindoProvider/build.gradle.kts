@@ -27,6 +27,9 @@ cloudstream {
 }
 
 android {
+
+    namespace = "com.dubbindo" 
+    
     buildFeatures {
         buildConfig = true
     }
