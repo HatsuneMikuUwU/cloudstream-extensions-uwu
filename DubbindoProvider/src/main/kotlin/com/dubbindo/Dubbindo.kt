@@ -138,15 +138,40 @@ class Dubbindo : MainAPI() {
                 .text().replace("\u2063", "").trim()
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
-            val video = document.select("video#my-video source").map {
-                Video(
-                    it.attr("src"),
-                    it.attr("res"),  // atribut resolusi di HTML adalah "res"
-                    it.attr("type"),
-                )
-            }
 
-            newMovieLoadResponse(title, url, TvType.Movie, video.toJson()) {
+            // FIX: Video tidak di <source> tag — URL-nya di-inject JS di halaman embed.
+            // JS pattern: $('video').attr('src', 'uvideoweb/movie/xxx.mp4')
+            // Base URL S3: https://s3.dubbindo.my.id/
+            val embedUrl = document.selectFirst("iframe[src*=/embed/]")?.attr("src")
+                ?: document.selectFirst("iframe[src*=dubbindo]")?.attr("src")
+
+            val video = if (embedUrl != null) {
+                val embedHtml = app.get(
+                    embedUrl,
+                    headers = mapOf("Referer" to url)
+                ).text
+
+                // Regex ekstrak path dari JS: $('video').attr('src', 'PATH')
+                val srcRegex = Regex("""[^a-z]src',\s*'([^']+\.(mp4|mkv|avi))'""")
+                val match = srcRegex.find(embedHtml)?.groupValues?.getOrNull(1)
+
+                if (match != null) {
+                    val fullSrc = if (match.startsWith("http")) match
+                                  else "https://s3.dubbindo.my.id/$match"
+                    listOf(Video(fullSrc, null, "video/mp4"))
+                } else {
+                    // Fallback: cari di <source> tag
+                    org.jsoup.Jsoup.parse(embedHtml)
+                        .select("video source")
+                        .map { Video(it.attr("src"), it.attr("res"), it.attr("type")) }
+                }
+            } else emptyList()
+
+            val dataJson = if (video.isNotEmpty()) video.toJson()
+                           else listOfNotNull(embedUrl).toJson()
+
+            newMovieLoadResponse(title, url, TvType.Movie, dataJson) {
+
                 posterUrl = poster
                 plot = description
                 this.tags = tags
