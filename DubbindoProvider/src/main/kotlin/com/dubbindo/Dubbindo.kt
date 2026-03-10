@@ -255,7 +255,8 @@ class Dubbindo : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         ensureSession()
 
-        val (document, _) = fetchVideoSources(url).let { it } // load awal
+        // Load halaman pertama untuk ambil metadata + tombol subscribe
+        val document = app.get(url, headers = authedHeaders).document
 
         val title = (document.selectFirst("meta[name=title]")?.attr("content")
             ?: document.title()).replace(" | UVideo", "").trim()
@@ -280,7 +281,11 @@ class Dubbindo : MainAPI() {
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
 
-            // Jalankan fetchVideoSources untuk dapat dokumen + sources final
+            // Subscribe langsung saat buka halaman detail,
+            // tidak perlu tunggu video gagal load terlebih dahulu.
+            subscribeChannel(document, url)
+
+            // Ambil video sources (dengan retry login + re-subscribe jika masih wall)
             val (_, videos) = fetchVideoSources(url)
 
             newMovieLoadResponse(title, url, TvType.Movie, videos.toJson()) {
