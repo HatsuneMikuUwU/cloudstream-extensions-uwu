@@ -25,10 +25,10 @@ class Dubbindo : MainAPI() {
     )
 
     override val mainPage = mainPageOf(
-        "$mainUrl/videos/category/1" to "Movie",
-        "$mainUrl/videos/category/3" to "TV Series",
-        "$mainUrl/videos/category/5" to "Anime Series",
-        "$mainUrl/videos/category/4" to "Anime Movie",
+        "$mainUrl/videos/category/1"     to "Movie",
+        "$mainUrl/videos/category/3"     to "TV Series",
+        "$mainUrl/videos/category/5"     to "Anime Series",
+        "$mainUrl/videos/category/4"     to "Anime Movie",
         "$mainUrl/videos/category/other" to "Other",
     )
 
@@ -36,34 +36,57 @@ class Dubbindo : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
+        // Pagination menggunakan ?page_id= (konfirmasi dari HTML)
         val document = app.get("${request.data}?page_id=$page").document
 
-        // FIX: Selector diperbarui sesuai struktur HTML aktual website.
-        // Website menggunakan div.video-list sebagai container kartu video,
-        // bukan div.video-wrapper seperti sebelumnya.
-        val home = document.select("div.video-list")
-            .mapNotNull {
-                it.toSearchResult()
-            }
+        // FIX: Halaman category menggunakan "div.video-wrapper" bukan "div.video-list"
+        val home = document.select("div.video-wrapper")
+            .mapNotNull { it.toCategoryResult() }
+
         return newHomePageResponse(
             list = HomePageList(
                 name = request.name,
                 list = home,
                 isHorizontalImages = true
             ),
-            hasNext = true
+            hasNext = home.isNotEmpty()
         )
     }
 
+    // Untuk kartu di halaman category: div.video-wrapper
+    // Struktur: div.video-thumb > a[href] + img[src]
+    //           div.video-title > a > h4
+    private fun Element.toCategoryResult(): TvSeriesSearchResponse? {
+        val title = this.selectFirst("div.video-title h4")?.text()?.trim()
+            ?: return null
+        if (title.isEmpty()) return null
+
+        val href = this.selectFirst("div.video-thumb a")?.attr("href")
+            ?: this.selectFirst("a")?.attr("href")
+            ?: return null
+
+        val posterUrl = fixUrlNull(
+            this.selectFirst("div.video-thumb img")?.attr("src")
+        )
+
+        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
+            this.posterUrl = posterUrl
+        }
+    }
+
+    // Untuk kartu di hasil search: div.video-list
     private fun Element.toSearchResult(): TvSeriesSearchResponse? {
-        // FIX: Selector title disesuaikan dengan struktur HTML baru.
-        // Judul ada di dalam div.video-list-title > a > h4
-        val title = this.selectFirst("div.video-list-title h4, h4")?.text()?.trim() ?: return null
-        // Ambil href dari link gambar/thumbnail (link pertama di dalam div.video-list-image)
+        val title = this.selectFirst("div.video-list-title h4")?.text()?.trim()
+            ?: this.selectFirst("h4")?.text()?.trim()
+            ?: return null
+        if (title.isEmpty()) return null
+
         val href = this.selectFirst("div.video-list-image a")?.attr("href")
             ?: this.selectFirst("a")?.attr("href")
             ?: return null
+
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
+
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
             this.posterUrl = posterUrl
         }
@@ -72,16 +95,9 @@ class Dubbindo : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val searchResponse = mutableListOf<SearchResponse>()
         for (i in 1..10) {
-            val document =
-                app.get(
-                    "$mainUrl/search?keyword=$query&page_id=$i",
-                ).document
-
-            // FIX: Selector search juga diperbarui ke div.video-list
+            val document = app.get("$mainUrl/search?keyword=$query&page_id=$i").document
             val results = document.select("div.video-list")
-                .mapNotNull {
-                    it.toSearchResult()
-                }
+                .mapNotNull { it.toSearchResult() }
             searchResponse.addAll(results)
             if (results.isEmpty()) break
         }
@@ -91,8 +107,6 @@ class Dubbindo : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
 
-        // FIX: Ambil title dari meta tag agar bisa dipakai di kedua jenis halaman,
-        // lalu bersihkan nama site-nya.
         val title = (document.selectFirst("meta[name=title]")?.attr("content")
             ?: document.title())
             .replace(" | UVideo", "").trim()
@@ -101,22 +115,14 @@ class Dubbindo : MainAPI() {
         val poster = document.selectFirst("meta[property=og:image]")?.attr("content")
         val tags = document.select("div.pt_categories li a").map { it.text() }
 
-        // FIX: Tangani dua jenis halaman detail:
-        //  1. /articles/read/... → link video ada di div.read-article-text a
-        //  2. /watch/...         → sumber video ada di video#my-video source
         return if (url.contains("/articles/read/")) {
             // --- Halaman Artikel ---
             val description = document.selectFirst("div.read-article-description article")?.text()
-
-            // Kumpulkan semua link video/extractor dari body artikel
             val videoLinks = document.select("div.read-article-text a")
                 .map { it.attr("href") }
                 .filter { it.isNotBlank() }
-
-            // Related videos di artikel menggunakan div.related-video-wrapper
-            val recommendations = document.select("div.related-video-wrapper").mapNotNull {
-                it.toRelatedResult()
-            }
+            val recommendations = document.select("div.related-video-wrapper")
+                .mapNotNull { it.toRelatedResult() }
 
             newMovieLoadResponse(title, url, TvType.Movie, videoLinks.toJson()) {
                 posterUrl = poster
@@ -126,16 +132,14 @@ class Dubbindo : MainAPI() {
             }
         } else {
             // --- Halaman Watch ---
-            val description = document.select("div.watch-video-description p").text().replace("\u2063", "").trim()
-
-            val recommendations = document.select("div.related-video-wrapper").mapNotNull {
-                it.toRelatedResult()
-            }
-
+            val description = document.select("div.watch-video-description p")
+                .text().replace("\u2063", "").trim()
+            val recommendations = document.select("div.related-video-wrapper")
+                .mapNotNull { it.toRelatedResult() }
             val video = document.select("video#my-video source").map {
                 Video(
                     it.attr("src"),
-                    it.attr("res"),  // FIX: was "size" — atribut di HTML adalah "res"
+                    it.attr("res"),  // atribut resolusi di HTML adalah "res"
                     it.attr("type"),
                 )
             }
@@ -149,8 +153,7 @@ class Dubbindo : MainAPI() {
         }
     }
 
-    // FIX: Fungsi khusus untuk mengambil related video dari div.related-video-wrapper
-    // (struktur berbeda dari div.video-list di halaman utama)
+    // Related video di sidebar: div.related-video-wrapper
     private fun Element.toRelatedResult(): TvSeriesSearchResponse? {
         val title = this.selectFirst("div.video-title a")?.text()?.trim()
             ?: this.selectFirst("a")?.text()?.trim()
@@ -170,8 +173,7 @@ class Dubbindo : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-
-        // FIX: Coba parse sebagai List<Video> dulu (halaman watch)
+        // Parse sebagai List<Video> → halaman watch (mp4 langsung)
         val videos = tryParseJson<List<Video>>(data)
         if (videos != null) {
             videos.map { video ->
@@ -193,8 +195,7 @@ class Dubbindo : MainAPI() {
             return true
         }
 
-        // FIX: Jika bukan List<Video>, coba parse sebagai List<String>
-        // (halaman artikel dengan link extractor langsung)
+        // Parse sebagai List<String> → halaman artikel (link extractor)
         val urls = tryParseJson<List<String>>(data)
         if (urls != null) {
             urls.forEach { videoUrl ->
@@ -213,5 +214,4 @@ class Dubbindo : MainAPI() {
         val res: String? = null,
         val type: String? = null,
     )
-
 }
