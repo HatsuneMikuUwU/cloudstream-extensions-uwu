@@ -32,9 +32,6 @@ class Dubbindo : MainAPI() {
     // ── Session ───────────────────────────────────────────────────────────────
     private var sessionCookie = ""
 
-    // Track channel ID yang sudah disubscribe agar tidak kirim request berulang
-    private val subscribedChannels = mutableSetOf<String>()
-
     private val baseHeaders get() = mapOf(
         "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
         "Referer"    to "$mainUrl/"
@@ -55,7 +52,7 @@ class Dubbindo : MainAPI() {
 
     private suspend fun doLogin(): Boolean {
         // Step 1 – GET /login untuk PHPSESSID awal
-        val getResp    = app.get("$mainUrl/login", headers = baseHeaders)
+        val getResp     = app.get("$mainUrl/login", headers = baseHeaders)
         val initCookies = getResp.headers
             .filter { it.first.equals("set-cookie", ignoreCase = true) }
             .mapNotNull { parseCookiePair(it.second) }
@@ -96,35 +93,43 @@ class Dubbindo : MainAPI() {
         doLogin()
     }
 
-    // ── Auto-subscribe ────────────────────────────────────────────────────────
+    // ── Subscribe ─────────────────────────────────────────────────────────────
 
     /**
-     * Cek apakah ada tombol Subscribe di halaman, lalu POST ke /aj/subscribe.
-     * Dipanggil setiap load() agar video dari channel berlangganan bisa diakses.
-     *
-     * Selector: <button class="btn-subscribe" data-id="CHANNEL_ID">
-     * atau:     <input id="profile-id" value="CHANNEL_ID">
+     * Ambil channel ID dari halaman, lalu POST ke /aj/subscribe.
+     * Mengambil main_session dari halaman untuk header Referer yang benar.
+     * Return true jika berhasil menemukan channel ID dan mengirim request.
      */
-    private suspend fun autoSubscribe(document: Document) {
-        val channelId = document.selectFirst("button.btn-subscribe[data-id]")
+    private suspend fun subscribeChannel(document: Document, pageUrl: String): Boolean {
+        // Cari channel ID dari tombol subscribe di halaman watch/channel
+        val channelId = document
+            .selectFirst("button.btn-subscribe[data-id], .subscribe-btn-container button[data-id]")
             ?.attr("data-id")?.trim()
-            ?: document.selectFirst("input#profile-id")
-                ?.attr("value")?.trim()
-            ?: return
+            ?: document.selectFirst("input#profile-id")?.attr("value")?.trim()
+            ?: return false
 
-        if (channelId.isBlank() || subscribedChannels.contains(channelId)) return
+        if (channelId.isBlank()) return false
 
-        app.post(
+        val resp = app.post(
             "$mainUrl/aj/subscribe",
             data    = mapOf("user_id" to channelId),
             headers = authedHeaders + mapOf(
-                "Content-Type" to "application/x-www-form-urlencoded",
+                "Content-Type"     to "application/x-www-form-urlencoded",
                 "X-Requested-With" to "XMLHttpRequest",
-                "Referer"      to "$mainUrl/"
+                "Referer"          to pageUrl,
+                "Origin"           to mainUrl
             )
         )
 
-        subscribedChannels.add(channelId)
+        return resp.isSuccessful
+    }
+
+    /** Deteksi apakah halaman masih terkunci (subscribe wall). */
+    private fun isSubscribeWall(document: Document): Boolean {
+        val playerArea = document.selectFirst("div.video-processing, div.video-player")
+            ?.text().orEmpty()
+        return playerArea.contains("subscribe to watch", ignoreCase = true) ||
+               document.select("video#my-video source, video source").isEmpty()
     }
 
     // ── Main page ─────────────────────────────────────────────────────────────
@@ -153,7 +158,7 @@ class Dubbindo : MainAPI() {
         val href = selectFirst("div.video-thumb a")?.attr("href")
             ?: selectFirst("a")?.attr("href") ?: return null
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            posterUrl    = fixUrlNull(selectFirst("div.video-thumb img")?.attr("src"))
+            posterUrl     = fixUrlNull(selectFirst("div.video-thumb img")?.attr("src"))
             posterHeaders = mapOf("Referer" to mainUrl)
         }
     }
@@ -165,7 +170,7 @@ class Dubbindo : MainAPI() {
         val href = selectFirst("div.video-list-image a")?.attr("href")
             ?: selectFirst("a")?.attr("href") ?: return null
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            posterUrl    = fixUrlNull(selectFirst("img")?.attr("src"))
+            posterUrl     = fixUrlNull(selectFirst("img")?.attr("src"))
             posterHeaders = mapOf("Referer" to mainUrl)
         }
     }
@@ -176,7 +181,7 @@ class Dubbindo : MainAPI() {
         val href = selectFirst("div.ra-thumb a")?.attr("href")
             ?: selectFirst("a")?.attr("href") ?: return null
         return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            posterUrl    = fixUrlNull(selectFirst("img")?.attr("src"))
+            posterUrl     = fixUrlNull(selectFirst("img")?.attr("src"))
             posterHeaders = mapOf("Referer" to mainUrl)
         }
     }
@@ -198,7 +203,6 @@ class Dubbindo : MainAPI() {
 
     // ── Load ──────────────────────────────────────────────────────────────────
 
-    /** Ekstrak semua <source> dari elemen video di halaman. */
     private fun parseVideoSources(doc: Document): List<Video> =
         doc.select("video#my-video source, video source").mapNotNull { el ->
             val src = el.attr("src").trim().ifEmpty { return@mapNotNull null }
@@ -209,10 +213,49 @@ class Dubbindo : MainAPI() {
             )
         }
 
+    /**
+     * Ambil video sources dari URL, dengan logika:
+     * 1. Load halaman
+     * 2. Jika kena subscribe wall → subscribe → reload
+     * 3. Jika masih wall → sesi expired → login ulang → subscribe → reload
+     */
+    private suspend fun fetchVideoSources(url: String): Pair<Document, List<Video>> {
+        var doc    = app.get(url, headers = authedHeaders).document
+        var videos = parseVideoSources(doc)
+
+        if (videos.isNotEmpty()) return doc to videos
+
+        // Kena subscribe wall — coba subscribe lalu reload
+        if (isSubscribeWall(doc)) {
+            subscribeChannel(doc, url)
+            doc    = app.get(url, headers = authedHeaders).document
+            videos = parseVideoSources(doc)
+        }
+
+        if (videos.isNotEmpty()) return doc to videos
+
+        // Masih kosong — mungkin sesi expired, login ulang
+        sessionCookie = ""
+        if (doLogin()) {
+            // Muat ulang halaman dengan sesi baru
+            doc    = app.get(url, headers = authedHeaders).document
+            videos = parseVideoSources(doc)
+
+            // Masih kena wall setelah re-login → subscribe ulang dengan sesi baru
+            if (videos.isEmpty() && isSubscribeWall(doc)) {
+                subscribeChannel(doc, url)
+                doc    = app.get(url, headers = authedHeaders).document
+                videos = parseVideoSources(doc)
+            }
+        }
+
+        return doc to videos
+    }
+
     override suspend fun load(url: String): LoadResponse? {
         ensureSession()
 
-        var document = app.get(url, headers = authedHeaders).document
+        val (document, _) = fetchVideoSources(url).let { it } // load awal
 
         val title = (document.selectFirst("meta[name=title]")?.attr("content")
             ?: document.title()).replace(" | UVideo", "").trim()
@@ -222,8 +265,8 @@ class Dubbindo : MainAPI() {
         val tags   = document.select("div.pt_categories li a").map { it.text() }
 
         return if (url.contains("/articles/read/")) {
-            val description = document.selectFirst("div.read-article-description article")?.text()
-            val videoLinks  = document.select("div.read-article-text a")
+            val description    = document.selectFirst("div.read-article-description article")?.text()
+            val videoLinks     = document.select("div.read-article-text a")
                 .map { it.attr("href") }.filter { it.isNotBlank() }
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
@@ -237,25 +280,8 @@ class Dubbindo : MainAPI() {
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
 
-            var videos = parseVideoSources(document)
-
-            if (videos.isEmpty()) {
-                // Video kosong → subscribe ke channel lalu reload
-                autoSubscribe(document)
-                document = app.get(url, headers = authedHeaders).document
-                videos   = parseVideoSources(document)
-
-                // Masih kosong → sesi expired, login ulang
-                if (videos.isEmpty()) {
-                    sessionCookie = ""
-                    if (doLogin()) {
-                        // Subscribe ulang setelah login baru
-                        autoSubscribe(document)
-                        document = app.get(url, headers = authedHeaders).document
-                        videos   = parseVideoSources(document)
-                    }
-                }
-            }
+            // Jalankan fetchVideoSources untuk dapat dokumen + sources final
+            val (_, videos) = fetchVideoSources(url)
 
             newMovieLoadResponse(title, url, TvType.Movie, videos.toJson()) {
                 posterUrl = poster; plot = description
