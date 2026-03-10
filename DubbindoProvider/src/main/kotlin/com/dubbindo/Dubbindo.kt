@@ -291,6 +291,19 @@ class Dubbindo : MainAPI() {
     }
 
     // ── Load links ────────────────────────────────────────────────────────────
+
+    /**
+     * Wasabi / AWS S3 pre-signed URL sudah punya credentials di query string
+     * (X-Amz-Signature, X-Amz-Credential, dll).
+     * Menambahkan Cookie atau Referer justru bisa menyebabkan SignatureDoesNotMatch.
+     * URL seperti ini harus dikirim tanpa header tambahan.
+     */
+    private fun isPresignedS3(url: String) =
+        url.contains("X-Amz-Signature", ignoreCase = true) ||
+        url.contains("X-Amz-Credential", ignoreCase = true) ||
+        url.contains("wasabisys.com", ignoreCase = true) ||
+        url.contains("amazonaws.com", ignoreCase = true)
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -308,7 +321,9 @@ class Dubbindo : MainAPI() {
                     callback.invoke(
                         newExtractorLink(name, name, src, INFER_TYPE) {
                             quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
-                            headers = streamHeaders
+                            // Pre-signed S3/Wasabi URL: jangan tambah header apapun
+                            // karena signature dihitung hanya untuk header "host"
+                            headers = if (isPresignedS3(src)) emptyMap() else streamHeaders
                         }
                     )
                 } else {
