@@ -309,6 +309,31 @@ class Dubbindo : MainAPI() {
         url.contains("wasabisys.com", ignoreCase = true) ||
         url.contains("amazonaws.com", ignoreCase = true)
 
+    /**
+     * Resolve redirect dari s3.dubbindo.my.id → Wasabi pre-signed URL.
+     * Pre-signed URL bisa diputar langsung tanpa Cookie/Referer.
+     * Jika tidak ada redirect, kembalikan URL aslinya.
+     */
+    private suspend fun resolveVideoUrl(src: String): String {
+        if (isPresignedS3(src)) return src           // sudah Wasabi, tidak perlu resolve
+        if (!src.contains("s3.dubbindo.my.id")) return src  // bukan CDN dubbindo, skip
+
+        return try {
+            val resp = app.get(
+                src,
+                headers  = authedHeaders,
+                allowRedirects = false
+            )
+            // Ambil header Location dari 301/302 redirect
+            val location = resp.headers
+                .firstOrNull { it.first.equals("location", ignoreCase = true) }
+                ?.second
+            if (!location.isNullOrBlank()) location else src
+        } catch (e: Exception) {
+            src  // fallback ke URL asli jika gagal
+        }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -320,14 +345,17 @@ class Dubbindo : MainAPI() {
         val videos = tryParseJson<List<Video>>(data)
         if (videos != null) {
             videos.forEach { video ->
-                val src = video.src ?: return@forEach
+                val rawSrc = video.src ?: return@forEach
+                // Resolve redirect s3.dubbindo.my.id → Wasabi pre-signed URL
+                val src = resolveVideoUrl(rawSrc)
+
                 if (src.endsWith(".m3u8") || video.type.orEmpty().startsWith("video/")
                     || video.type == "application/x-mpegURL") {
                     callback.invoke(
                         newExtractorLink(name, name, src, INFER_TYPE) {
                             quality = video.res?.toIntOrNull() ?: Qualities.Unknown.value
-                            // Pre-signed S3/Wasabi URL: jangan tambah header apapun
-                            // karena signature dihitung hanya untuk header "host"
+                            // Pre-signed Wasabi/S3: tanpa header (signature hanya untuk "host")
+                            // URL lain: pakai Cookie + Referer
                             headers = if (isPresignedS3(src)) emptyMap() else streamHeaders
                         }
                     )
