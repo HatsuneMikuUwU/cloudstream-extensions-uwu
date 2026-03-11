@@ -148,11 +148,14 @@ class DubbindoProvider : MainAPI() {
     }
 
     private fun isSubscribeWall(document: Document): Boolean {
-        val playerArea = document.selectFirst("div.video-processing, div.video-player")
-            ?.text().orEmpty()
+        if (isVideoInQueue(document)) return false
+        val playerArea = document.selectFirst("div.video-player")?.text().orEmpty()
         return playerArea.contains("subscribe to watch", ignoreCase = true) ||
                document.select("video#my-video source, video source").isEmpty()
     }
+
+    private fun isVideoInQueue(document: Document): Boolean =
+        document.selectFirst("div.pt_video_player div.video-processing") != null
 
     override val mainPage = mainPageOf(
         "$mainUrl/videos/trending"         to "Trending",
@@ -287,6 +290,14 @@ class DubbindoProvider : MainAPI() {
                 .text().replace("\u2063", "").trim()
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
+
+            if (isVideoInQueue(document)) {
+                return newMovieLoadResponse(title, url, TvType.Movie, "[]") {
+                    posterUrl = poster
+                    plot = "⏳ Video ini sedang dalam antrian pemrosesan.\nHarap buka kembali dalam beberapa menit atau jam."
+                    this.tags = tags
+                }
+            }
 
             subscribeChannel(document, url)
 
