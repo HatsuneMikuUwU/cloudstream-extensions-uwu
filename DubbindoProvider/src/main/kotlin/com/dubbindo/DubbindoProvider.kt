@@ -152,6 +152,8 @@ class DubbindoProvider : MainAPI() {
         document.selectFirst("div.pt_video_player div.video-processing") != null
 
     override val mainPage = mainPageOf(
+        "$mainUrl/videos/latest"              to "Latest Update",
+        "$mainUrl/videos/top"                  to "Most Viewed",
         "$mainUrl/videos/trending"         to "Trending",
         "$mainUrl/videos/category/1"      to "Movie",
         "$mainUrl/videos/category/3"     to "TV Series",
