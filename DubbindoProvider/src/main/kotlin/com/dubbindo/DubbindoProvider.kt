@@ -26,10 +26,12 @@ class DubbindoProvider : MainAPI() {
         TvType.Anime,
     )
 
-    private val USERNAME = "HatsuneMikuUwU"
+    private val USERNAME = BuildConfig.DUBBINDO_USERNAME
     private val PASSWORD = BuildConfig.DUBBINDO_PASSWORD
 
     private var sessionCookie = ""
+
+    private val subscribedChannelIds = mutableSetOf<String>()
 
     private val baseHeaders get() = mapOf(
         "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
@@ -100,6 +102,8 @@ class DubbindoProvider : MainAPI() {
 
         if (channelId.isBlank()) return false
 
+        if (channelId in subscribedChannelIds) return true
+
         val mainSession = document
             .selectFirst("input.main_session")?.attr("value")?.trim()
             .orEmpty()
@@ -121,6 +125,8 @@ class DubbindoProvider : MainAPI() {
         )
 
         if (!resp.isSuccessful) return false
+
+        subscribedChannelIds.add(channelId)
 
         val muteUrl = if (mainSession.isNotBlank())
             "$mainUrl/aj/user/notify?hash=$mainSession"

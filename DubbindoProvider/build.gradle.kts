@@ -37,5 +37,8 @@ android {
     defaultConfig {
         val githubPassword = System.getenv("DUBBINDO_PASSWORD") ?: ""
         buildConfigField("String", "DUBBINDO_PASSWORD", "\"$githubPassword\"")
+        
+        val githubUsername = System.getenv("DUBBINDO_USERNAME") ?: ""
+        buildConfigField("String", "DUBBINDO_USERNAME", "\"$githubUsername\"")
     }
 }
