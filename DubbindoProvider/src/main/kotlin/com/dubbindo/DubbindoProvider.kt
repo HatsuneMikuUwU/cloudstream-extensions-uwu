@@ -31,8 +31,6 @@ class DubbindoProvider : MainAPI() {
 
     private var sessionCookie = ""
 
-    private val subscribedChannelIds = mutableSetOf<String>()
-
     private val baseHeaders get() = mapOf(
         "User-Agent" to "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36",
         "Referer"    to "$mainUrl/"
@@ -102,8 +100,6 @@ class DubbindoProvider : MainAPI() {
 
         if (channelId.isBlank()) return false
 
-        if (channelId in subscribedChannelIds) return true
-
         val mainSession = document
             .selectFirst("input.main_session")?.attr("value")?.trim()
             .orEmpty()
@@ -126,8 +122,6 @@ class DubbindoProvider : MainAPI() {
 
         if (!resp.isSuccessful) return false
 
-        subscribedChannelIds.add(channelId)
-
         val muteUrl = if (mainSession.isNotBlank())
             "$mainUrl/aj/user/notify?hash=$mainSession"
         else
@@ -148,12 +142,12 @@ class DubbindoProvider : MainAPI() {
     }
 
     private fun isSubscribeWall(document: Document): Boolean {
-        if (isVideoInQueue(document)) return false
-        val playerArea = document.selectFirst("div.video-player")?.text().orEmpty()
+        val playerArea = document.selectFirst("div.video-processing, div.video-player")
+            ?.text().orEmpty()
         return playerArea.contains("subscribe to watch", ignoreCase = true) ||
                document.select("video#my-video source, video source").isEmpty()
     }
-
+    
     private fun isVideoInQueue(document: Document): Boolean =
         document.selectFirst("div.pt_video_player div.video-processing") != null
 
@@ -290,7 +284,7 @@ class DubbindoProvider : MainAPI() {
                 .text().replace("\u2063", "").trim()
             val recommendations = document.select("div.related-video-wrapper")
                 .mapNotNull { it.toRelatedResult() }
-
+                
             if (isVideoInQueue(document)) {
                 return newMovieLoadResponse(title, url, TvType.Movie, "[]") {
                     posterUrl = poster
