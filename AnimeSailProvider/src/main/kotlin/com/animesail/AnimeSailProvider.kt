@@ -30,99 +30,89 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") : Interceptor {
-
-    companion object {
-        private const val POLL_INTERVAL_MS = 500L
-        private const val MAX_ATTEMPTS     = 30
-    }
-
-    private fun getCookieValue(domainUrl: String): String? {
-        val raw = CookieManager.getInstance().getCookie(domainUrl) ?: return null
-        return raw.split(";")
-            .map { it.trim() }
-            .firstOrNull { it.startsWith("$targetCookie=") }
-            ?.substringAfter("=")
-            ?.takeIf { it.isNotBlank() }
-    }
-
-    private fun invalidateCookie(domainUrl: String) {
-        CookieManager.getInstance().apply {
-            setCookie(domainUrl, "$targetCookie=; Max-Age=0")
-            flush()
-        }
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
-        val url       = originalRequest.url.toString()
+        val url = originalRequest.url.toString()
+        
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
         val cookieManager = CookieManager.getInstance()
 
-        if (getCookieValue(domainUrl) != null) {
-            val response = chain.proceed(
-                originalRequest.newBuilder()
-                    .header("Cookie", cookieManager.getCookie(domainUrl) ?: "")
-                    .build()
-            )
-            if (response.code != 403 && response.code != 503) return response
-            response.close()
-            invalidateCookie(domainUrl)
+        var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
+        var userAgent = originalRequest.header("User-Agent") ?: ""
+
+        var needsRefresh = false
+        var initialResponse: Response? = null
+
+        if (currentCookies.contains(targetCookie)) {
+            val requestBuilder = originalRequest.newBuilder()
+                .header("Cookie", currentCookies)
+            
+            initialResponse = chain.proceed(requestBuilder.build())
+
+            if (initialResponse.code == 403 || initialResponse.code == 503) {
+                needsRefresh = true
+                initialResponse.close()
+            } else {
+                return initialResponse
+            }
+        } else {
+            needsRefresh = true
         }
 
-        val context = AcraApplication.context
-            ?: return chain.proceed(originalRequest)
+        if (needsRefresh) {
+            val context = AcraApplication.context
+            if (context != null) {
+                val handler = Handler(Looper.getMainLooper())
+                var webView: WebView? = null
 
-        val handler = Handler(Looper.getMainLooper())
-        var webView: WebView? = null
-        var resolvedUserAgent = originalRequest.header("User-Agent") ?: ""
+                handler.post {
+                    val newWebView = WebView(context)
+                    webView = newWebView
+                    
+                    newWebView.settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        userAgentString = userAgent.ifBlank { userAgentString }
+                    }
+                    userAgent = newWebView.settings.userAgentString ?: userAgent
 
-        handler.post {
-            try {
-                val wv = WebView(context).also { webView = it }
-                wv.settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    if (resolvedUserAgent.isNotBlank()) userAgentString = resolvedUserAgent
-                    resolvedUserAgent = userAgentString
+                    newWebView.webViewClient = WebViewClient()
+
+                    cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
+                    cookieManager.flush()
+
+                    newWebView.loadUrl(url)
                 }
-                wv.webViewClient = WebViewClient()
-                wv.loadUrl(url)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
 
-        var attempts = 0
-        while (attempts < MAX_ATTEMPTS) {
-            Thread.sleep(POLL_INTERVAL_MS)
-            if (getCookieValue(domainUrl) != null) {
-                cookieManager.flush()
-                break
-            }
-            attempts++
-        }
-
-        handler.post {
-            try {
-                webView?.apply {
-                    stopLoading()
-                    clearCache(false)
-                    destroy()
+                var attempts = 0
+                val maxAttempts = 15
+                while (attempts < maxAttempts) {
+                    Thread.sleep(1000) 
+                    val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
+                    
+                    if (checkCookies.contains(targetCookie)) {
+                        cookieManager.flush()
+                        break
+                    }
+                    attempts++
                 }
-                webView = null
-            } catch (e: Exception) {
-                e.printStackTrace()
+
+                handler.post {
+                    webView?.stopLoading()
+                    webView?.destroy()
+                }
             }
+
+            currentCookies = cookieManager.getCookie(domainUrl) ?: ""
+            val newRequestBuilder = originalRequest.newBuilder()
+                .header("User-Agent", userAgent)
+                .header("Cookie", currentCookies)
+            
+            return chain.proceed(newRequestBuilder.build())
         }
 
-        val finalCookies = cookieManager.getCookie(domainUrl) ?: ""
-        return chain.proceed(
-            originalRequest.newBuilder()
-                .header("Cookie", finalCookies)
-                .apply { if (resolvedUserAgent.isNotBlank()) header("User-Agent", resolvedUserAgent) }
-                .build()
-        )
+        return initialResponse ?: chain.proceed(originalRequest)
     }
 }
 
