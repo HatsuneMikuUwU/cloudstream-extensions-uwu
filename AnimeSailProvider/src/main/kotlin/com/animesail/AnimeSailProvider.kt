@@ -30,24 +30,25 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") : Interceptor {
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
-        
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
         val cookieManager = CookieManager.getInstance()
 
+        cookieManager.setAcceptCookie(true)
+
         var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
         var userAgent = originalRequest.header("User-Agent") ?: ""
-
         var needsRefresh = false
         var initialResponse: Response? = null
 
         if (currentCookies.contains(targetCookie)) {
             val requestBuilder = originalRequest.newBuilder()
                 .header("Cookie", currentCookies)
-            
+
             initialResponse = chain.proceed(requestBuilder.build())
 
             if (initialResponse.code == 403 || initialResponse.code == 503) {
@@ -69,28 +70,38 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 handler.post {
                     val newWebView = WebView(context)
                     webView = newWebView
-                    
+
+                    cookieManager.setAcceptCookie(true)
+                    cookieManager.setAcceptThirdPartyCookies(newWebView, true)
+
                     newWebView.settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
+                        databaseEnabled = true
+                        loadWithOverviewMode = true
+                        useWideViewPort = true
                         userAgentString = userAgent.ifBlank { userAgentString }
                     }
                     userAgent = newWebView.settings.userAgentString ?: userAgent
 
-                    newWebView.webViewClient = WebViewClient()
+                    newWebView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            cookieManager.flush()
+                        }
+                    }
 
-                    cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
+                    cookieManager.removeAllCookies(null)
                     cookieManager.flush()
 
                     newWebView.loadUrl(url)
                 }
 
                 var attempts = 0
-                val maxAttempts = 15
+                val maxAttempts = 60
                 while (attempts < maxAttempts) {
-                    Thread.sleep(1000) 
+                    Thread.sleep(1000)
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
-                    
                     if (checkCookies.contains(targetCookie)) {
                         cookieManager.flush()
                         break
@@ -101,6 +112,7 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 handler.post {
                     webView?.stopLoading()
                     webView?.destroy()
+                    webView = null
                 }
             }
 
@@ -108,7 +120,7 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
             val newRequestBuilder = originalRequest.newBuilder()
                 .header("User-Agent", userAgent)
                 .header("Cookie", currentCookies)
-            
+
             return chain.proceed(newRequestBuilder.build())
         }
 
@@ -130,8 +142,8 @@ class AnimeSailProvider : MainAPI() {
     )
 
     companion object {
-        private val mapper: ObjectMapper by lazy { 
-            ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false) 
+        private val mapper: ObjectMapper by lazy {
+            ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         }
 
         fun getType(t: String): TvType {
@@ -157,7 +169,7 @@ class AnimeSailProvider : MainAPI() {
             interceptor = turnstileInterceptor,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
             ),
             referer = ref
         )
@@ -194,9 +206,9 @@ class AnimeSailProvider : MainAPI() {
     private fun Element.toSearchResult(): AnimeSearchResponse {
         val rawHref = fixUrlNull(this.selectFirst("a")?.attr("href")).toString()
         val href = getProperAnimeLink(rawHref)
-        
+
         val rawTitle = this.selectFirst(".tt > h2")?.text() ?: ""
-        
+
         val title = rawTitle.replace(Regex("(?i)Episode\\s?\\d+"), "")
             .replace(Regex("(?i)Subtitle Indonesia"), "")
             .replace(Regex("(?i)Sub Indo"), "")
@@ -205,9 +217,9 @@ class AnimeSailProvider : MainAPI() {
             .trim()
 
         val posterUrl = fixUrlNull(this.selectFirst("div.limit img")?.attr("src"))
-        
+
         val epNum = Regex("(?i)Episode\\s?(\\d+)").find(rawTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        
+
         val typeText = this.selectFirst(".tt > span")?.text() ?: ""
         val type = if (typeText.contains("Movie", ignoreCase = true)) TvType.AnimeMovie else TvType.Anime
 
@@ -269,13 +281,13 @@ class AnimeSailProvider : MainAPI() {
         val episodes = document.select("ul.daftar > li").amap {
             val link = fixUrl(it.select("a").attr("href"))
             val name = it.select("a").text()
-            
+
             var episodeNum = Regex("Episode\\s?(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            
+
             if (type == TvType.AnimeMovie && episodeNum == null) {
                 episodeNum = 1
             }
-            
+
             val episodeKey = episodeNum?.toString()
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
 
@@ -286,14 +298,14 @@ class AnimeSailProvider : MainAPI() {
                 "Synopsis not yet available."
             }
 
-            newEpisode(link) {                 
+            newEpisode(link) {
                 this.name = if (type == TvType.AnimeMovie) {
                     animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
                 } else {
                     metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: name
                 }
-                
-                this.episode = episodeNum 
+
+                this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
                 this.description = finalOverview
@@ -304,7 +316,7 @@ class AnimeSailProvider : MainAPI() {
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
         val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
-        
+
         val finalPlot = if (!rawPlot.isNullOrBlank()) {
             rawPlot
         } else {
@@ -316,7 +328,7 @@ class AnimeSailProvider : MainAPI() {
             this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             this.posterUrl = tracker?.image ?: poster
             this.backgroundPosterUrl = backgroundposter
-            try { this.logoUrl = logoUrl } catch(_:Throwable){}
+            try { this.logoUrl = logoUrl } catch (_: Throwable) {}
             this.year = year
             this.duration = getDurationFromString(durationText)
             addEpisodes(DubStatus.Subbed, episodes)
@@ -325,7 +337,7 @@ class AnimeSailProvider : MainAPI() {
             this.tags = tagsList
             addMalId(malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
-            try { addKitsuId(kitsuid) } catch(_:Throwable){}
+            try { addKitsuId(kitsuid) } catch (_: Throwable) {}
         }
     }
 
@@ -348,9 +360,9 @@ class AnimeSailProvider : MainAPI() {
 
                 val rawText = element.text().trim()
                 val quality = getIndexQuality(rawText)
-                
-                val serverName = rawText.split(" ").firstOrNull()?.replaceFirstChar { 
-                    if (it.isLowerCase()) it.titlecase() else it.toString() 
+
+                val serverName = rawText.split(" ").firstOrNull()?.replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase() else it.toString()
                 } ?: name
 
                 when {
@@ -379,7 +391,7 @@ class AnimeSailProvider : MainAPI() {
                     iframe.contains("player-kodir.aghanim.xyz") || iframe.contains("${playerPath}kodir2") -> {
                         val res = request(iframe, ref = data).text
                         var link = Jsoup.parse(res.substringAfter("= `", "").substringBefore("`;", "")).select("source").last()?.attr("src")
-                        
+
                         if (link.isNullOrBlank()) {
                             link = Jsoup.parse(res).select("source").attr("src")
                         }
@@ -392,7 +404,7 @@ class AnimeSailProvider : MainAPI() {
                                     url = link,
                                     type = INFER_TYPE
                                 ) {
-                                    referer = iframe 
+                                    referer = iframe
                                     this.quality = quality
                                 }
                             )
@@ -424,7 +436,7 @@ class AnimeSailProvider : MainAPI() {
                                     url = link,
                                     type = INFER_TYPE
                                 ) {
-                                    referer = iframe 
+                                    referer = iframe
                                     this.quality = quality
                                 }
                             )
@@ -450,14 +462,14 @@ class AnimeSailProvider : MainAPI() {
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
             val finalName = if (serverName.equals(link.name, ignoreCase = true)) link.name else "$serverName - ${link.name}"
-            
+
             runBlocking {
                 callback.invoke(
                     newExtractorLink(
                         source = link.name,
                         name = finalName,
                         url = link.url,
-                        type = link.type 
+                        type = link.type
                     ) {
                         this.referer = referer ?: mainUrl
                         this.quality = if (link.type == ExtractorLinkType.M3U8) link.quality else quality ?: Qualities.Unknown.value
