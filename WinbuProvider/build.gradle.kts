@@ -4,7 +4,6 @@ cloudstream {
     language = "id"
     description = "Winbu — Streaming Anime, Movie and TV Series"
     authors = listOf("Miku")
-    isCrossPlatform = true
     status = 1
     tvTypes = listOf(
         "Movie",
