@@ -1,9 +1,12 @@
 package com.animesail
 
 import android.annotation.SuppressLint
+import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
@@ -22,9 +25,8 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import com.lagradost.nicehttp.Session
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import okhttp3.Interceptor
 import okhttp3.Response
 import org.json.JSONObject
@@ -36,73 +38,138 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
+        val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
+        
         val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
 
-        var currentCookies = cookieManager.getCookie(url) ?: ""
-        var userAgent = originalRequest.header("User-Agent") ?: ""
+        val standardUserAgent = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
 
-        var response: Response? = null
+        var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
         var needsRefresh = false
+        var initialResponse: Response? = null
 
-        if (!currentCookies.contains(targetCookie)) {
-            needsRefresh = true
-        } else {
+        if (currentCookies.contains(targetCookie) || currentCookies.contains("_as_turnstile")) {
             val requestBuilder = originalRequest.newBuilder()
-                .header("Cookie", currentCookies)
-            response = chain.proceed(requestBuilder.build())
+                .removeHeader("User-Agent")
+                .addHeader("User-Agent", standardUserAgent)
+                .removeHeader("Cookie")
+                .addHeader("Cookie", currentCookies)
 
-            if (response.code == 403 || response.code == 503) {
+            initialResponse = chain.proceed(requestBuilder.build())
+
+            if (initialResponse.code in listOf(403, 503, 202)) {
                 needsRefresh = true
-                response.close()
+                initialResponse.close()
+            } else {
+                return initialResponse
             }
+        } else {
+            needsRefresh = true
         }
 
         if (needsRefresh) {
-            runBlocking(Dispatchers.Main) {
-                val context = AcraApplication.context
-                if (context != null) {
-                    val webView = WebView(context)
-                    
-                    webView.settings.javaScriptEnabled = true
-                    webView.settings.domStorageEnabled = true
-                    webView.settings.userAgentString = userAgent.ifBlank { webView.settings.userAgentString }
-                    userAgent = webView.settings.userAgentString 
+            val context = AcraApplication.context
+            if (context != null) {
+                val handler = Handler(Looper.getMainLooper())
+                var webView: WebView? = null
+                var isResolved = false
 
-                    webView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
+                handler.post {
+                    try {
+                        val newWebView = WebView(context)
+                        webView = newWebView
+
+                        newWebView.resumeTimers()
+                        newWebView.onResume()
+                        newWebView.layoutParams = android.view.ViewGroup.LayoutParams(1080, 1920)
+
+                        cookieManager.setAcceptThirdPartyCookies(newWebView, true)
+
+                        newWebView.settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            databaseEnabled = true
+                            useWideViewPort = true
+                            loadWithOverviewMode = true
+                            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+                            userAgentString = standardUserAgent
+                            mediaPlaybackRequiresUserGesture = false
+                            javaScriptCanOpenWindowsAutomatically = true
                         }
-                    }
+                        
+                        newWebView.clearCache(true)
+                        newWebView.clearHistory()
+                        
+                        newWebView.webChromeClient = WebChromeClient()
+                        newWebView.webViewClient = object : WebViewClient() {
+                            @SuppressLint("WebViewClientOnReceivedSslError")
+                            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                                handler?.proceed() 
+                            }
 
-                    cookieManager.setCookie(url, "$targetCookie=; Max-Age=0")
-
-                    webView.loadUrl(url)
-
-                    var attempts = 0
-                    val maxAttempts = 60
-                    while (attempts < maxAttempts) {
-                        delay(1000)
-                        val checkCookies = cookieManager.getCookie(url) ?: ""
-                        if (checkCookies.contains(targetCookie)) {
-                            break
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                super.onPageFinished(view, url)
+                                val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
+                                if (checkCookies.contains(targetCookie) || checkCookies.contains("_as_turnstile")) {
+                                    isResolved = true
+                                }
+                            }
                         }
-                        attempts++
-                    }
 
-                    webView.stopLoading()
-                    webView.destroy()
+                        val challengeCookies = listOf(targetCookie, "_as_turnstile")
+                        challengeCookies.forEach { cookie ->
+                            cookieManager.setCookie(domainUrl, "$cookie=; Max-Age=0")
+                        }
+                        cookieManager.flush()
+
+                        newWebView.loadUrl(url)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
+                var attempts = 0
+                val maxAttempts = 60
+                while (attempts < maxAttempts) {
+                    Thread.sleep(1000)
+                    val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
+
+                    if (checkCookies.contains(targetCookie) || checkCookies.contains("_as_turnstile") || isResolved) {
+                        cookieManager.flush()
+                        break
+                    }
+                    attempts++
+                }
+
+                handler.post {
+                    try {
+                        webView?.stopLoading()
+                        webView?.destroy()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
 
-            currentCookies = cookieManager.getCookie(url) ?: ""
-            val newRequestBuilder = originalRequest.newBuilder()
-                .header("User-Agent", userAgent)
-                .header("Cookie", currentCookies)
+            currentCookies = cookieManager.getCookie(domainUrl) ?: ""
             
-            response = chain.proceed(newRequestBuilder.build())
+            val newRequestBuilder = originalRequest.newBuilder()
+                .removeHeader("User-Agent")
+                .addHeader("User-Agent", standardUserAgent)
+                .removeHeader("Cookie")
+                .addHeader("Cookie", currentCookies)
+
+            return chain.proceed(newRequestBuilder.build())
         }
 
-        return response ?: chain.proceed(originalRequest)
+        val finalRequest = originalRequest.newBuilder()
+            .removeHeader("User-Agent")
+            .addHeader("User-Agent", standardUserAgent)
+            .build()
+            
+        return initialResponse ?: chain.proceed(finalRequest)
     }
 }
 
@@ -112,6 +179,10 @@ class AnimeSailProvider : MainAPI() {
     override val hasMainPage = true
     override var lang = "id"
     override val hasDownloadSupport = true
+
+    private val fetch by lazy { 
+        Session(app.baseClient.newBuilder().addInterceptor(TurnstileInterceptor()).build()) 
+    }
 
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -140,12 +211,10 @@ class AnimeSailProvider : MainAPI() {
     }
 
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
-        return app.get(
+        return fetch.get(
             url,
-            interceptor = TurnstileInterceptor("_as_turnstile"),
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
             ),
             referer = ref
         )
