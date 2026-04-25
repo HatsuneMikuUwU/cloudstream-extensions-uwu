@@ -30,25 +30,24 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") : Interceptor {
-
     @SuppressLint("SetJavaScriptEnabled")
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
+        
         val domainUrl = "${originalRequest.url.scheme}://${originalRequest.url.host}"
         val cookieManager = CookieManager.getInstance()
 
-        cookieManager.setAcceptCookie(true)
-
         var currentCookies = cookieManager.getCookie(domainUrl) ?: ""
         var userAgent = originalRequest.header("User-Agent") ?: ""
+
         var needsRefresh = false
         var initialResponse: Response? = null
 
         if (currentCookies.contains(targetCookie)) {
             val requestBuilder = originalRequest.newBuilder()
                 .header("Cookie", currentCookies)
-
+            
             initialResponse = chain.proceed(requestBuilder.build())
 
             if (initialResponse.code == 403 || initialResponse.code == 503) {
@@ -70,28 +69,17 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 handler.post {
                     val newWebView = WebView(context)
                     webView = newWebView
-
-                    cookieManager.setAcceptCookie(true)
-                    cookieManager.setAcceptThirdPartyCookies(newWebView, true)
-
+                    
                     newWebView.settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        databaseEnabled = true
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
                         userAgentString = userAgent.ifBlank { userAgentString }
                     }
                     userAgent = newWebView.settings.userAgentString ?: userAgent
 
-                    newWebView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
-                            cookieManager.flush()
-                        }
-                    }
+                    newWebView.webViewClient = WebViewClient()
 
-                    cookieManager.removeAllCookies(null)
+                    cookieManager.setCookie(domainUrl, "$targetCookie=; Max-Age=0")
                     cookieManager.flush()
 
                     newWebView.loadUrl(url)
@@ -100,8 +88,9 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 var attempts = 0
                 val maxAttempts = 60
                 while (attempts < maxAttempts) {
-                    Thread.sleep(1000)
+                    Thread.sleep(1000) 
                     val checkCookies = cookieManager.getCookie(domainUrl) ?: ""
+                    
                     if (checkCookies.contains(targetCookie)) {
                         cookieManager.flush()
                         break
@@ -112,7 +101,6 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                 handler.post {
                     webView?.stopLoading()
                     webView?.destroy()
-                    webView = null
                 }
             }
 
@@ -120,7 +108,7 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
             val newRequestBuilder = originalRequest.newBuilder()
                 .header("User-Agent", userAgent)
                 .header("Cookie", currentCookies)
-
+            
             return chain.proceed(newRequestBuilder.build())
         }
 
