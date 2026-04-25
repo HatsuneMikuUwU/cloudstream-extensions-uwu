@@ -72,7 +72,7 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                     webView = newWebView
 
                     newWebView.resumeTimers()
-                    newWebView.resume()
+                    newWebView.onResume()
                     newWebView.layoutParams = android.view.ViewGroup.LayoutParams(1080, 1920)
 
                     cookieManager.setAcceptCookie(true)
