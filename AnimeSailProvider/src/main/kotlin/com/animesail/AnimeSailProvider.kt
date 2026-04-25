@@ -71,6 +71,10 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                     val newWebView = WebView(context)
                     webView = newWebView
 
+                    newWebView.resumeTimers()
+                    newWebView.resume()
+                    newWebView.layoutParams = android.view.ViewGroup.LayoutParams(1080, 1920)
+
                     cookieManager.setAcceptCookie(true)
                     cookieManager.setAcceptThirdPartyCookies(newWebView, true)
 
@@ -80,7 +84,14 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
                         databaseEnabled = true
                         loadWithOverviewMode = true
                         useWideViewPort = true
-                        userAgentString = userAgent.ifBlank { userAgentString }
+                        mediaPlaybackRequiresUserGesture = false
+                        javaScriptCanOpenWindowsAutomatically = true
+                        mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        var customUa = userAgent.ifBlank { userAgentString }
+                        if (customUa.contains("; wv")) {
+                            customUa = customUa.replace("; wv", "")
+                        }
+                        userAgentString = customUa
                     }
                     userAgent = newWebView.settings.userAgentString ?: userAgent
 
