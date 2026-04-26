@@ -16,7 +16,7 @@ import com.lagradost.cloudstream3.newAudioFile
 import java.net.URLEncoder
 
 class BstationProvider : MainAPI() {
-    override var mainUrl = "https://www.bilibili.tv"
+    override var mainUrl = "https://www.bilibili.tv/id"
     override var name = "Bstation"
     override val hasMainPage = true
     override var lang = "id"
