@@ -18,34 +18,34 @@
 
 ## 📦 Available Extensions
 
-| Extension | Region | Content Type | Status |
-| :--- | :---: | :--- | :---: |
-| **Anichin** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
-| **AnimeSail** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua | ✅ Active |
-| **CineMax21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **Donghub** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
-| **Drakor** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
-| **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series | ✅ Active |
-| **Dutamovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **HidoriStream** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
-| **Idlix** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **IndoMax21** | 🇮🇩 ID | 🔞 NSFW, 🎬 Movies & Series | ✅ Active |
-| **JavHey** | 🇮🇩 ID | 🔞 NSFW | ✅ Active |
-| **KlikXXI** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **Kuronime** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
-| **LayarAsia** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
-| **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai | ✅ Active |
-| **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **Nimegami** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
-| **Nomat** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
-| **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
-| **OtakuDesu** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
-| **PencuriMovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
-| **Samehadaku** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
-| **Winbu** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series | ✅ Active |
+| No. | Extension | Region | Content Type | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | **Anichin** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
+| 2 | **AnimeSail** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua | ✅ Active |
+| 3 | **CineMax21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 4 | **Donghub** | 🇮🇩 ID | 🐉 Donghua | ✅ Active |
+| 5 | **Drakor** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
+| 6 | **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series | ✅ Active |
+| 7 | **Dutamovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 8 | **HidoriStream** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| 9 | **Idlix** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 10 | **IndoMax21** | 🇮🇩 ID | 🔞 NSFW, 🎬 Movies & Series | ✅ Active |
+| 11 | **JavHey** | 🇮🇩 ID | 🔞 NSFW | ✅ Active |
+| 12 | **KlikXXI** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 13 | **Kuronime** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| 14 | **LayarAsia** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
+| 15 | **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 16 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 17 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai | ✅ Active |
+| 18 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 19 | **Nimegami** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| 20 | **Nomat** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 21 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| 22 | **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
+| 23 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| 24 | **PencuriMovie** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| 25 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
+| 26 | **Winbu** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series | ✅ Active |
 
 > [!WARNING]
 > **Disclaimer & Legal Notice**
