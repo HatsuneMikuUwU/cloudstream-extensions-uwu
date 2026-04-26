@@ -24,6 +24,11 @@ class TurnstileInterceptor(private val targetCookie: String = "_as_turnstile") :
 
         cookieManager.setAcceptCookie(true)
 
+        cookieManager.setCookie(domainUrl, "_as_ipin_lc=id-ID; path=/; SameSite=Strict")
+        cookieManager.setCookie(domainUrl, "_as_ipin_tz=Asia/Jakarta; path=/; SameSite=Strict")
+        cookieManager.setCookie(domainUrl, "_as_ipin_ct=ID; path=/; SameSite=Strict")
+        cookieManager.flush()
+
         val existingCookies = cookieManager.getCookie(domainUrl) ?: ""
         if (existingCookies.contains(targetCookie)) {
             val response = chain.proceed(
