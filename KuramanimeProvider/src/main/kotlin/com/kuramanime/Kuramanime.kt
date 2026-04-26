@@ -319,9 +319,14 @@ class Kuramanime : MainAPI() {
             val checkEpisodeUrl = document.selectFirst("#checkEp")?.attr("value")
                 ?.ifBlank { null }
                 ?: "${episodeUrl.trimEnd('/')}/check-episode"
+                
+            val tokenAuthJsRoute = document.selectFirst("#tokenAuthJs")?.attr("value")
+                ?.trim()
+                ?.ifBlank { null }
             val routeScriptName = document.selectFirst("[data-kk]")?.attr("data-kk")
                 ?.trim()
                 ?.ifBlank { null }
+                
             val serverOptions = document.select("option[value]")
                 .mapNotNull { option ->
                     val value = option.attr("value").trim().ifBlank { return@mapNotNull null }
@@ -338,6 +343,18 @@ class Kuramanime : MainAPI() {
                 }
 
             val jsEnv = when {
+                !tokenAuthJsRoute.isNullOrBlank() -> {
+                    val scriptUrl = if (tokenAuthJsRoute.startsWith("http")) {
+                        tokenAuthJsRoute
+                    } else {
+                        "${mainUrl.trimEnd('/')}/${tokenAuthJsRoute.trimStart('/')}"
+                    }
+                    app.get(
+                        scriptUrl,
+                        referer = episodeUrl,
+                        cookies = cookieJar,
+                    ).also { mergeCookies(cookieJar, it.cookies) }.text
+                }
                 !routeScriptName.isNullOrBlank() -> {
                     app.get(
                         "$mainUrl/assets/js/$routeScriptName.js",
@@ -382,6 +399,18 @@ class Kuramanime : MainAPI() {
                 ?: throw ErrorLoadingException("Missing page token key")
             val streamServerKey = envMap["MIX_STREAM_SERVER_KEY"]
                 ?: throw ErrorLoadingException("Missing stream server key")
+
+            var dynamicAuthToken = Regex("""authorization\s*:\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE)
+                .find(jsEnv)?.groupValues?.getOrNull(1)
+
+            if (dynamicAuthToken.isNullOrBlank()) {
+                dynamicAuthToken = Regex("""authorization\s*:\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE)
+                    .find(pageResponse.text)?.groupValues?.getOrNull(1)
+            }
+
+            val finalAuthToken = dynamicAuthToken 
+                ?: envMap["MIX_STREAM_AUTHORIZATION"] 
+                ?: "qDBDmoKgQIdP6wmFGUCDo3vuVg9FBfV98"
 
             runCatching {
                 app.post(
@@ -434,7 +463,7 @@ class Kuramanime : MainAPI() {
 
                 val secureResponse = app.post(
                     secureUrl,
-                    data = mapOf("authorization" to SECURE_AUTHORIZATION),
+                    data = mapOf("authorization" to finalAuthToken),
                     headers = mapOf(
                         "Origin" to mainUrl,
                         "X-Requested-With" to "XMLHttpRequest",
@@ -463,6 +492,9 @@ class Kuramanime : MainAPI() {
                 extractFromText(secureResponse.text, server.label)
             }
             emitted.isNotEmpty()
+        }.onFailure { error -> 
+            println("Kuramanime Error saat loadLinks: ${error.message}")
+            error.printStackTrace()
         }.getOrDefault(false)
 
         if (nativeResolved) {
@@ -570,10 +602,6 @@ class Kuramanime : MainAPI() {
             typeLabel.contains("ova", true) || typeLabel.contains("special", true) -> TvType.OVA
             else -> TvType.Anime
         }
-    }
-
-    private companion object {
-        const val SECURE_AUTHORIZATION = "qDBDmoKgQIdP6wmFGUCDo3vuVg9FBfV98"
     }
 
     private data class ServerOption(
