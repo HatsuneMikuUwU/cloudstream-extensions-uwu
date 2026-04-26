@@ -38,6 +38,7 @@
 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai | ✅ Active |
 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
+| **Nimegami** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **Nomat** | 🇮🇩 ID | 🎬 Movies & Series | ✅ Active |
 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime | ✅ Active |
 | **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series | ✅ Active |
