@@ -16,7 +16,7 @@ import com.lagradost.cloudstream3.newAudioFile
 import java.net.URLEncoder
 
 class BstationProvider : MainAPI() {
-    override var mainUrl = "https://www.bilibili.tv/id"
+    override var mainUrl = "https://www.bilibili.tv"
     override var name = "Bstation"
     override val hasMainPage = true
     override var lang = "id"
@@ -43,7 +43,7 @@ class BstationProvider : MainAPI() {
         "Referer" to "$mainUrl/",
         "Origin" to mainUrl,
         "Accept" to "application/json, text/plain, */*",
-        "Accept-Language" to "en-US,en;q=0.9"
+        "Accept-Language" to "id-ID,id;q=0.9"
     )
 
     private enum class ContentAccessError {
@@ -54,7 +54,7 @@ class BstationProvider : MainAPI() {
         try {
             val playurlUrl = when {
                 epId != null -> "$PLAYURL_API?ep_id=$epId&device=wap&platform=web&qn=64&tf=0&type=0"
-                aid != null -> "$PLAYURL_API?s_locale=en_US&platform=web&aid=$aid&qn=120"
+                aid != null -> "$PLAYURL_API?s_locale=id_ID&platform=web&aid=$aid&qn=120"
                 else -> return ContentAccessError.NONE
             }
             
@@ -130,7 +130,7 @@ class BstationProvider : MainAPI() {
                     }
                 }
                 request.data == "timeline" -> {
-                    val timelineUrl = "$WEB_API/ogv/timeline?platform=web&s_locale=en_US"
+                    val timelineUrl = "$WEB_API/ogv/timeline?platform=web&s_locale=id_ID"
                     val response = app.get(timelineUrl, headers = headers).text
                     Log.d(TAG, "Timeline response: ${response.take(500)}")
                     
@@ -471,7 +471,7 @@ class BstationProvider : MainAPI() {
             val playurlUrl = when {
                 isEpisode -> "$PLAYURL_API?ep_id=$epId&device=wap&platform=web&qn=64&tf=0&type=0"
                 epId != null -> "$PLAYURL_API?ep_id=$epId&device=wap&platform=web&qn=64&tf=0&type=0"
-                aid != null -> "$PLAYURL_API?s_locale=en_US&platform=web&aid=$aid&qn=120"
+                aid != null -> "$PLAYURL_API?s_locale=id_ID&platform=web&aid=$aid&qn=120"
                 else -> return false
             }
             
@@ -995,7 +995,7 @@ class BstationProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit
     ) {
         try {
-            val subtitleUrl = "$WEB_API/subtitle?ep_id=$epId&platform=web&s_locale=en_US"
+            val subtitleUrl = "$WEB_API/subtitle?ep_id=$epId&platform=web&s_locale=id_ID"
             val response = app.get(subtitleUrl, headers = headers).text
             val json = parseJson<BiliSubtitleResponse>(response)
             
