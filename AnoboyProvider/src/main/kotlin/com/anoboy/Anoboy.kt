@@ -18,7 +18,7 @@ class Anoboy : MainAPI() {
     override var lang = "id"
 
     override val supportedTypes = setOf(
-        TvType.Anime
+        TvType.Anime, TvType.AnimeMovie, TvType.OVA
     )
 
     companion object {
@@ -42,21 +42,25 @@ class Anoboy : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "anime/" to "Latest Added",
-        "anime/ongoing/" to "Ongoing",
-        "anime-movie/" to "Movie"
+        "" to "New Update",
+        "category/anime" to "Latest Added",
+        "category/live-action-movie" to "Live Action",
+        "category/anime-movie" to "Movie",
+        "category/donghua" to "Donghua"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-val path = request.data.trimStart('/')
+        val path = request.data.trim('/')
         val url = if (page <= 1) {
-            "$mainUrl/$path"
+            if (path.isEmpty()) mainUrl else "$mainUrl/$path/"
         } else {
-            "$mainUrl/$path" + "page/$page/"
+            if (path.isEmpty()) "$mainUrl/page/$page/" else "$mainUrl/$path/page/$page/"
         }
         val document = app.get(url).document
-        val items = document.select("div.column-content > a[href]:has(div.amv)")
+        
+        val items = document.select("a[href]:has(div.amv), a[href]:has(div#amv)")
             .mapNotNull { it.toSearchResult() }
+            
         return newHomePageResponse(request.name, items)
     }
 
@@ -65,16 +69,21 @@ val path = request.data.trimStart('/')
         if (link.isBlank()) return null
 
         val title = attr("title").trim().ifBlank {
-            selectFirst("h3.ibox1")?.text()?.trim().orEmpty()
+            selectFirst("h3.ibox1, h3.ibox")?.text()?.trim().orEmpty()
         }.ifBlank {
             selectFirst("img")?.attr("alt")?.trim().orEmpty()
         }
         if (title.isBlank()) return null
 
-        val isMovie = link.contains("/anime-movie/", true) || title.contains("movie", true)
+        val isMovie = link.contains("/anime-movie/", true) || link.contains("/live-action-movie/", true) || title.contains("movie", true)
         val isOva = title.contains("ova", true) || title.contains("special", true)
-        if (isMovie || isOva) return null
-        val tvType = if (isMovie) TvType.AnimeMovie else TvType.Anime
+        
+        val tvType = when {
+            isMovie -> TvType.AnimeMovie
+            isOva -> TvType.OVA
+            else -> TvType.Anime
+        }
+        
         val poster = selectFirst("img")?.getImageAttr()?.let { fixUrlNull(it) }
 
         return newAnimeSearchResponse(title, fixUrl(link), tvType) {
@@ -87,18 +96,25 @@ val path = request.data.trimStart('/')
         val title = selectFirst("div.tt")?.text()?.trim()
             ?: selectFirst("a")?.attr("title")?.trim()
             ?: return null
-        val isMovie = link.contains("/anime-movie/", true) || title.contains("movie", true)
+            
+        val isMovie = link.contains("/anime-movie/", true) || link.contains("/live-action-movie/", true) || title.contains("movie", true)
         val isOva = title.contains("ova", true) || title.contains("special", true)
-        if (isMovie || isOva) return null
+        
+        val tvType = when {
+            isMovie -> TvType.AnimeMovie
+            isOva -> TvType.OVA
+            else -> TvType.Anime
+        }
+        
         val poster = selectFirst("img")?.getImageAttr()?.let { fixUrlNull(it) }
-        return newAnimeSearchResponse(title, fixUrl(link), TvType.Anime) {
+        return newAnimeSearchResponse(title, fixUrl(link), tvType) {
             posterUrl = poster
         }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get("$mainUrl/?s=$query").document
-        val modernResults = document.select("div.column-content > a[href]:has(div.amv)")
+        val modernResults = document.select("a[href]:has(div.amv), a[href]:has(div#amv)")
             .mapNotNull { it.toSearchResult() }
         if (modernResults.isNotEmpty()) return modernResults
         return document.select("div.listupd article.bs")
@@ -113,15 +129,20 @@ val path = request.data.trimStart('/')
         }
         if (href.isBlank()) return null
 
-        val title = selectFirst("h3.ibox1")?.text()?.trim()
+        val title = selectFirst("h3.ibox1, h3.ibox")?.text()?.trim()
             ?: selectFirst("div.tt")?.text()?.trim()
             ?: attr("title").trim().ifBlank { null }
             ?: return null
 
-        val isMovie = href.contains("/anime-movie/", true) || title.contains("movie", true)
+        val isMovie = href.contains("/anime-movie/", true) || href.contains("/live-action-movie/", true) || title.contains("movie", true)
         val isOva = title.contains("ova", true) || title.contains("special", true)
-        if (isMovie || isOva) return null
-        val tvType = if (isMovie) TvType.AnimeMovie else TvType.Anime
+        
+        val tvType = when {
+            isMovie -> TvType.AnimeMovie
+            isOva -> TvType.OVA
+            else -> TvType.Anime
+        }
+        
         val posterUrl = selectFirst("img")?.getImageAttr()?.let { fixUrlNull(it) }
 
         return newAnimeSearchResponse(title, fixUrl(href), tvType) {
@@ -134,7 +155,7 @@ val path = request.data.trimStart('/')
 
         val title = document.selectFirst("h1.entry-title, h2.entry-title")?.text()?.trim().orEmpty()
         val poster = document
-            .selectFirst("div.column-three-fourth > img, div.column-content > img, div.bigcontent img")
+            .selectFirst("div.column-three-fourth > img, div.column-content > img, div.bigcontent img, div.entry-content img")
             ?.getImageAttr()
             ?.let { fixUrlNull(it) }
 
@@ -192,7 +213,7 @@ val path = request.data.trimStart('/')
             ?.attr("src")
         val status = getStatus(getTableValue("Status"))
 
-        val recommendations = document.select("div.column-content > a[href]:has(div.amv), div.listupd article.bs")
+        val recommendations = document.select("a[href]:has(div.amv), a[href]:has(div#amv), div.listupd article.bs")
             .mapNotNull { it.toRecommendResult() }
             .distinctBy { it.url }
 
@@ -624,7 +645,6 @@ val path = request.data.trimStart('/')
         fun resolveUrl(raw: String?, base: String): String? {
             if (!isValidUrl(raw)) return null
             var clean = raw!!.trim()
-            // Some legacy Anoboy acbatch pages output broken query values where '+' becomes ' '.
             if (clean.contains("/uploads/stream/", true) && clean.contains("data=", true)) {
                 clean = clean.replace(" ", "+")
             }
@@ -746,12 +766,10 @@ val path = request.data.trimStart('/')
                 val nestedDoc = app.get(next, referer = requestReferer).document
                 extractFromDoc(next, nestedDoc)
             } catch (_: Exception) {
-                // skip dead mirror page
             }
         }
 
         if (discoveredUrls.isEmpty() && document != null) {
-            // fallback for old mirrored options stored as base64 iframe html
             val mirrorOptions = document.select("select.mirror option[value]:not([disabled])")
             for (opt in mirrorOptions) {
                 val base64 = opt.attr("value")
@@ -762,7 +780,6 @@ val path = request.data.trimStart('/')
                         queueUrl(iframe, requestReferer)
                     }
                 } catch (_: Exception) {
-                    // ignore broken base64 mirrors
                 }
             }
         }
@@ -1005,7 +1022,6 @@ val path = request.data.trimStart('/')
             }
             .forEach { resolveLegacyMirrorPage(it) }
 
-        // Try Blogger first, then continue with all other mirrors so users can switch sources.
         bloggerLinks.distinct().forEach { link ->
             if (!emitBloggerDirectLinks(link, requestReferer)) {
                 bloggerExtractor.getUrl(link, requestReferer, subtitleCallback, callbackWrapper)
