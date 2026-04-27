@@ -27,7 +27,8 @@ class Anoboy : MainAPI() {
             return when {
                 t.contains("Tv", true) -> TvType.Anime
                 t.contains("Movie", true) -> TvType.AnimeMovie
-                t.contains("OVA", true) || t.contains("Special", true) -> TvType.OVA
+                t.contains("OVA", true) -> TvType.OVA
+                t.contains("Special", true) -> TvType.OVA
                 else -> TvType.Anime
             }
         }
@@ -66,7 +67,10 @@ class Anoboy : MainAPI() {
             
         val hasNext = document.selectFirst(".wp-pagenavi a.nextpostslink") != null
             
-        return newHomePageResponse(request.name, items, hasNext)
+        return HomePageResponse(
+            listOf(HomePageList(request.name, items, isHorizontalImages = true)),
+            hasNext
+        )
     }
 
     private fun Element.toSearchResult(): SearchResponse? {

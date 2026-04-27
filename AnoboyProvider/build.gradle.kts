@@ -1,7 +1,7 @@
 version = 1
 
 cloudstream {
-    description = "Anoboy"
+    description = "AnoBoy — Streaming Anime Subtitle Indonesia"
     language = "id"
     authors = listOf("Miku")
 
