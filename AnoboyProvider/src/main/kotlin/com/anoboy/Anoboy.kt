@@ -58,10 +58,15 @@ class Anoboy : MainAPI() {
         }
         val document = app.get(url).document
         
-        val items = document.select("a[href]:has(div.amv), a[href]:has(div#amv)")
-            .mapNotNull { it.toSearchResult() }
+        val elements = document.select("a[href]:has(div.amv), a[href]:has(div#amv)")
+            .filterNot { it.parents().hasClass("side_home") }
             
-        return newHomePageResponse(request.name, items)
+        val items = elements.mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+            
+        val hasNext = document.selectFirst(".wp-pagenavi a.nextpostslink") != null
+            
+        return newHomePageResponse(request.name, items, hasNext)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
