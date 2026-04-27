@@ -67,7 +67,7 @@ class Anoboy : MainAPI() {
             
         val hasNext = document.selectFirst(".wp-pagenavi a.nextpostslink") != null
             
-        return HomePageResponse(
+        return newHomePageResponse(
             listOf(HomePageList(request.name, items, isHorizontalImages = true)),
             hasNext
         )
