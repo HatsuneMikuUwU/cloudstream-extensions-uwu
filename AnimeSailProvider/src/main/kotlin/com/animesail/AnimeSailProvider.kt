@@ -147,21 +147,16 @@ class AnimeSailProvider : MainAPI() {
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
         val malId = tracker?.malId
 
+        var animeMetaData: MetaAnimeData? = null
         var tmdbid: Int? = null
         var kitsuid: String? = null
-        var engTitle: String? = null
 
         if (malId != null) {
             try {
-                val urlMalSync = "https://raw.githubusercontent.com/MALSync/MAL-Sync-Backup/master/data/myanimelist/anime/$malId.json"
-                val syncMetaData = app.get(urlMalSync).text
-                
-                val malSyncData = mapper.readValue(syncMetaData, MalSyncData::class.java)
-                engTitle = malSyncData.title
-
-                val sites = malSyncData.sites
-                tmdbid = (sites?.get("TheMovieDB") ?: sites?.get("TMDB"))?.values?.firstOrNull()?.identifier?.toIntOrNull()
-                kitsuid = sites?.get("Kitsu")?.values?.firstOrNull()?.identifier
+                val syncMetaData = app.get("https://api.ani.zip/mappings?mal_id=$malId").text
+                animeMetaData = parseAnimeData(syncMetaData)
+                tmdbid = animeMetaData?.mappings?.themoviedbId
+                kitsuid = animeMetaData?.mappings?.kitsuId
             } catch (e: Exception) {
             }
         }
@@ -174,7 +169,7 @@ class AnimeSailProvider : MainAPI() {
             appLangCode = "en"
         )
 
-        val backgroundposter = tracker?.cover
+        val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
 
         val episodes = document.select("ul.daftar > li").amap {
             val link = fixUrl(it.select("a").attr("href"))
@@ -186,16 +181,44 @@ class AnimeSailProvider : MainAPI() {
                 episodeNum = 1
             }
 
+            val episodeKey = episodeNum?.toString()
+            val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
+
+            val epOverview = metaEp?.overview
+            val finalOverview = if (!epOverview.isNullOrBlank()) {
+                epOverview
+            } else {
+                "Synopsis not yet available."
+            }
+
             newEpisode(link) {
-                this.name = name
+                this.name = if (type == TvType.AnimeMovie) {
+                    animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
+                } else {
+                    metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: name
+                }
+
                 this.episode = episodeNum
-                this.description = "Synopsis not yet available."
+                this.score = Score.from10(metaEp?.rating)
+                this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
+                this.description = finalOverview
+                this.addDate(metaEp?.airDateUtc)
+                this.runTime = metaEp?.runtime
             }
         }.reversed()
 
+        val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+
+        val finalPlot = if (!rawPlot.isNullOrBlank()) {
+            rawPlot
+        } else {
+            plotText
+        }
+
         return newAnimeLoadResponse(title, url, TvType.Anime) {
-            this.engName = engTitle ?: title
-            this.japName = title
+            this.engName = animeMetaData?.titles?.get("en") ?: title
+            this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             this.posterUrl = tracker?.image ?: poster
             this.backgroundPosterUrl = backgroundposter
             try { this.logoUrl = logoUrl } catch (_: Throwable) {}
@@ -203,7 +226,7 @@ class AnimeSailProvider : MainAPI() {
             this.duration = getDurationFromString(durationText)
             addEpisodes(DubStatus.Subbed, episodes)
             this.showStatus = getStatus(statusText)
-            this.plot = plotText
+            this.plot = finalPlot
             this.tags = tagsList
             addMalId(malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
@@ -357,16 +380,45 @@ class AnimeSailProvider : MainAPI() {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    data class MalSyncData(
-        @JsonProperty("title") val title: String? = null,
-        @JsonProperty("image") val image: String? = null,
-        @JsonProperty("Sites") val sites: Map<String, Map<String, MalSyncSite>>? = null
+    data class MetaImage(
+        @JsonProperty("coverType") val coverType: String?,
+        @JsonProperty("url") val url: String?
     )
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    data class MalSyncSite(
-        @JsonProperty("identifier") val identifier: String? = null
+    data class MetaEpisode(
+        @JsonProperty("episode") val episode: String?,
+        @JsonProperty("airDateUtc") val airDateUtc: String?,
+        @JsonProperty("runtime") val runtime: Int?,
+        @JsonProperty("image") val image: String?,
+        @JsonProperty("title") val title: Map<String, String>?,
+        @JsonProperty("overview") val overview: String?,
+        @JsonProperty("rating") val rating: String?,
+        @JsonProperty("finaleType") val finaleType: String?
     )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MetaAnimeData(
+        @JsonProperty("titles") val titles: Map<String, String>?,
+        @JsonProperty("description") val description: String?,
+        @JsonProperty("images") val images: List<MetaImage>?,
+        @JsonProperty("episodes") val episodes: Map<String, MetaEpisode>?,
+        @JsonProperty("mappings") val mappings: MetaMappings? = null
+    )
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    data class MetaMappings(
+        @JsonProperty("themoviedb_id") val themoviedbId: Int? = null,
+        @JsonProperty("kitsu_id") val kitsuId: String? = null
+    )
+
+    private fun parseAnimeData(jsonString: String): MetaAnimeData? {
+        return try {
+            mapper.readValue(jsonString, MetaAnimeData::class.java)
+        } catch (_: Exception) {
+            null
+        }
+    }
 }
 
 suspend fun fetchTmdbLogoUrl(
