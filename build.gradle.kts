@@ -87,7 +87,7 @@ subprojects {
         implementation("org.mozilla:rhino:1.9.0")
         implementation("me.xdrop:fuzzywuzzy:1.4.0")
         implementation("com.google.code.gson:gson:2.14.0")
-        implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+        implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
         implementation("com.github.vidstige:jadb:v1.3.0")
         implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
     }
