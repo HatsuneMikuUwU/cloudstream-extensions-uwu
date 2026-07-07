@@ -21,12 +21,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           path: "src"
 
       - name: Checkout Builds Branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: "builds"
           path: "builds"
