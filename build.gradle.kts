@@ -82,7 +82,7 @@ subprojects {
         
         // JSON Parsing
         add("implementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.22.1")
-        add("implementation", "com.fasterxml.jackson.core:jackson-databind:2.22.0")
+        add("implementation", "com.fasterxml.jackson.core:jackson-databind:2.22.1")
         add("implementation", "com.google.code.gson:gson:2.14.0")
         
         // JavaScript Evaluation
