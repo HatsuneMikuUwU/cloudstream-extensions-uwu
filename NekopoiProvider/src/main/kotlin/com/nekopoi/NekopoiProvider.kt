@@ -299,7 +299,7 @@ class NekopoiProvider : MainAPI() {
                             val realUrl = bypassOuo(ouoUrl) ?: return@amap
                             
                             if (linkName.contains("Mirror", ignoreCase = true)) {
-                                val bypassedAds = bypassMirrored(realUrl) ?: return@amap
+                                val bypassedAds = bypassMirrored(realUrl)
                                 bypassedAds.amap ads@{ adsLink ->
                                     val fixedEmbed = fixEmbed(adsLink) ?: return@ads
                                     loadExtractor(fixedEmbed, "$mainUrl/", subtitleCallback) { link ->
@@ -457,23 +457,40 @@ class NekopoiProvider : MainAPI() {
 
     private fun NiceResponse.selectMirror(): String? {
         return this.document.selectFirst("script:containsData(#passcheck)")?.data()
-            ?.substringAfter("\"GET\", \"")?.substringBefore("\"")
+            ?.substringAfter("\"GET\", \"", "")
+            ?.substringBefore("\"", "")
+            ?.takeIf { it.isNotBlank() }
     }
 
-    private suspend fun bypassMirrored(url: String?): List<String?> {
-        val request = session.get(url ?: return emptyList())
-        delay(500)
-        val mirrorUrl = request.selectMirror() ?: run {
-            val nextUrl = request.document.select("div.col-sm.centered.extra-top a").attr("href")
-            session.get(nextUrl).selectMirror()
-        }
-        return session.get(fixUrl(mirrorUrl ?: return emptyList(), mirroredHost)).document.select("table.hoverable tbody tr")
-                .filter { mirror ->
-                    !mirrorIsBlackList(mirror.selectFirst("img")?.attr("alt"))
-                }.amap {
-                val fileLink = it.selectFirst("a")?.attr("href")
-                session.get(fixUrl(fileLink ?: return@amap null, mirroredHost)).document.selectFirst("div.code_wrap code")?.text()
+    private suspend fun bypassMirrored(url: String?): List<String> {
+        if (url.isNullOrBlank()) return emptyList()
+        try {
+            val request = session.get(url)
+            delay(500)
+            
+            val mirrorUrl = request.selectMirror() ?: run {
+                val nextUrl = request.document.selectFirst("div.col-sm.centered.extra-top a, a.get_btn")?.attr("href")
+                if (nextUrl.isNullOrBlank()) return emptyList()
+                session.get(fixUrl(nextUrl, mirroredHost)).selectMirror()
             }
+
+            if (mirrorUrl.isNullOrBlank()) return emptyList()
+
+            return session.get(fixUrl(mirrorUrl, mirroredHost)).document.select("table.hoverable tbody tr")
+                .filter { mirror ->
+                    val hostName = mirror.selectFirst("img")?.attr("alt") ?: ""
+                    !mirrorIsBlackList(hostName)
+                }.amap { row ->
+                    val fileLink = row.selectFirst("a")?.attr("href") ?: return@amap null
+                    val res = session.get(fixUrl(fileLink, mirroredHost))
+                    
+                    res.document.selectFirst("div.code_wrap code")?.text()?.takeIf { it.startsWith("http") }
+                        ?: res.document.selectFirst("a.btn, a.btn-primary")?.attr("href")?.takeIf { it.startsWith("http") }
+                }.filterNotNull()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return emptyList()
+        }
     }
 
     private fun mirrorIsBlackList(host: String?): Boolean {
