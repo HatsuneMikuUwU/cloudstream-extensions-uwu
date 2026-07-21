@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.Qualities
 
 class Playmogo : ExtractorApi() {
@@ -21,59 +22,14 @@ class Playmogo : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val doc = app.get(url, referer = referer).text
+            val doodUrl = url.replace("playmogo.com", "dood.to")
+                             .replace("playmogo.net", "dood.to")
             
-            val title = Regex("""\[(\d+)[Pp]\]""").find(doc)?.groupValues?.getOrNull(1)
-            val pageQuality = title?.toIntOrNull() ?: 0
-
-            val directSource = Regex("""source\s*:\s*['"](https?://[^'"]+\.(?:m3u8|mp4).*?)['"]""").find(doc)?.groupValues?.getOrNull(1)
-            if (directSource != null) {
-                val q = if (pageQuality > 0) pageQuality else Qualities.Unknown.value
-                val isM3u8 = directSource.contains(".m3u8", ignoreCase = true)
-                
-                callback.invoke(
-                    newExtractorLink(name, name, directSource, if (isM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO) {
-                        this.referer = mainUrl
-                        this.quality = q
-                        this.headers = mapOf("Referer" to mainUrl, "Origin" to mainUrl)
-                    }
-                )
-                return
-            }
-
-            val passMd5 = Regex("""/pass_md5/([^/]+)/([^/\s"']+)""").find(doc) ?: return
-            val passPath = passMd5.value
-            
-            val req = app.get("$mainUrl$passPath", referer = url)
-            var videoBase = req.text.trim()
-            
-            if (videoBase.isBlank()) return
-
-            if (videoBase.startsWith("{")) {
-                videoBase = Regex("""['"]url['"]\s*:\s*['"]([^'"]+)['"]""").find(videoBase)?.groupValues?.getOrNull(1) ?: return
-            }
-
-            val token = passMd5.groupValues[2]
-            val expiry = (System.currentTimeMillis() + 86400000).toString()
-            val videoUrl = if (videoBase.endsWith("~")) "$videoBase$token?token=$token&expiry=$expiry" else videoBase
-
-            val q = if (pageQuality > 0) pageQuality else when {
-                Regex("""\b(?:2160|4k)\b""", RegexOption.IGNORE_CASE).containsMatchIn(videoUrl) -> Qualities.P2160.value
-                Regex("""\b(?:1080|hd)\b""", RegexOption.IGNORE_CASE).containsMatchIn(videoUrl) -> Qualities.P1080.value
-                Regex("""\b720\b""", RegexOption.IGNORE_CASE).containsMatchIn(videoUrl) -> Qualities.P720.value
-                Regex("""\b480\b""", RegexOption.IGNORE_CASE).containsMatchIn(videoUrl) -> Qualities.P480.value
-                Regex("""\b360\b""", RegexOption.IGNORE_CASE).containsMatchIn(videoUrl) -> Qualities.P360.value
-                else -> Qualities.Unknown.value
-            }
-
-            val isVideoM3u8 = videoUrl.contains(".m3u8", ignoreCase = true)
-
-            callback.invoke(
-                newExtractorLink(name, name, videoUrl, if (isVideoM3u8) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO) {
-                    this.referer = mainUrl
-                    this.quality = q
-                    this.headers = mapOf("Referer" to mainUrl, "Origin" to mainUrl)
-                }
+            loadExtractor(
+                doodUrl,
+                referer,
+                subtitleCallback,
+                callback
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -95,7 +51,8 @@ class Streampoi : ExtractorApi() {
         try {
             val html = app.get(url, referer = referer).text
 
-            var fileUrl = Regex("""['"]file['"]\s*:\s*['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.getOrNull(1)
+            val regexPattern = """(?i)['"]?file['"]?\s*:\s*['"](https?://[^'"]+)['"]"""
+            var fileUrl = Regex(regexPattern).find(html)?.groupValues?.getOrNull(1)
 
             if (fileUrl == null) {
                 val packed = Regex(
@@ -118,7 +75,7 @@ class Streampoi : ExtractorApi() {
                         }
                     }
                     
-                    fileUrl = Regex("""['"]file['"]\s*:\s*['"]((?:[^'"]|\\.)*+)['"]""").find(result)?.groupValues?.getOrNull(1)
+                    fileUrl = Regex(regexPattern).find(result)?.groupValues?.getOrNull(1)
                 }
             }
 

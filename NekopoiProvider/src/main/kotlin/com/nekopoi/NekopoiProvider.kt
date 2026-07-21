@@ -77,7 +77,7 @@ class NekopoiProvider : MainAPI() {
             list = HomePageList(
                 name = request.name,
                 list = home,
-                isHorizontalImages = true
+                isHorizontalImages = false
             ),
             hasNext = home.isNotEmpty()
         )
@@ -260,8 +260,12 @@ class NekopoiProvider : MainAPI() {
 
         runAllAsync(
             {
-                res.select("div.nk-player-frame iframe").amap { iframe ->
-                    val src = iframe.attr("src").takeIf { it.isNotBlank() } ?: return@amap
+                res.select("div.nk-player-frame iframe, iframe[src]").amap { iframe ->
+                    val rawSrc = iframe.attr("src").takeIf { it.isNotBlank() }
+                        ?: iframe.attr("data-src").takeIf { it.isNotBlank() }
+                        ?: return@amap
+                    
+                    val src = fixUrl(rawSrc, mainUrl)
                     
                     val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback) { link ->
                         runBlocking {
@@ -288,12 +292,13 @@ class NekopoiProvider : MainAPI() {
 
                     row.select("div.nk-download-links a").amap { a ->
                         val linkName = a.text().trim()
-                        val ouoUrl = a.attr("href")
+                        val rawUrl = a.attr("href").takeIf { it.isNotBlank() } ?: return@amap
+                        val ouoUrl = fixUrl(rawUrl, mainUrl)
 
-                        if (ouoUrl.contains("ouo.io") || ouoUrl.contains("ouo.press")) {
+                        if (ouoUrl.contains("ouo.", ignoreCase = true)) {
                             val realUrl = bypassOuo(ouoUrl) ?: return@amap
                             
-                            if (linkName.equals("Mirror", ignoreCase = true)) {
+                            if (linkName.contains("Mirror", ignoreCase = true)) {
                                 val bypassedAds = bypassMirrored(realUrl) ?: return@amap
                                 bypassedAds.amap ads@{ adsLink ->
                                     val fixedEmbed = fixEmbed(adsLink) ?: return@ads
@@ -344,17 +349,17 @@ class NekopoiProvider : MainAPI() {
                 iframeSrc,
                 headers = mapOf(
                     "Referer" to mainUrl,
-                    "Accept-Language" to "en-US,en;q=0.5"
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
                 )
             ).text
 
             val videoUrl = 
                 Regex("""(?i)(?:source|file|src|url)["']?\s*[:=]\s*["'](https?://[^"']+\.(?:m3u8|mp4)[^"']*)["']""").find(html)?.groupValues?.get(1)
-                ?: Regex("""(https?://[^"']+\.(?:m3u8|mp4)[^"']*)""").find(html)?.groupValues?.get(1)
+                ?: Regex("""(https?://[^\s"']+\.(?:m3u8|mp4)[^\s"']*)""").find(html)?.groupValues?.get(1)
 
             if (videoUrl != null) {
                 val isM3u8 = videoUrl.contains(".m3u8", ignoreCase = true)
-                val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "CustomServer" }
+                val hostName = try { URI(iframeSrc).host } catch (e: Exception) { "NekoStream" }
                 
                 callback.invoke(
                     newExtractorLink(
@@ -371,9 +376,12 @@ class NekopoiProvider : MainAPI() {
                 return
             }
 
-            val nestedSrc = Regex("""<iframe[^>]+src=['"](https?://[^'"]+)['"]""").find(html)?.groupValues?.get(1)
-            if (nestedSrc != null && nestedSrc != iframeSrc) {
-                loadExtractor(nestedSrc, iframeSrc, subtitleCallback, callback)
+            val nestedSrc = Regex("""<iframe[^>]+src=['"]([^'"]+)['"]""").find(html)?.groupValues?.get(1)
+            if (nestedSrc != null) {
+                val fullNested = fixUrl(nestedSrc, iframeSrc)
+                if (fullNested != iframeSrc) {
+                    loadExtractor(fullNested, iframeSrc, subtitleCallback, callback)
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
