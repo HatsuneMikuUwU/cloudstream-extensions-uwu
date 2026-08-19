@@ -77,7 +77,7 @@ subprojects {
         
         // Network & Scraping
         add("implementation", "com.github.Blatzar:NiceHttp:0.4.18")
-        add("implementation", "com.squareup.okhttp3:okhttp:5.4.0")
+        add("implementation", "com.squareup.okhttp3:okhttp:5.5.0")
         add("implementation", "org.jsoup:jsoup:1.22.2")
         
         // JSON Parsing
