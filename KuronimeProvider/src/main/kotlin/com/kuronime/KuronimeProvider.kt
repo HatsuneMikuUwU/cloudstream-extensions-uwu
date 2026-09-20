@@ -87,8 +87,6 @@ class KuronimeProvider : MainAPI() {
         val title = when {
             slug.contains("-episode") && !slug.contains("-movie") -> 
                 Regex("nonton-(.+)-episode").find(slug)?.groupValues?.get(1) ?: slug
-            slug.contains("-movie") -> 
-                Regex("nonton-(.+)-movie").find(slug)?.groupValues?.get(1) ?: slug
             else -> slug
         }
 
@@ -235,7 +233,7 @@ class KuronimeProvider : MainAPI() {
             description
         }
 
-        return newAnimeLoadResponse(title, url, type) {
+        return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.engName = animeMetaData?.titles?.get("en") ?: title
             this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             this.posterUrl = tracker?.image ?: poster

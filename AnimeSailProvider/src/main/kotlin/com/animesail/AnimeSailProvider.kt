@@ -82,7 +82,6 @@ class AnimeSailProvider : MainAPI() {
             var title = uri.substringAfter("$mainUrl/")
             title = when {
                 (title.contains("-episode")) && !(title.contains("-movie")) -> title.substringBefore("-episode")
-                (title.contains("-movie")) -> title.substringBefore("-movie")
                 else -> title
             }
             "$mainUrl/anime/$title"
@@ -212,7 +211,7 @@ class AnimeSailProvider : MainAPI() {
             plotText
         }
 
-        return newAnimeLoadResponse(title, url, type) {
+        return newAnimeLoadResponse(title, url, TvType.Anime) {
             this.engName = animeMetaData?.titles?.get("en") ?: title
             this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             this.posterUrl = tracker?.image ?: poster
