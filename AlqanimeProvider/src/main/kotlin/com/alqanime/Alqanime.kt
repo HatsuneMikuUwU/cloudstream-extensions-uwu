@@ -275,7 +275,7 @@ class Alqanime : MainAPI() {
             ep.episode = episodeNum
             ep.score = Score.from10(metaEp?.rating)
             ep.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: ep.posterUrl?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundPoster ?: tracker?.cover
-            ep.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
+            ep.description = epOverview?.takeIf { it.isNotBlank() }
             ep.addDate(metaEp?.airDateUtc)
             ep.runTime = metaEp?.runtime
         }

@@ -183,11 +183,7 @@ class AnimeSailProvider : MainAPI() {
             val metaEp = if (episodeKey != null) animeMetaData?.episodes?.get(episodeKey) else null
 
             val epOverview = metaEp?.overview
-            val finalOverview = if (!epOverview.isNullOrBlank()) {
-                epOverview
-            } else {
-                "Synopsis not yet available."
-            }
+            val finalOverview = epOverview?.takeIf { it.isNotBlank() }
 
             newEpisode(link) {
                 this.name = if (type == TvType.AnimeMovie) {

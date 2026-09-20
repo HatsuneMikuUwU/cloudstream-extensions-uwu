@@ -200,7 +200,7 @@ class KuramanimeProvider : MainAPI() {
                 this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
                 this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundPoster ?: tracker?.image ?: poster
-                this.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
+                this.description = epOverview?.takeIf { it.isNotBlank() }
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
             }
