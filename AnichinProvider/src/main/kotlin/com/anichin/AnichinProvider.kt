@@ -5,6 +5,7 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import org.jsoup.Jsoup
+import java.net.URI
 
 class AnichinProvider : MainAPI() {
     companion object {
@@ -112,15 +113,32 @@ class AnichinProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = app.get(fixUrl(data), interceptor = cloudflareKiller).document
+
+        val sources = mutableListOf<String>()
+
         document.select(".mobius option").forEach { server ->
-            val base64 = server.attr("value")
-            if (base64.isNotBlank()) {
-                val decoded = base64Decode(base64)
-                val doc = Jsoup.parse(decoded)
-                val href = fixUrl(doc.select("iframe").attr("src"))
-                loadExtractor(href, data, subtitleCallback, callback)
-            }
+            val encoded = server.attr("value").trim()
+            if (encoded.isBlank()) return@forEach
+            val html = runCatching { base64Decode(encoded) }.getOrNull() ?: return@forEach
+            val src = Jsoup.parse(html).selectFirst("iframe")?.attr("src")
+            if (!src.isNullOrBlank()) sources.add(src)
         }
+
+        document.select("#pembed iframe[src]").forEach { sources.add(it.attr("src")) }
+
+        sources.map { normalizeEmbed(fixUrl(it)) }
+            .distinct()
+            .amap { url -> loadExtractor(url, data, subtitleCallback, callback) }
+
         return true
+    }
+
+    private fun normalizeEmbed(url: String): String {
+        val host = runCatching { URI(url).host }.getOrNull().orEmpty()
+        if (host.endsWith("anichin-player.web.id")) {
+            val id = url.substringAfter("video=", "").substringBefore("&")
+            if (id.isNotBlank()) return "https://www.dailymotion.com/embed/video/$id"
+        }
+        return url
     }
 }
