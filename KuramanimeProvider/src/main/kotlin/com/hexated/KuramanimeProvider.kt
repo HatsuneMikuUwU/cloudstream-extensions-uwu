@@ -16,7 +16,7 @@ import java.net.URI
 import java.util.Calendar
 
 class KuramanimeProvider : MainAPI() {
-    override var mainUrl = "https://v18.kuramanime.ing"
+    override var mainUrl = "https://v20.kuramanime.ing"
     override var name = "Kuramanime"
     override val hasQuickSearch = true
     override val hasMainPage = true
