@@ -22,7 +22,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class AnimeSailProvider : MainAPI() {
-    override var mainUrl = "https://v1.animesail.xyz"
+    override var mainUrl = "https://anisail.com"
     override var name = "AnimeSail"
     override val hasMainPage = true
     override var lang = "id"
@@ -54,15 +54,20 @@ class AnimeSailProvider : MainAPI() {
         }
     }
 
-    private val turnstileInterceptor = TurnstileInterceptor("_as_turnstile")
-
     private suspend fun request(url: String, ref: String? = null): NiceResponse {
         return app.get(
             url,
-            interceptor = turnstileInterceptor,
             headers = mapOf(
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+            ),
+            // Situs biasanya men-set cookie ini lewat JS (ipin_setCookie) berdasarkan
+            // timezone/locale browser untuk menandai origin sebagai Indonesia.
+            // Kita kirim langsung karena provider ini tidak menjalankan JS.
+            cookies = mapOf(
+                "_as_ipin_ct" to "ID",
+                "_as_ipin_tz" to "Asia/Jakarta",
+                "_as_ipin_lc" to "id-ID"
             ),
             referer = ref
         )
@@ -248,7 +253,13 @@ class AnimeSailProvider : MainAPI() {
                 val encodedData = element.attr("data-em")
                 if (encodedData.isBlank()) return@safeApiCall
 
-                val iframe = fixUrl(Jsoup.parse(base64Decode(encodedData)).select("iframe").attr("src"))
+                // Situs masih meng-encode URL utils/player dengan domain lama (v1.animesail.xyz)
+                // lalu menormalkannya ke mainUrl lewat JS di sisi klien saat dirender.
+                // Kita tiru normalisasi itu di sini supaya deteksi playerPath tetap cocok.
+                val decodedHtml = base64Decode(encodedData)
+                    .replace("v1.animesail.xyz", mainUrl.substringAfter("://"))
+
+                val iframe = fixUrl(Jsoup.parse(decodedHtml).select("iframe").attr("src"))
                 if (iframe.contains("statistic") || iframe.isBlank()) return@safeApiCall
 
                 val rawText = element.text().trim()
