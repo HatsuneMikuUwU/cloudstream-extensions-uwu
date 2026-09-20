@@ -2,6 +2,7 @@ package com.Animexin
 
 import org.jsoup.nodes.Element
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 
@@ -13,6 +14,9 @@ class Animexin : MainAPI() {
     override val hasDownloadSupport   = true
     override val supportedTypes       = setOf(TvType.Movie,TvType.Anime)
 
+    private val cloudflareKiller by lazy { CloudflareKiller() }
+    private val posterHeaders get() = mapOf("Referer" to "$mainUrl/")
+
     override val mainPage = mainPageOf(
         "anime/?status=ongoing&order=update" to "Recently Updated",
         "anime/?status=ongoing&order&order=popular" to "Popular",
@@ -22,7 +26,7 @@ class Animexin : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-val document = app.get("$mainUrl/${request.data}&page=$page").documentLarge
+        val document = app.get("$mainUrl/${request.data}&page=$page", referer = "$mainUrl/", interceptor = cloudflareKiller).documentLarge
         val home     = document.select("div.listupd > article").mapNotNull { it.toSearchResult() }
 
         return newHomePageResponse(
@@ -41,19 +45,20 @@ val document = app.get("$mainUrl/${request.data}&page=$page").documentLarge
         val posterUrl = fixUrlNull(this.select("div.bsx > a img").attr("src"))
         return newMovieSearchResponse(title, href, TvType.Movie) {
             this.posterUrl = posterUrl
+            this.posterHeaders = posterHeaders
         }
     }
 
 
     override suspend fun search(query: String,page: Int): SearchResponseList {
-        val document = app.get("${mainUrl}/page/$page/?s=$query").documentLarge
+        val document = app.get("${mainUrl}/page/$page/?s=$query", referer = "$mainUrl/", interceptor = cloudflareKiller).documentLarge
         val results = document.select("div.listupd > article").mapNotNull { it.toSearchResult() }.toNewSearchResponseList()
         return results
     }
 
     @Suppress("SuspiciousIndentation")
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).documentLarge
+        val document = app.get(url, referer = "$mainUrl/", interceptor = cloudflareKiller).documentLarge
         val title = document.selectFirst("h1.entry-title")?.text()?.trim().orEmpty()
         val href=document.selectFirst("div.eplister > ul > li a")?.attr("href") ?:""
         val poster = document.select("div.thumb img").attr("src").ifEmpty { document.selectFirst("meta[property=og:image]")?.attr("content")?.trim().orEmpty() }
@@ -73,24 +78,27 @@ val document = app.get("$mainUrl/${request.data}&page=$page").documentLarge
                 newEpisode(href1) {
                     this.episode = epnum
                     this.name = epnum?.let { "Episode $it" } ?: epText
-                    this.posterUrl = posterr
+                    this.posterUrl = fixUrlNull(posterr)
+                    this.posterHeaders = posterHeaders
                 }
             }
 
             newTvSeriesLoadResponse(title, url, TvType.Anime, episodes.reversed()) {
-                this.posterUrl = poster
+                this.posterUrl = fixUrlNull(poster)
+                this.posterHeaders = posterHeaders
                 this.plot = description
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, href) {
-                this.posterUrl = poster
+                this.posterUrl = fixUrlNull(poster)
+                this.posterHeaders = posterHeaders
                 this.plot = description
             }
         }
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
-        val document = app.get(data).documentLarge
+        val document = app.get(data, referer = "$mainUrl/", interceptor = cloudflareKiller).documentLarge
         document.select(".mobius option").forEach { server->
             val base64 = server.attr("value")
             val decoded=base64Decode(base64)
