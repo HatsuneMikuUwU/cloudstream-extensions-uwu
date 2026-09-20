@@ -332,6 +332,7 @@ class Anoboy : MainAPI() {
                     name = if (cleanedTitle.isBlank()) "Episode $episodeNumber" else cleanedTitle
                     episode = episodeNumber
                     if (seasonNum != null) this.season = seasonNum
+                    this.posterUrl = poster
                 }
             }
 
@@ -458,6 +459,7 @@ class Anoboy : MainAPI() {
                     newEpisode(encodeEpisodeData(pageReferer, data)) {
                         name = title
                         episode = episodeNumber
+                        this.posterUrl = poster
                     }
                 }
         }
@@ -487,6 +489,7 @@ class Anoboy : MainAPI() {
                         name = if (cleanedTitle.isBlank()) "Episode $episodeNumber" else cleanedTitle
                         episode = episodeNumber
                         if (seasonNum != null) this.season = seasonNum
+                        this.posterUrl = poster
                     }
                 }
         }

@@ -217,7 +217,7 @@ class HidoristreamProvider : MainAPI() {
                     this.name = animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
                     this.episode = 1
                     this.score = Score.from10(animeMetaData?.episodes?.get("1")?.rating)
-                    this.posterUrl = animeMetaData?.episodes?.get("1")?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: ""
+                    this.posterUrl = animeMetaData?.episodes?.get("1")?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: tracker?.image ?: poster ?: ""
                     this.description = finalOverview
                     this.addDate(animeMetaData?.episodes?.get("1")?.airDateUtc)
                     this.runTime = animeMetaData?.episodes?.get("1")?.runtime
@@ -236,7 +236,7 @@ class HidoristreamProvider : MainAPI() {
                     this.name = metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: "Episode $epNum"
                     this.episode = epNum
                     this.score = Score.from10(metaEp?.rating)
-                    this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: ""
+                    this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: tracker?.image ?: poster ?: ""
                     this.description = finalOverview
                     this.addDate(metaEp?.airDateUtc)
                     this.runTime = metaEp?.runtime

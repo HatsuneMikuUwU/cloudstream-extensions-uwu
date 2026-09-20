@@ -131,7 +131,7 @@ val document = app.get("$mainUrl${request.data}/page/$page").document
                 }
                 this.episode = episode
                 this.score = Score.from10(metaEp?.rating)
-                this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundPoster ?: tracker?.cover
+                this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundPoster ?: tracker?.cover ?: tracker?.image ?: poster
                 this.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime

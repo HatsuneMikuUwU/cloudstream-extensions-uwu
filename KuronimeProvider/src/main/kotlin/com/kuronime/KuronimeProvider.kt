@@ -215,7 +215,7 @@ class KuronimeProvider : MainAPI() {
                 }
                 this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
-                this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: ""
+                this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: tracker?.image ?: poster ?: ""
                 this.description = finalOverview
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime

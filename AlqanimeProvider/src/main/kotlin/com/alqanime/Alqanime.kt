@@ -209,7 +209,7 @@ class Alqanime : MainAPI() {
                     episodes.add(newEpisode(links.toEpisodeJson()) {
                         this.name = "Episode $episodeNumber"
                         this.episode = episodeNumber
-                        this.posterUrl = epThumbs[episodeNumber]
+                        this.posterUrl = epThumbs[episodeNumber] ?: coverBg ?: poster
                     })
                 }
             }
@@ -227,6 +227,7 @@ class Alqanime : MainAPI() {
                     episodes.add(newEpisode(linkList.toEpisodeJson()) {
                         this.name = epTitle
                         this.episode = epNum
+                        this.posterUrl = coverBg ?: poster
                     })
                 }
             }
