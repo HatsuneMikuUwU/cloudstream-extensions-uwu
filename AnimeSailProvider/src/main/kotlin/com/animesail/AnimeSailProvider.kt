@@ -61,9 +61,6 @@ class AnimeSailProvider : MainAPI() {
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
             ),
-            // Situs biasanya men-set cookie ini lewat JS (ipin_setCookie) berdasarkan
-            // timezone/locale browser untuk menandai origin sebagai Indonesia.
-            // Kita kirim langsung karena provider ini tidak menjalankan JS.
             cookies = mapOf(
                 "_as_ipin_ct" to "ID",
                 "_as_ipin_tz" to "Asia/Jakarta",
@@ -253,9 +250,6 @@ class AnimeSailProvider : MainAPI() {
                 val encodedData = element.attr("data-em")
                 if (encodedData.isBlank()) return@safeApiCall
 
-                // Situs masih meng-encode URL utils/player dengan domain lama (v1.animesail.xyz)
-                // lalu menormalkannya ke mainUrl lewat JS di sisi klien saat dirender.
-                // Kita tiru normalisasi itu di sini supaya deteksi playerPath tetap cocok.
                 val decodedHtml = base64Decode(encodedData)
                     .replace("v1.animesail.xyz", mainUrl.substringAfter("://"))
 
