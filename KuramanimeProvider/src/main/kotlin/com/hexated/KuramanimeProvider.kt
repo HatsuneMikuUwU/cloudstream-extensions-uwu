@@ -3,12 +3,14 @@ package com.hexated
 import app.cash.quickjs.QuickJs
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addKitsuId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -164,19 +166,70 @@ class KuramanimeProvider : MainAPI() {
         }
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
+        val malId = tracker?.malId
+
+        // api.ani.zip: titles, description, fanart and per-episode metadata
+        val animeMetaData = malId?.let {
+            try {
+                parseAnimeData(app.get("https://api.ani.zip/mappings?mal_id=$it").text)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                null
+            }
+        }
+        val tmdbId = animeMetaData?.mappings?.themoviedbId
+        val kitsuId = animeMetaData?.mappings?.kitsuId
+
+        // api.themoviedb.org: title logo
+        val tmdbLogoUrl = fetchTmdbLogoUrl(
+            tmdbAPI = "https://api.themoviedb.org/3",
+            apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
+            type = type,
+            tmdbId = tmdbId,
+            appLangCode = "en"
+        )
+
+        val backgroundPoster = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
+
+        val finalEpisodes = episodes.distinctBy { it.data }.map { ep ->
+            val episodeNum = ep.episode ?: if (type == TvType.AnimeMovie) 1 else null
+            val metaEp = episodeNum?.let { animeMetaData?.episodes?.get(it.toString()) }
+            val epOverview = metaEp?.overview
+
+            newEpisode(ep.data) {
+                this.name = if (type == TvType.AnimeMovie) {
+                    animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: ep.name
+                } else {
+                    metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: ep.name
+                }
+                this.episode = episodeNum
+                this.score = Score.from10(metaEp?.rating)
+                this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url
+                this.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
+                this.addDate(metaEp?.airDateUtc)
+                this.runTime = metaEp?.runtime
+            }
+        }
+
+        val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val finalPlot = if (!rawPlot.isNullOrBlank()) rawPlot else description
 
         return newAnimeLoadResponse(title, url, type) {
-            engName = title
+            engName = animeMetaData?.titles?.get("en") ?: title
+            japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             posterUrl = tracker?.image ?: poster
-            backgroundPosterUrl = tracker?.cover
+            backgroundPosterUrl = backgroundPoster
+            try { this.logoUrl = tmdbLogoUrl } catch (_: Throwable) {}
             this.year = year
-            addEpisodes(DubStatus.Subbed, episodes.distinctBy { it.data })
+            addEpisodes(DubStatus.Subbed, finalEpisodes)
             showStatus = status
-            plot = description
+            plot = finalPlot
             this.tags = tags
             this.recommendations = recommendations
-            addMalId(tracker?.malId)
+            addMalId(malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
+            try { addKitsuId(kitsuId) } catch (_: Throwable) {}
         }
     }
 
