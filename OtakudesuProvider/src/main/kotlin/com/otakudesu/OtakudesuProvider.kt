@@ -198,7 +198,7 @@ class OtakudesuProvider : MainAPI() {
             description
         }
 
-        return newAnimeLoadResponse(title, url, TvType.Anime) {
+        return newAnimeLoadResponse(title, url, type) {
             this.engName = animeMetaData?.titles?.get("en") ?: title
             this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             this.posterUrl = tracker?.image ?: poster
