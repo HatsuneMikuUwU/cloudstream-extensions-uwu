@@ -79,11 +79,12 @@ class AnimeSailProvider : MainAPI() {
         return if (uri.contains("/anime/")) {
             uri
         } else {
-            var title = uri.substringAfter("$mainUrl/")
-            title = if (title.contains("-episode")) {
-                title.substringBefore("-episode")
-            } else {
-                title
+            var title = uri.substringAfter("$mainUrl/").removeSuffix("/")
+            title = when {
+                title.contains("-episode-") -> title.substringBefore("-episode")
+                Regex("-movie-\\d+$", RegexOption.IGNORE_CASE).containsMatchIn(title) ->
+                    title.replace(Regex("-movie-\\d+$", RegexOption.IGNORE_CASE), "-movie")
+                else -> title
             }
             "$mainUrl/anime/$title"
         }
