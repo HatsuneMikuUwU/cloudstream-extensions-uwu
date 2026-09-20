@@ -35,19 +35,20 @@
 | 13 | **IndoMax21** | 🇮🇩 ID | 🔞 NSFW, 🎬 Movies & Series |
 | 14 | **JavHey** | 🇮🇩 ID | 🔞 NSFW |
 | 15 | **KlikXXI** | 🇮🇩 ID | 🎬 Movies & Series |
-| 16 | **Kuronime** | 🇮🇩 ID | 🌸 Anime |
-| 17 | **LayarAsia** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
-| 18 | **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series |
-| 19 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series |
-| 20 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai |
-| 21 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series |
-| 22 | **Nimegami** | 🇮🇩 ID | 🌸 Anime |
-| 23 | **Nomat** | 🇮🇩 ID | 🎬 Movies & Series |
-| 24 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
-| 25 | **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
-| 26 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
-| 27 | **PencuriMovie** | 🇮🇩 ID | 🎬 Movies & Series |
-| 28 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
+| 16 | **Kuramanime** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
+| 17 | **Kuronime** | 🇮🇩 ID | 🌸 Anime |
+| 18 | **LayarAsia** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
+| 19 | **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series |
+| 20 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series |
+| 21 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai |
+| 22 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series |
+| 23 | **Nimegami** | 🇮🇩 ID | 🌸 Anime |
+| 24 | **Nomat** | 🇮🇩 ID | 🎬 Movies & Series |
+| 25 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
+| 26 | **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
+| 27 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
+| 28 | **PencuriMovie** | 🇮🇩 ID | 🎬 Movies & Series |
+| 29 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
 
 > [!WARNING]
 > **Disclaimer & Legal Notice**
