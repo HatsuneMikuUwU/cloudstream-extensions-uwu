@@ -3,10 +3,12 @@ package com.hexated
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addKitsuId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
@@ -90,10 +92,54 @@ val document = app.get("$mainUrl${request.data}/page/$page").document
         val description = document.select("div#Sinopsis p").text().trim()
         val trailer = document.selectFirst("div#Trailer iframe")?.attr("src")
 
+        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
+        val malId = tracker?.malId
+
+        // api.ani.zip: titles, description, fanart and per-episode metadata
+        val animeMetaData = malId?.let {
+            try {
+                parseAnimeData(app.get("https://api.ani.zip/mappings?mal_id=$it").text)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                null
+            }
+        }
+        val tmdbId = animeMetaData?.mappings?.themoviedbId
+        val kitsuId = animeMetaData?.mappings?.kitsuId
+
+        // api.themoviedb.org: title logo
+        val tmdbLogoUrl = fetchTmdbLogoUrl(
+            tmdbAPI = "https://api.themoviedb.org/3",
+            apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
+            type = type,
+            tmdbId = tmdbId,
+            appLangCode = "en"
+        )
+
+        val backgroundPoster = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url
+            ?: tracker?.cover
+            ?: bgPoster
+
         val episodes = document.select("div.list_eps_stream li").mapNotNull {
             val episode = Regex("Episode\\s?(\\d+)").find(it.text())?.groupValues?.getOrNull(1)?.toIntOrNull()
+                ?: if (type == TvType.AnimeMovie) 1 else null
             val link = it.attr("data")
-            newEpisode(url = link, initializer = { this.episode = episode }, fix = false)
+            val metaEp = episode?.let { num -> animeMetaData?.episodes?.get(num.toString()) }
+            val epOverview = metaEp?.overview
+
+            newEpisode(url = link, initializer = {
+                this.name = if (type == TvType.AnimeMovie) {
+                    animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja")
+                } else {
+                    metaEp?.title?.get("en") ?: metaEp?.title?.get("ja")
+                }
+                this.episode = episode
+                this.score = Score.from10(metaEp?.rating)
+                this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url
+                this.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
+                this.addDate(metaEp?.airDateUtc)
+                this.runTime = metaEp?.runtime
+            }, fix = false)
         }
 
         val recommendations = document.select("div#randomList > a").mapNotNull {
@@ -106,21 +152,26 @@ val document = app.get("$mainUrl${request.data}/page/$page").document
             }
         }
 
-        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
+        val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val finalPlot = if (!rawPlot.isNullOrBlank()) rawPlot else description
 
         return newAnimeLoadResponse(title, url, type) {
-            engName = title
+            engName = animeMetaData?.titles?.get("en") ?: title
+            japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
             posterUrl = tracker?.image ?: poster
-            backgroundPosterUrl = tracker?.cover ?: bgPoster
+            backgroundPosterUrl = backgroundPoster
+            try { this.logoUrl = tmdbLogoUrl } catch (_: Throwable) {}
             this.year = year
             addEpisodes(DubStatus.Subbed, episodes)
             showStatus = status
-            plot = description
+            plot = finalPlot
             this.tags = tags
             this.recommendations = recommendations
             addTrailer(trailer)
-            addMalId(tracker?.malId)
+            addMalId(malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
+            try { addKitsuId(kitsuId) } catch (_: Throwable) {}
         }
     }
 
