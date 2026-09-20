@@ -232,10 +232,10 @@ class Alqanime : MainAPI() {
             }
         }
 
-        val tracker = com.lagradost.cloudstream3.APIHolder.getTracker(
-            listOf(title),
-            com.lagradost.cloudstream3.TrackerType.getTypes(TvType.Anime),
-            null,
+        val tracker = APIHolder.getTracker(
+            listOfNotNull(title, japName).distinct(),
+            TrackerType.getTypes(type),
+            year,
             true
         )
         val malId = tracker?.malId
