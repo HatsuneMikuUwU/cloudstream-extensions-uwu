@@ -15,7 +15,35 @@ class Animexin : MainAPI() {
     override val supportedTypes       = setOf(TvType.Movie,TvType.Anime)
 
     private val cloudflareKiller by lazy { CloudflareKiller() }
-    private val posterHeaders get() = mapOf("Referer" to "$mainUrl/")
+
+    private val posterHeaders: Map<String, String>
+        get() {
+            val base = mutableMapOf(
+                "Referer" to "$mainUrl/",
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+                "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            )
+            runCatching { cloudflareKiller.getCookieHeaders(mainUrl).toMap() }
+                .getOrNull()
+                ?.forEach { (k, v) -> base[k] = v }
+            return base
+        }
+
+    private fun Element?.getImageAttr(): String? {
+        if (this == null) return null
+        val attrs = listOf("data-src", "data-lazy-src", "data-original", "data-cfsrc", "data-lazy", "src")
+        for (a in attrs) {
+            val v = this.attr(a).trim()
+            if (v.isNotEmpty() && !v.startsWith("data:")) return fixUrlNull(v)
+        }
+        val srcset = this.attr("data-srcset").ifBlank { this.attr("srcset") }.trim()
+        if (srcset.isNotEmpty()) {
+            val first = srcset.split(",").firstOrNull()?.trim()?.substringBefore(" ")
+            if (!first.isNullOrBlank() && !first.startsWith("data:")) return fixUrlNull(first)
+        }
+        return null
+    }
 
     override val mainPage = mainPageOf(
         "anime/?status=ongoing&order=update" to "Recently Updated",
@@ -39,13 +67,15 @@ class Animexin : MainAPI() {
         )
     }
 
-    private fun Element.toSearchResult(): SearchResponse {
-        val title     = this.select("div.bsx > a").attr("title")
-        val href      = fixUrl(this.select("div.bsx > a").attr("href"))
-        val posterUrl = fixUrlNull(this.select("div.bsx > a img").attr("src"))
+    private fun Element.toSearchResult(): SearchResponse? {
+        val a         = this.selectFirst("div.bsx > a") ?: return null
+        val title     = a.attr("title").trim().ifEmpty { this.selectFirst("div.tt h2")?.text()?.trim().orEmpty() }
+        val href      = fixUrl(a.attr("href"))
+        if (title.isEmpty() || href.isEmpty()) return null
+        val posterUrl = a.selectFirst("img").getImageAttr()
         return newMovieSearchResponse(title, href, TvType.Movie) {
             this.posterUrl = posterUrl
-            this.posterHeaders = posterHeaders
+            this.posterHeaders = this@Animexin.posterHeaders
         }
     }
 
@@ -61,7 +91,9 @@ class Animexin : MainAPI() {
         val document = app.get(url, referer = "$mainUrl/", interceptor = cloudflareKiller).documentLarge
         val title = document.selectFirst("h1.entry-title")?.text()?.trim().orEmpty()
         val href=document.selectFirst("div.eplister > ul > li a")?.attr("href") ?:""
-        val poster = document.select("div.thumb img").attr("src").ifEmpty { document.selectFirst("meta[property=og:image]")?.attr("content")?.trim().orEmpty() }
+        val poster = document.selectFirst("div.bigcontent div.thumb img").getImageAttr()
+            ?: document.selectFirst("div.thumb img").getImageAttr()
+            ?: document.selectFirst("meta[property=og:image]")?.attr("content")?.trim()?.takeIf { it.isNotEmpty() }
         val description = document.selectFirst("div.entry-content")?.text()?.trim()
         val type=document.selectFirst(".spe")?.text().orEmpty()
         val tvtag=if (type.contains("Movie")) TvType.Movie else TvType.TvSeries
@@ -70,7 +102,7 @@ class Animexin : MainAPI() {
 
             val episodes = document.select("div.eplister > ul > li").map { info ->
                 val href1 = info.select("a").attr("href")
-                val posterr = info.selectFirst("a img")?.attr("src") ?: ""
+                val posterr = info.selectFirst("a img").getImageAttr()
 
                 val epText = info.selectFirst("div.epl-num")?.text().orEmpty()
                 val epnum = episodeRegex.find(epText)?.groupValues?.get(1)?.toIntOrNull()
@@ -84,13 +116,13 @@ class Animexin : MainAPI() {
 
             newTvSeriesLoadResponse(title, url, TvType.Anime, episodes.reversed()) {
                 this.posterUrl = fixUrlNull(poster)
-                this.posterHeaders = posterHeaders
+                this.posterHeaders = this@Animexin.posterHeaders
                 this.plot = description
             }
         } else {
             newMovieLoadResponse(title, url, TvType.Movie, href) {
                 this.posterUrl = fixUrlNull(poster)
-                this.posterHeaders = posterHeaders
+                this.posterHeaders = this@Animexin.posterHeaders
                 this.plot = description
             }
         }
