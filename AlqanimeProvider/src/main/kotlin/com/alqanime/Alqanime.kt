@@ -6,8 +6,10 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addKitsuId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.nodes.Element
@@ -236,24 +238,75 @@ class Alqanime : MainAPI() {
             null,
             true
         )
+        val malId = tracker?.malId
+
+        // api.ani.zip: titles, description, fanart and per-episode metadata
+        val animeMetaData = malId?.let {
+            try {
+                parseAnimeData(app.get("https://api.ani.zip/mappings?mal_id=$it").text)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                null
+            }
+        }
+        val tmdbId = animeMetaData?.mappings?.themoviedbId
+        val kitsuId = animeMetaData?.mappings?.kitsuId
+
+        // api.themoviedb.org: title logo
+        val tmdbLogoUrl = fetchTmdbLogoUrl(
+            tmdbAPI = "https://api.themoviedb.org/3",
+            apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
+            type = type,
+            tmdbId = tmdbId,
+            appLangCode = "en"
+        )
+
+        val backgroundPoster = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url
+            ?: tracker?.cover
+            ?: coverBg
+
+        // Episode data (link JSON) stays untouched, only the display info is enriched.
+        episodes.forEach { ep ->
+            val episodeNum = ep.episode ?: if (type == TvType.AnimeMovie) 1 else null
+            val metaEp = episodeNum?.let { animeMetaData?.episodes?.get(it.toString()) }
+            val epOverview = metaEp?.overview
+
+            ep.name = if (type == TvType.AnimeMovie) {
+                animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: ep.name
+            } else {
+                metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: ep.name
+            }
+            ep.episode = episodeNum
+            ep.score = Score.from10(metaEp?.rating)
+            ep.posterUrl = metaEp?.image ?: ep.posterUrl ?: animeMetaData?.images?.firstOrNull()?.url
+            ep.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
+            ep.addDate(metaEp?.airDateUtc)
+            ep.runTime = metaEp?.runtime
+        }
+
+        val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
+        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val finalPlot = if (!rawPlot.isNullOrBlank()) rawPlot else description
 
         return newAnimeLoadResponse(title, url, type) {
-            this.japName = japName
-            engName = title
+            this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat") ?: japName
+            engName = animeMetaData?.titles?.get("en") ?: title
             posterUrl = tracker?.image ?: poster
-            backgroundPosterUrl = tracker?.cover ?: coverBg
+            backgroundPosterUrl = backgroundPoster
+            try { this.logoUrl = tmdbLogoUrl } catch (_: Throwable) {}
             this.year = year
             this.duration = duration
             addEpisodes(DubStatus.Subbed, episodes.reversed())
             showStatus = status
-            plot = description
+            plot = finalPlot
             addTrailer(trailer, addRaw = true)
             this.tags = listOfNotNull(*genres.toTypedArray(), studio, season)
             addActors(actors)
             this.score = Score.from10(scoreText?.toFloatOrNull())
 
-            addMalId(tracker?.malId)
+            addMalId(malId)
             addAniListId(tracker?.aniId?.toIntOrNull())
+            try { addKitsuId(kitsuId) } catch (_: Throwable) {}
         }
     }
 
