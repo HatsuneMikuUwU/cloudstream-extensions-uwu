@@ -238,17 +238,12 @@ class Alqanime : MainAPI() {
             year,
             true
         )
-        val malId = tracker?.malId
+        val ids = resolveAnimeIds(listOfNotNull(title, japName).distinct(), type, year, tracker?.malId, tracker?.aniId?.toIntOrNull())
+        val malId = ids.malId
+        val aniId = ids.aniId
 
         // api.ani.zip: titles, description, fanart and per-episode metadata
-        val animeMetaData = malId?.let {
-            try {
-                parseAnimeData(app.get("https://api.ani.zip/mappings?mal_id=$it").text)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                null
-            }
-        }
+        val animeMetaData = fetchAniZipMeta(malId, aniId)
         val tmdbId = animeMetaData?.mappings?.themoviedbId
         val kitsuId = animeMetaData?.mappings?.kitsuId
 
@@ -278,14 +273,16 @@ class Alqanime : MainAPI() {
             }
             ep.episode = episodeNum
             ep.score = Score.from10(metaEp?.rating)
-            ep.posterUrl = metaEp?.image ?: ep.posterUrl ?: animeMetaData?.images?.firstOrNull()?.url
+            ep.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: ep.posterUrl?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundPoster ?: tracker?.cover
             ep.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
             ep.addDate(metaEp?.airDateUtc)
             ep.runTime = metaEp?.runtime
         }
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
-        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val rawPlot = apiDescription?.takeIf { it.isNotBlank() }
+            ?: animeMetaData?.episodes?.get("1")?.overview?.takeIf { it.isNotBlank() }
+            ?: fetchAniListPlot(malId, aniId)
         val finalPlot = if (!rawPlot.isNullOrBlank()) rawPlot else description
 
         return newAnimeLoadResponse(title, url, type) {
@@ -305,7 +302,7 @@ class Alqanime : MainAPI() {
             this.score = Score.from10(scoreText?.toFloatOrNull())
 
             addMalId(malId)
-            addAniListId(tracker?.aniId?.toIntOrNull())
+            addAniListId(aniId)
             try { addKitsuId(kitsuId) } catch (_: Throwable) {}
         }
     }

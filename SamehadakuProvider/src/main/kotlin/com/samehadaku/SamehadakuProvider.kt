@@ -121,16 +121,17 @@ class SamehadakuProvider : MainAPI() {
         val trailer = document.selectFirst("div.trailer-anime iframe")?.attr("src")
         
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
-        val malId = tracker?.malId
+        val ids = resolveAnimeIds(listOf(title), type, year, tracker?.malId, tracker?.aniId?.toIntOrNull())
+        val malId = ids.malId
+        val aniId = ids.aniId
 
         var animeMetaData: MetaAnimeData? = null
         var tmdbid: Int? = null
         var kitsuid: String? = null
 
-        if (malId != null) {
+        if (malId != null || aniId != null) {
             try {
-                val syncMetaData = app.get("https://api.ani.zip/mappings?mal_id=$malId").text
-                animeMetaData = parseAnimeData(syncMetaData)
+                animeMetaData = fetchAniZipMeta(malId, aniId)
                 tmdbid = animeMetaData?.mappings?.themoviedbId
                 kitsuid = animeMetaData?.mappings?.kitsuId
             } catch (e: Exception) {}
@@ -174,7 +175,7 @@ class SamehadakuProvider : MainAPI() {
                 }
                 this.episode = episodeNum 
                 this.score = Score.from10(metaEp?.rating)
-                this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
+                this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: ""
                 this.description = finalOverview
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
@@ -184,7 +185,9 @@ class SamehadakuProvider : MainAPI() {
         val recommendations = document.select("aside#sidebar ul li, div.relat animepost").mapNotNull { it.toSearchResult() }
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
-        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val rawPlot = apiDescription?.takeIf { it.isNotBlank() }
+            ?: animeMetaData?.episodes?.get("1")?.overview?.takeIf { it.isNotBlank() }
+            ?: fetchAniListPlot(malId, aniId)
         
         val finalPlot = if (!rawPlot.isNullOrBlank()) {
             rawPlot
@@ -208,7 +211,7 @@ class SamehadakuProvider : MainAPI() {
             this.recommendations = recommendations
             
             addMalId(malId)
-            addAniListId(tracker?.aniId?.toIntOrNull())
+            addAniListId(aniId)
             try { addKitsuId(kitsuid) } catch(_:Throwable){}
         }
     }

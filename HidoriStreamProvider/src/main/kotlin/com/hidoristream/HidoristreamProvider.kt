@@ -179,16 +179,17 @@ class HidoristreamProvider : MainAPI() {
             ?.toIntOrNull()
 
         val tracker = APIHolder.getTracker(altTitles, TrackerType.getTypes(type), year, true)
-        val finalMalId = malIdFromPage ?: tracker?.malId
+        val ids = resolveAnimeIds(altTitles, type, year, malIdFromPage ?: tracker?.malId, aniIdFromPage ?: tracker?.aniId?.toIntOrNull())
+        val finalMalId = ids.malId
+        val finalAniId = ids.aniId
 
         var animeMetaData: MetaAnimeData? = null
         var tmdbid: Int? = null
         var kitsuid: String? = null
 
-        if (finalMalId != null) {
+        if (finalMalId != null || finalAniId != null) {
             try {
-                val syncMetaData = app.get("https://api.ani.zip/mappings?mal_id=$finalMalId").text
-                animeMetaData = parseAnimeData(syncMetaData)
+                animeMetaData = fetchAniZipMeta(finalMalId, finalAniId)
                 tmdbid = animeMetaData?.mappings?.themoviedbId
                 kitsuid = animeMetaData?.mappings?.kitsuId
             } catch (e: Exception) {}
@@ -216,7 +217,7 @@ class HidoristreamProvider : MainAPI() {
                     this.name = animeMetaData?.titles?.get("en") ?: animeMetaData?.titles?.get("ja") ?: title
                     this.episode = 1
                     this.score = Score.from10(animeMetaData?.episodes?.get("1")?.rating)
-                    this.posterUrl = animeMetaData?.episodes?.get("1")?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
+                    this.posterUrl = animeMetaData?.episodes?.get("1")?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: ""
                     this.description = finalOverview
                     this.addDate(animeMetaData?.episodes?.get("1")?.airDateUtc)
                     this.runTime = animeMetaData?.episodes?.get("1")?.runtime
@@ -235,7 +236,7 @@ class HidoristreamProvider : MainAPI() {
                     this.name = metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: "Episode $epNum"
                     this.episode = epNum
                     this.score = Score.from10(metaEp?.rating)
-                    this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url ?: ""
+                    this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundposter ?: ""
                     this.description = finalOverview
                     this.addDate(metaEp?.airDateUtc)
                     this.runTime = metaEp?.runtime
@@ -244,7 +245,9 @@ class HidoristreamProvider : MainAPI() {
         }
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
-        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val rawPlot = apiDescription?.takeIf { it.isNotBlank() }
+            ?: animeMetaData?.episodes?.get("1")?.overview?.takeIf { it.isNotBlank() }
+            ?: fetchAniListPlot(finalMalId, finalAniId)
         
         val finalPlot = if (!rawPlot.isNullOrBlank()) rawPlot else description
         
@@ -268,7 +271,7 @@ class HidoristreamProvider : MainAPI() {
             if (castList.isNotEmpty()) this.actors = castList
             addTrailer(trailer)
             addMalId(finalMalId)
-            addAniListId(aniIdFromPage ?: tracker?.aniId?.toIntOrNull())
+            addAniListId(finalAniId)
             try { addKitsuId(kitsuid) } catch(_:Throwable){}
         }
     }

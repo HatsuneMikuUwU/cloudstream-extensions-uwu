@@ -166,17 +166,12 @@ class KuramanimeProvider : MainAPI() {
         }
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
-        val malId = tracker?.malId
+        val ids = resolveAnimeIds(listOf(title), type, year, tracker?.malId, tracker?.aniId?.toIntOrNull())
+        val malId = ids.malId
+        val aniId = ids.aniId
 
         // api.ani.zip: titles, description, fanart and per-episode metadata
-        val animeMetaData = malId?.let {
-            try {
-                parseAnimeData(app.get("https://api.ani.zip/mappings?mal_id=$it").text)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                null
-            }
-        }
+        val animeMetaData = fetchAniZipMeta(malId, aniId)
         val tmdbId = animeMetaData?.mappings?.themoviedbId
         val kitsuId = animeMetaData?.mappings?.kitsuId
 
@@ -204,7 +199,7 @@ class KuramanimeProvider : MainAPI() {
                 }
                 this.episode = episodeNum
                 this.score = Score.from10(metaEp?.rating)
-                this.posterUrl = metaEp?.image ?: animeMetaData?.images?.firstOrNull()?.url
+                this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() } ?: animeMetaData?.images?.firstOrNull()?.url ?: backgroundPoster
                 this.description = if (!epOverview.isNullOrBlank()) epOverview else "Synopsis not yet available."
                 this.addDate(metaEp?.airDateUtc)
                 this.runTime = metaEp?.runtime
@@ -212,7 +207,9 @@ class KuramanimeProvider : MainAPI() {
         }
 
         val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
-        val rawPlot = apiDescription ?: animeMetaData?.episodes?.get("1")?.overview
+        val rawPlot = apiDescription?.takeIf { it.isNotBlank() }
+            ?: animeMetaData?.episodes?.get("1")?.overview?.takeIf { it.isNotBlank() }
+            ?: fetchAniListPlot(malId, aniId)
         val finalPlot = if (!rawPlot.isNullOrBlank()) rawPlot else description
 
         return newAnimeLoadResponse(title, url, type) {
@@ -228,7 +225,7 @@ class KuramanimeProvider : MainAPI() {
             this.tags = tags
             this.recommendations = recommendations
             addMalId(malId)
-            addAniListId(tracker?.aniId?.toIntOrNull())
+            addAniListId(aniId)
             try { addKitsuId(kitsuId) } catch (_: Throwable) {}
         }
     }

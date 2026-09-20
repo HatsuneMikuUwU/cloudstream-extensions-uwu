@@ -567,13 +567,21 @@ class Anoboy : MainAPI() {
         }
 
         val tracker = APIHolder.getTracker(altTitles, TrackerType.getTypes(type), year, true)
+        val ids = resolveAnimeIds(altTitles, type, year, malIdFromPage ?: tracker?.malId, aniIdFromPage ?: tracker?.aniId?.toIntOrNull())
+
+        // api.ani.zip: English synopsis (falls back to the site synopsis)
+        val animeMetaData = fetchAniZipMeta(ids.malId, ids.aniId)
+        val apiPlot = animeMetaData?.description?.replace(Regex("<.*?>"), "")?.takeIf { it.isNotBlank() }
+            ?: animeMetaData?.episodes?.get("1")?.overview?.takeIf { it.isNotBlank() }
+            ?: fetchAniListPlot(ids.malId, ids.aniId)
+        val finalPlot = if (!apiPlot.isNullOrBlank()) apiPlot else description
 
         return if (finalEpisodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
                 posterUrl = tracker?.image ?: poster
                 backgroundPosterUrl = tracker?.cover
                 this.year = year
-                this.plot = description
+                this.plot = finalPlot
                 this.tags = tags
                 showStatus = status
                 this.recommendations = recommendations
@@ -583,15 +591,15 @@ class Anoboy : MainAPI() {
                 addActors(actors)
                 if (castList.isNotEmpty()) this.actors = castList
                 addTrailer(trailer)
-                addMalId(malIdFromPage ?: tracker?.malId)
-                addAniListId(aniIdFromPage ?: tracker?.aniId?.toIntOrNull())
+                addMalId(ids.malId)
+                addAniListId(ids.aniId)
             }
         } else {
             newMovieLoadResponse(title, url, type, url) {
                 posterUrl = tracker?.image ?: poster
                 backgroundPosterUrl = tracker?.cover
                 this.year = year
-                this.plot = description
+                this.plot = finalPlot
                 this.tags = tags
                 this.recommendations = recommendations
                 this.duration = duration ?: 0
@@ -599,8 +607,8 @@ class Anoboy : MainAPI() {
                 addActors(actors)
                 if (castList.isNotEmpty()) this.actors = castList
                 addTrailer(trailer)
-                addMalId(malIdFromPage ?: tracker?.malId)
-                addAniListId(aniIdFromPage ?: tracker?.aniId?.toIntOrNull())
+                addMalId(ids.malId)
+                addAniListId(ids.aniId)
             }
         }
     }
