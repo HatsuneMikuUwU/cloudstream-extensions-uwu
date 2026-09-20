@@ -94,10 +94,14 @@ class NekopoiProvider : MainAPI() {
         }
     }
 
+    private fun String.isPreviewTitle(): Boolean =
+        Regex("""\[\s*preview\s*]""", RegexOption.IGNORE_CASE).containsMatchIn(this)
+
     private fun Element.toSearchResult(): AnimeSearchResponse? {
         val searchItem = this.selectFirst("a.nk-search-item")
         if (searchItem != null) {
             val title = searchItem.selectFirst("h2, h3")?.text()?.trim() ?: return null
+            if (title.isPreviewTitle()) return null
             val rawHref = searchItem.attr("href").takeIf { it.isNotBlank() } ?: return null
             val href = getProperAnimeLink(rawHref)
             val bgStyle = searchItem.selectFirst("div.nk-search-thumb")?.attr("style")
@@ -114,6 +118,7 @@ class NekopoiProvider : MainAPI() {
             val title = seriesLink.selectFirst("div.title")?.text()?.trim()
                 ?: seriesLink.text().trim().takeIf { it.isNotBlank() }
                 ?: return null
+            if (title.isPreviewTitle()) return null
             val href = getProperAnimeLink(seriesLink.attr("href").takeIf { it.isNotBlank() } ?: return null)
             val bgStyle = seriesLink.selectFirst("div.nk-hentai-thumb, div.nk-thumb-crop, div.nk-grid-thumb")?.attr("style")
             val posterUrl = Regex("""url\(['"]?([^'"()]+)['"]?\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1)
@@ -127,6 +132,7 @@ class NekopoiProvider : MainAPI() {
         val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.nk-jav-meta a, div.title a, h2 a, h3 a, .entry-title a")
             ?: return null
         val title = titleElement.text().trim().takeIf { it.isNotBlank() } ?: return null
+        if (title.isPreviewTitle()) return null
         val rawHref = titleElement.attr("href").takeIf { it.isNotBlank() }
             ?: this.selectFirst("a")?.attr("href")
             ?: return null
