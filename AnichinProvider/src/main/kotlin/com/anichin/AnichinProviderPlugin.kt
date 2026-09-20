@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.plugins.Plugin
 @CloudstreamPlugin
 class AnichinProviderPlugin: Plugin() {
     override fun load(context: Context) {
+        AnichinProvider.context = context
         registerMainAPI(AnichinProvider())
         registerExtractorAPI(Dailymotion())
         registerExtractorAPI(Geodailymotion())
@@ -15,15 +16,9 @@ class AnichinProviderPlugin: Plugin() {
         registerExtractorAPI(OkRuHTTP())
         registerExtractorAPI(Rumble())
         registerExtractorAPI(StreamRuby())
-        registerExtractorAPI(svilla())
-        registerExtractorAPI(svanila())
         registerExtractorAPI(Vidguardto())
-        registerExtractorAPI(Vidguardto1())
-        registerExtractorAPI(Vidguardto2())
-        registerExtractorAPI(Vidguardto3())
         registerExtractorAPI(Morencius())
         registerExtractorAPI(Rpmvid())
         registerExtractorAPI(Turbovidhls())
-
     }
 }

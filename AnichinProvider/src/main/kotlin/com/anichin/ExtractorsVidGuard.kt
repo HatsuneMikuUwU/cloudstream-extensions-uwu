@@ -2,11 +2,12 @@ package com.anichin
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.newSubtitleFile
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.json.JSONObject
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.NativeJSON
 import org.mozilla.javascript.NativeObject
@@ -38,55 +39,66 @@ open class Vidguardto : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         val res = app.get(getEmbedUrl(url))
-        val resc = res.document.select("script:containsData(eval)").firstOrNull()?.data()
-        resc?.let {
-            val jsonStr2 = AppUtils.parseJson<SvgObject>(runJS2(it))
-            val watchlink = sigDecode(jsonStr2.stream)
+        val script = res.document.select("script:containsData(eval)").firstOrNull()?.data() ?: return
+        val jsonText = runJS2(script).takeIf { it.isNotBlank() } ?: return
+        val stream = runCatching { JSONObject(jsonText).optString("stream").trim() }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        val watchlink = sigDecode(stream) ?: return
 
-            callback.invoke(
-                newExtractorLink(
-                    this.name,
-                    name,
-                    watchlink,
-                ) {
-                    this.referer = mainUrl
-                }
-            )
-        }
+        callback.invoke(
+            newExtractorLink(
+                this.name,
+                name,
+                watchlink,
+            ) {
+                this.referer = mainUrl
+            }
+        )
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    private fun sigDecode(url: String): String {
-        val sig = url.split("sig=")[1].split("&")[0]
-        val t = sig.chunked(2)
-            .joinToString("") { (Integer.parseInt(it, 16) xor 2).toChar().toString() }
-            .let {
-                val padding = when (it.length % 4) {
-                    2 -> "=="
-                    3 -> "="
-                    else -> ""
+    private fun sigDecode(url: String): String? {
+        return runCatching {
+            val sig = url.substringAfter("sig=", "").substringBefore("&")
+                .takeIf { it.isNotBlank() }
+                ?: return@runCatching url
+
+            val decodedSig = sig.chunked(2)
+                .joinToString("") { (Integer.parseInt(it, 16) xor 2).toChar().toString() }
+                .let {
+                    val padding = when (it.length % 4) {
+                        2 -> "=="
+                        3 -> "="
+                        else -> ""
+                    }
+                    String(Base64.decode((it + padding).toByteArray(Charsets.UTF_8)))
                 }
-                String(Base64.decode((it + padding).toByteArray(Charsets.UTF_8)))
-            }
-            .dropLast(5)
-            .reversed()
-            .toCharArray()
-            .apply {
-                for (i in indices step 2) {
-                    if (i + 1 < size) {
-                        this[i] = this[i + 1].also { this[i + 1] = this[i] }
+                .dropLast(5)
+                .reversed()
+                .toCharArray()
+                .apply {
+                    for (i in indices step 2) {
+                        if (i + 1 < size) {
+                            this[i] = this[i + 1].also { this[i + 1] = this[i] }
+                        }
                     }
                 }
-            }
-            .concatToString()
-            .dropLast(5)
-        return url.replace(sig, t)
+                .concatToString()
+                .dropLast(5)
+
+            url.replace(sig, decodedSig)
+        }.getOrElse {
+            Log.e("Vidguard", "Failed to decode signature: ${it.message}")
+            null
+        }
     }
 
     private fun runJS2(hideMyHtmlContent: String): String {
         var result = ""
         val r = Runnable {
             val rhino = Context.enter()
+            rhino.optimizationLevel = -1
             val scope: Scriptable = rhino.initSafeStandardObjects()
             scope.put("window", scope, scope)
             try {
@@ -115,13 +127,10 @@ open class Vidguardto : ExtractorApi() {
                 Context.exit()
             }
         }
-        val t = Thread(null, r, "thread_rhino", 8 * 1024 * 1024)
+        val t = Thread(ThreadGroup("A"), r, "thread_rhino", 8 * 1024 * 1024)
         t.start()
-        try {
-            t.join()
-        } catch (e: InterruptedException) {
-            Log.e("runJS", "Thread interrupted: ${e.message}")
-        }
+        t.join()
+        t.interrupt()
         return result
     }
 
@@ -129,9 +138,4 @@ open class Vidguardto : ExtractorApi() {
         return url.takeIf { it.contains("/d/") || it.contains("/v/") }
             ?.replace("/d/", "/e/")?.replace("/v/", "/e/") ?: url
     }
-
-    data class SvgObject(
-        val stream: String,
-        val hash: String
-    )
 }
