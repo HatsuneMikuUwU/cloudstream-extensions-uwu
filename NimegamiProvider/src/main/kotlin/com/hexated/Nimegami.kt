@@ -12,6 +12,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
+import java.util.concurrent.atomic.AtomicBoolean
 
 class Nimegami : MainAPI() {
     override var mainUrl = "https://nimegami.id"
@@ -176,12 +177,22 @@ val document = app.get("$mainUrl${request.data}/page/$page").document
     }
 
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+        val found = AtomicBoolean(false)
+        val emit: (ExtractorLink) -> Unit = { link ->
+            found.set(true)
+            callback(link)
+        }
+
         tryParseJson<ArrayList<Sources>>(base64Decode(data))?.map { sources ->
             sources.url?.amap { url ->
-                loadFixedExtractor(url, sources.format, "$mainUrl/", subtitleCallback, callback)
+                try {
+                    loadFixedExtractor(url, sources.format, "$mainUrl/", subtitleCallback, emit)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
             }
         }
-        return true
+        return found.get()
     }
 
     private suspend fun loadFixedExtractor(
