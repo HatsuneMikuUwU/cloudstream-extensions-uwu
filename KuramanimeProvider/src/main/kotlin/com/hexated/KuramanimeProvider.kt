@@ -26,7 +26,7 @@ class KuramanimeProvider : MainAPI() {
     override var sequentialMainPage = true
     override val hasDownloadSupport = true
     
-    var authorization: String? = null
+    var authorization: String? = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
     
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -36,8 +36,6 @@ class KuramanimeProvider : MainAPI() {
 
     companion object {
         private var cookies: Map<String, String> = mapOf()
-
-        private const val FALLBACK_AUTH_TOKEN = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
 
         fun getType(t: String, s: Int): TvType {
             return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
@@ -235,20 +233,8 @@ class KuramanimeProvider : MainAPI() {
         }
     }
 
-    private suspend fun invokeLocalSource(url: String, server: String, headers: Map<String, String>, authScriptUrl: String, refererUrl: String, kdriveServer: String?, driveCheckPingRoute: String?, driveCheckQuotaRoute: String?, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
-        driveCheckPingRoute?.let {
-            runCatching { app.get(it, headers = headers, cookies = cookies) }
-        }
-        driveCheckQuotaRoute?.let {
-            runCatching { app.get(it, headers = headers, cookies = cookies) }
-        }
-
-        val postData = mutableMapOf("authorization" to getAuth(authScriptUrl, refererUrl))
-        if (!kdriveServer.isNullOrBlank()) {
-            postData["kdrive_server"] = kdriveServer
-        }
-
-        val request = app.post(url, data = postData, headers = headers, cookies = cookies)
+    private suspend fun invokeLocalSource(url: String, server: String, headers: Map<String, String>, authScriptUrl: String, refererUrl: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
+        val request = app.post(url, data = mapOf("authorization" to getAuth(authScriptUrl, refererUrl)), headers = headers, cookies = cookies)
         delay(2000)
         val document = request.document
         document.select("video#player > source").map {
@@ -275,21 +261,6 @@ class KuramanimeProvider : MainAPI() {
         val tokenAuthUrl = res.selectFirst("input#tokenAuthJs")?.attr("value")
         val authScriptUrl = if (tokenAuthUrl != null) "$mainUrl$tokenAuthUrl" else "$mainUrl/storage/leviathan.js?v=${System.currentTimeMillis()}"
 
-        val kdriveServer = res.selectFirst("input#kdriveServer")?.attr("value")
-        val driveCheckPingRoute = res.selectFirst("input#driveCheckPingRoute")?.attr("value")
-        val driveCheckQuotaRoute = res.selectFirst("input#driveCheckQuotaRoute")?.attr("value")
-
-        val isEpisodePage = res.selectFirst("input#isEpisode")?.attr("value") == "1"
-        val checkUrl = res.selectFirst(if (isEpisodePage) "input#checkEp" else "input#checkBatch")?.attr("value")
-        checkUrl?.let {
-            runCatching {
-                val checkRes = app.get(it, headers = mapOf("X-Requested-With" to "XMLHttpRequest"), cookies = cookies)
-                cookies = cookies + checkRes.cookies
-            }
-        }
-
-        val auth = getAuth(authScriptUrl, data)
-
         val assets = getAssets(dataKps)
         var headers = mapOf(
             "X-CSRF-TOKEN" to token,
@@ -297,7 +268,6 @@ class KuramanimeProvider : MainAPI() {
             "X-Request-ID" to randomId(),
             "X-Request-Index" to "0",
             "X-Requested-With" to "XMLHttpRequest",
-            "Authorization" to "Bearer $auth",
         )
 
         val tokenRes = app.get("$mainUrl/${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}", headers = headers, cookies = cookies)
@@ -310,9 +280,9 @@ class KuramanimeProvider : MainAPI() {
             val server = source.attr("value")
             val link = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
             if (server.contains(Regex("(?i)kuramadrive|archive"))) {
-                invokeLocalSource(link, server, headers, authScriptUrl, data, kdriveServer, driveCheckPingRoute, driveCheckQuotaRoute, subtitleCallback, callback)
+                invokeLocalSource(link, server, headers, authScriptUrl, data, subtitleCallback, callback)
             } else {
-                val request = app.post(link, data = mapOf("authorization" to auth), referer = data, headers = headers, cookies = cookies)
+                val request = app.post(link, data = mapOf("authorization" to getAuth(authScriptUrl, data)), referer = data, headers = headers, cookies = cookies)
                 delay(2000)
                 request.document.select("div.iframe-container iframe").attr("src").let { videoUrl ->
                     loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
@@ -354,8 +324,8 @@ class KuramanimeProvider : MainAPI() {
         val host = URI(mainUrl).host
 
         val script = """
-            var window = {};
-            var global = window;
+            var window = this;
+            var global = this;
             var document = { createElement: function() { return {}; } };
             var navigator = { userAgent: "Mozilla/5.0" };
             var location = { hostname: "$host", href: "$mainUrl" };
@@ -397,16 +367,12 @@ class KuramanimeProvider : MainAPI() {
             extractedToken;
         """.trimIndent()
 
-        val authHeader = try {
-            QuickJs.create().use { ctx ->
-                ctx.evaluate(script) as String?
-            }
-        } catch (e: Exception) {
-            null
+        val authHeader = QuickJs.create().use { ctx ->
+            ctx.evaluate(script) as String?
         }
 
         if (authHeader.isNullOrEmpty() || authHeader.startsWith("FAILED") || authHeader.startsWith("ERROR")) {
-            return FALLBACK_AUTH_TOKEN
+            throw ErrorLoadingException("QuickJs failed to extract token: $authHeader")
         }
 
         return authHeader.replace("Bearer ", "", ignoreCase = true).trim()
