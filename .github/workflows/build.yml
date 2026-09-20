@@ -45,6 +45,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4.0.1
+        with:
+          packages: 'platform-tools'
 
       - name: Build Plugins
         working-directory: ${{ github.workspace }}/src
