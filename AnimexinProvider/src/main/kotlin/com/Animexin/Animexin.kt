@@ -79,7 +79,6 @@ class Animexin : MainAPI() {
                     this.episode = epnum
                     this.name = epnum?.let { "Episode $it" } ?: epText
                     this.posterUrl = fixUrlNull(posterr)
-                    this.posterHeaders = posterHeaders
                 }
             }
 
