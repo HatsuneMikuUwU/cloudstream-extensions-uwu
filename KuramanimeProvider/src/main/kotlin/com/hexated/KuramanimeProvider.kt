@@ -26,7 +26,7 @@ class KuramanimeProvider : MainAPI() {
     override var sequentialMainPage = true
     override val hasDownloadSupport = true
     
-    var authorization: String? = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
+    var authorization: String? = null
     
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -36,6 +36,8 @@ class KuramanimeProvider : MainAPI() {
 
     companion object {
         private var cookies: Map<String, String> = mapOf()
+
+        private const val FALLBACK_AUTH_TOKEN = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
 
         fun getType(t: String, s: Int): TvType {
             return if (t.contains("OVA", true) || t.contains("Special")) TvType.OVA
@@ -324,8 +326,8 @@ class KuramanimeProvider : MainAPI() {
         val host = URI(mainUrl).host
 
         val script = """
-            var window = this;
-            var global = this;
+            var window = {};
+            var global = window;
             var document = { createElement: function() { return {}; } };
             var navigator = { userAgent: "Mozilla/5.0" };
             var location = { hostname: "$host", href: "$mainUrl" };
@@ -367,12 +369,16 @@ class KuramanimeProvider : MainAPI() {
             extractedToken;
         """.trimIndent()
 
-        val authHeader = QuickJs.create().use { ctx ->
-            ctx.evaluate(script) as String?
+        val authHeader = try {
+            QuickJs.create().use { ctx ->
+                ctx.evaluate(script) as String?
+            }
+        } catch (e: Exception) {
+            null
         }
 
         if (authHeader.isNullOrEmpty() || authHeader.startsWith("FAILED") || authHeader.startsWith("ERROR")) {
-            throw ErrorLoadingException("QuickJs failed to extract token: $authHeader")
+            return FALLBACK_AUTH_TOKEN
         }
 
         return authHeader.replace("Bearer ", "", ignoreCase = true).trim()
