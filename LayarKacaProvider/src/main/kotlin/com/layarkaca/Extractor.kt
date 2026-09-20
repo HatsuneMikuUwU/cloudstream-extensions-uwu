@@ -16,6 +16,14 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.random.Random
 
+private const val DEFAULT_EMBED_ORIGIN = "https://videonode.de"
+
+private fun embedOriginOf(referer: String?): String {
+    if (referer.isNullOrBlank()) return DEFAULT_EMBED_ORIGIN
+    return runCatching { URI(referer).let { "${it.scheme}://${it.host}" } }
+        .getOrDefault(DEFAULT_EMBED_ORIGIN)
+}
+
 open class EmturbovidExtractor : ExtractorApi() {
     override var name = "Emturbovid"
     override var mainUrl = "https://emturbovid.com"
@@ -52,6 +60,11 @@ open class EmturbovidExtractor : ExtractorApi() {
     }
 }
 
+class TurbovidhlsExtractor : EmturbovidExtractor() {
+    override var name = "Turbovidhls"
+    override var mainUrl = "https://turbovidhls.com"
+}
+
 open class P2PExtractor : ExtractorApi() {
     override var name = "P2P"
     override var mainUrl = "https://cloud.hownetwork.xyz"
@@ -67,7 +80,7 @@ open class P2PExtractor : ExtractorApi() {
             "Origin" to mainUrl,
             "X-Requested-With" to "XMLHttpRequest"
         )
-        val formBody = mapOf("r" to "https://playeriframe.sbs/", "d" to "cloud.hownetwork.xyz")
+        val formBody = mapOf("r" to "${embedOriginOf(referer)}/", "d" to "cloud.hownetwork.xyz")
         val sources = mutableListOf<ExtractorLink>()
         try {
             val response = app.post(apiUrl, headers = headers, data = formBody).text
@@ -124,14 +137,15 @@ open class F16Extractor : ExtractorApi() {
             val jwtSignature = randomHex(43)
             val token = "$jwtHeader.$jwtPayloadEncoded.$jwtSignature"
 
+            val embedOrigin = embedOriginOf(referer)
             val headers = mapOf(
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
                 "Referer" to pageUrl,
                 "Origin" to mainUrl,
                 "Content-Type" to "application/json",
-                "x-embed-origin" to "playeriframe.sbs",
+                "x-embed-origin" to embedOrigin.substringAfter("://"),
                 "x-embed-parent" to pageUrl,
-                "x-embed-referer" to "https://playeriframe.sbs/"
+                "x-embed-referer" to "$embedOrigin/"
             )
 
             val jsonPayload = mapOf(

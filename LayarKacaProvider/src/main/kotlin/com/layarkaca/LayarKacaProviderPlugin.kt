@@ -9,6 +9,7 @@ class LayarKacaPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(LayarKacaProvider())
         registerExtractorAPI(EmturbovidExtractor())
+        registerExtractorAPI(TurbovidhlsExtractor())
         registerExtractorAPI(P2PExtractor())
         registerExtractorAPI(F16Extractor())
     }

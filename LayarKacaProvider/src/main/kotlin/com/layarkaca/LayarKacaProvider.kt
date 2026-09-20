@@ -7,11 +7,13 @@ import com.lagradost.cloudstream3.utils.*
 import org.json.JSONObject
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 
 class LayarKacaProvider : MainAPI() {
 
-    override var mainUrl = "https://tv9.lk21official.cc"
-    private var seriesUrl = "https://tv3.nontondrama.my"
+    override var mainUrl = "https://tv12.lk21official.cc"
+    private var seriesUrl = "https://tv9.nontondrama.my"
     private var searchurl= "https://gudangvape.com"
 
     override var name = "LayarKaca"
@@ -191,27 +193,101 @@ class LayarKacaProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
-        document.select("ul#player-list > li a, .player-list a").mapNotNull {
-            fixUrlNull(it.attr("href"))
-        }.amap { url ->
+        val pageUrl = fixUrl(data)
+        val document = app.get(pageUrl, referer = "$mainUrl/").document
+
+        val found = AtomicBoolean(false)
+        val emit: (ExtractorLink) -> Unit = { link ->
+            found.set(true)
+            callback(link)
+        }
+
+        val servers = linkedSetOf<String>()
+        document.select("ul#player-list li a, .player-list a").forEach { a ->
+            a.attr("data-url").ifBlank { a.attr("href") }
+                .takeIf { it.isNotBlank() && it != "#" }
+                ?.let { servers.add(fixUrl(it)) }
+        }
+        document.select("select#player-select option[value]").forEach { option ->
+            option.attr("value").takeIf { it.isNotBlank() }?.let { servers.add(fixUrl(it)) }
+        }
+        if (servers.isEmpty()) {
+            document.selectFirst("iframe#main-player, .main-player iframe")
+                ?.attr("src")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { servers.add(fixUrl(it)) }
+        }
+
+        servers.toList().amap { serverUrl ->
             try {
-                val iframe = url.getIframe()
-                val referer = getSafeBaseUrl(url)
-                if (iframe.isNotBlank()) {
-                    Log.d("Phisher", iframe)
-                    loadExtractor(iframe, referer, subtitleCallback, callback)
-                }
+                resolveServer(serverUrl, pageUrl, subtitleCallback, emit)
             } catch (e: Exception) {
-                e.printStackTrace()
+                if (e is CancellationException) throw e
+                Log.e("LayarKaca", "Server failed: $serverUrl (${e.message})")
             }
         }
-        return true
+
+        return found.get()
     }
 
-    private suspend fun String.getIframe(): String {
-        return app.get(this, referer = "$seriesUrl/").document
-            .selectFirst("div.embed-container iframe, iframe")?.attr("src") ?: ""
+    private suspend fun resolveServer(
+        serverUrl: String,
+        pageUrl: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val response = app.get(serverUrl, referer = "${getSafeBaseUrl(pageUrl)}/")
+        val body = response.text.replace("\\/", "/")
+        val candidates = linkedSetOf<String>()
+
+        response.document.select("div.embed-container iframe, iframe").forEach { frame ->
+            frame.attr("data-src").ifBlank { frame.attr("src") }
+                .takeIf { it.isNotBlank() }
+                ?.let { candidates.add(it) }
+        }
+
+        if (candidates.isEmpty()) {
+            Regex("""https?://[^\s"'<>\\]+\.m3u8[^\s"'<>\\]*""")
+                .findAll(body)
+                .forEach { candidates.add(it.value) }
+            Regex("""(?i)(?:iframe|embed|src|file|url)\s*[:=]\s*["']((?:https?:)?//[^"']+)["']""")
+                .findAll(body)
+                .forEach { candidates.add(it.groupValues[1]) }
+        }
+
+        if (candidates.isEmpty()) candidates.add(response.url.ifBlank { serverUrl })
+
+        candidates
+            .mapNotNull { resolveUrl(it, serverUrl) }
+            .filterNot { isJunkUrl(it) }
+            .distinct()
+            .forEach { link ->
+                Log.d("LayarKaca", "Resolved: $link")
+                if (link.contains(".m3u8", true)) {
+                    M3u8Helper.generateM3u8(
+                        source = name,
+                        streamUrl = link,
+                        referer = serverUrl
+                    ).forEach(callback)
+                } else {
+                    loadExtractor(link, serverUrl, subtitleCallback, callback)
+                }
+            }
+    }
+
+    private fun resolveUrl(url: String, base: String): String? {
+        val value = url.trim()
+        return when {
+            value.isBlank() -> null
+            value.startsWith("//") -> "https:$value"
+            value.startsWith("http", true) -> value
+            else -> runCatching { URI(base).resolve(value).toString() }.getOrNull()
+        }
+    }
+
+    private fun isJunkUrl(url: String): Boolean {
+        return Regex("""\.(js|css|png|jpe?g|gif|svg|ico|woff2?)(\?|$)""", RegexOption.IGNORE_CASE).containsMatchIn(url) ||
+            listOf("histats", "google", "doubleclick", "cdn-cgi", "facebook", "youtube").any { url.contains(it, true) }
     }
 
     private suspend fun fetchURL(url: String): String {
