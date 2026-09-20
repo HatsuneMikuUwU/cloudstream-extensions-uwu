@@ -3,6 +3,7 @@ package com.anichin
 import org.jsoup.nodes.Element
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import org.jsoup.Jsoup
 
 class AnichinProvider : MainAPI() {
@@ -117,7 +118,7 @@ class AnichinProvider : MainAPI() {
                 val decoded = base64Decode(base64)
                 val doc = Jsoup.parse(decoded)
                 val href = fixUrl(doc.select("iframe").attr("src"))
-                loadExtractor(href, subtitleCallback, callback, interceptor = cloudflareKiller)
+                loadExtractor(href, data, subtitleCallback, callback)
             }
         }
         return true
