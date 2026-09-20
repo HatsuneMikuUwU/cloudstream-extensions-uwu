@@ -9,7 +9,6 @@ import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -25,8 +24,7 @@ class KuramanimeProvider : MainAPI() {
     override var sequentialMainPage = true
     override val hasDownloadSupport = true
     
-    private var cachedAuth: Pair<String, String>? = null
-    private val fallbackAuthorization = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
+    var authorization: String? = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
     
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -183,13 +181,7 @@ class KuramanimeProvider : MainAPI() {
     }
 
     private suspend fun invokeLocalSource(url: String, server: String, headers: Map<String, String>, authScriptUrl: String, refererUrl: String, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit) {
-        val auth = getAuth(authScriptUrl, refererUrl)
-        val request = app.post(
-            url,
-            data = mapOf("authorization" to auth),
-            headers = headers + ("Authorization" to "Bearer $auth"),
-            cookies = cookies
-        )
+        val request = app.post(url, data = mapOf("authorization" to getAuth(authScriptUrl, refererUrl)), headers = headers, cookies = cookies)
         delay(2000)
         val document = request.document
         document.select("video#player > source").map {
@@ -211,16 +203,12 @@ class KuramanimeProvider : MainAPI() {
         val res = req.document
         cookies = req.cookies
 
-        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content")
-        val dataKps = res.selectFirst("[data-kk]")?.attr("data-kk")
-        if (token == null || dataKps == null) return false
+        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content") ?: return false
+        val dataKps = res.selectFirst("[data-kk]")?.attr("data-kk") ?: return false
         val tokenAuthUrl = res.selectFirst("input#tokenAuthJs")?.attr("value")
         val authScriptUrl = if (tokenAuthUrl != null) "$mainUrl$tokenAuthUrl" else "$mainUrl/storage/leviathan.js?v=${System.currentTimeMillis()}"
 
         val assets = getAssets(dataKps)
-        if (assets == null) {
-            return false
-        }
         var headers = mapOf(
             "X-CSRF-TOKEN" to token,
             "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
@@ -241,17 +229,9 @@ class KuramanimeProvider : MainAPI() {
             if (server.contains(Regex("(?i)kuramadrive|archive"))) {
                 invokeLocalSource(link, server, headers, authScriptUrl, data, subtitleCallback, callback)
             } else {
-                val auth = getAuth(authScriptUrl, data)
-                val request = app.post(
-                    link,
-                    data = mapOf("authorization" to auth),
-                    referer = data,
-                    headers = headers + ("Authorization" to "Bearer $auth"),
-                    cookies = cookies
-                )
+                val request = app.post(link, data = mapOf("authorization" to getAuth(authScriptUrl, data)), referer = data, headers = headers, cookies = cookies)
                 delay(2000)
-                val videoUrl = request.document.select("div.iframe-container iframe").attr("src")
-                if (videoUrl.isNotBlank()) {
+                request.document.select("div.iframe-container iframe").attr("src").let { videoUrl ->
                     loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
                 }
             }
@@ -259,35 +239,20 @@ class KuramanimeProvider : MainAPI() {
         return true
     }
 
-    private suspend fun getAssets(bpjs: String?): Assets? {
+    private suspend fun getAssets(bpjs: String?): Assets {
         val env = app.get("$mainUrl/assets/js/$bpjs.js").text
-        fun read(key: String): String? =
-            Regex("""$key\s*[:=]\s*['"]([^'"]*)['"]""").find(env)?.groupValues?.get(1)
-
-        val prefix = read("MIX_PREFIX_AUTH_ROUTE_PARAM")
-        val route = read("MIX_AUTH_ROUTE_PARAM")
-        val key = read("MIX_AUTH_KEY")
-        val token = read("MIX_AUTH_TOKEN")
-        val pageKey = read("MIX_PAGE_TOKEN_KEY")
-        val serverKey = read("MIX_STREAM_SERVER_KEY")
-
         return Assets(
-            prefix ?: return null, route ?: return null, key ?: return null,
-            token ?: return null, pageKey ?: return null, serverKey ?: return null
+            env.substringAfter("MIX_PREFIX_AUTH_ROUTE_PARAM: '").substringBefore("',"),
+            env.substringAfter("MIX_AUTH_ROUTE_PARAM: '").substringBefore("',"),
+            env.substringAfter("MIX_AUTH_KEY: '").substringBefore("',"),
+            env.substringAfter("MIX_AUTH_TOKEN: '").substringBefore("',"),
+            env.substringAfter("MIX_PAGE_TOKEN_KEY: '").substringBefore("',"),
+            env.substringAfter("MIX_STREAM_SERVER_KEY: '").substringBefore("',")
         )
     }
 
     suspend fun getAuth(tokenUrl: String, referer: String): String {
-        cachedAuth?.takeIf { it.first == tokenUrl }?.let { return it.second }
-        return try {
-            fetchAuth(tokenUrl, referer).also {
-                cachedAuth = tokenUrl to it
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            fallbackAuthorization
-        }
+        return authorization ?: fetchAuth(tokenUrl, referer).also { authorization = it }
     }
 
     suspend fun fetchAuth(tokenUrl: String, referer: String): String {
@@ -366,11 +331,11 @@ class KuramanimeProvider : MainAPI() {
     }
 
     data class Assets(
-        val MIX_PREFIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_KEY: String,
-        val MIX_AUTH_TOKEN: String,
-        val MIX_PAGE_TOKEN_KEY: String,
-        val MIX_STREAM_SERVER_KEY: String,
+        val MIX_PREFIX_AUTH_ROUTE_PARAM: String?,
+        val MIX_AUTH_ROUTE_PARAM: String?,
+        val MIX_AUTH_KEY: String?,
+        val MIX_AUTH_TOKEN: String?,
+        val MIX_PAGE_TOKEN_KEY: String?,
+        val MIX_STREAM_SERVER_KEY: String?,
     )
 }
