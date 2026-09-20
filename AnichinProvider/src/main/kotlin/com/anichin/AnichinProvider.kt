@@ -9,6 +9,7 @@ class AnichinProvider : MainAPI() {
     companion object {
         var context: android.content.Context? = null
     }
+    private val cloudflareKiller by lazy { CloudflareKiller() }
     override var mainUrl = "https://anichin.moe"
     override var name = "Anichin"
     override val hasMainPage = true
@@ -25,7 +26,7 @@ class AnichinProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("${mainUrl}/${request.data}&page=$page").document
+        val document = app.get("${mainUrl}/${request.data}&page=$page", interceptor = cloudflareKiller).document
         val home = document.select("div.listupd > article").mapNotNull { it.toSearchResult() }
         return newHomePageResponse(
             list = HomePageList(
@@ -49,7 +50,7 @@ class AnichinProvider : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val searchResponse = mutableListOf<SearchResponse>()
         for (i in 1..3) {
-            val document = app.get("${mainUrl}/page/$i/?s=$query").document
+            val document = app.get("${mainUrl}/page/$i/?s=$query", interceptor = cloudflareKiller).document
             val results = document.select("div.listupd > article").mapNotNull { it.toSearchResult() }
             if (results.isEmpty()) break
             searchResponse.addAll(results)
@@ -58,7 +59,7 @@ class AnichinProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(fixUrl(url)).document
+        val document = app.get(fixUrl(url), interceptor = cloudflareKiller).document
         val title = document.selectFirst("h1.entry-title")?.text()?.trim().toString()
         var poster = document.select("div.ime > img").attr("src")
         val description = document.selectFirst("div.entry-content")?.text()?.trim()
@@ -109,14 +110,14 @@ class AnichinProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(fixUrl(data)).document
+        val document = app.get(fixUrl(data), interceptor = cloudflareKiller).document
         document.select(".mobius option").forEach { server ->
             val base64 = server.attr("value")
             if (base64.isNotBlank()) {
                 val decoded = base64Decode(base64)
                 val doc = Jsoup.parse(decoded)
                 val href = fixUrl(doc.select("iframe").attr("src"))
-                loadExtractor(href, subtitleCallback, callback)
+                loadExtractor(href, subtitleCallback, callback, interceptor = cloudflareKiller)
             }
         }
         return true
