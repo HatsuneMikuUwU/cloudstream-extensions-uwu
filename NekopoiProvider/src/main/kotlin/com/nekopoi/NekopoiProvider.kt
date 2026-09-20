@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.net.URLEncoder
 
 class NekopoiProvider : MainAPI() {
     override var mainUrl = "https://nekopoi.care"
@@ -123,7 +124,7 @@ class NekopoiProvider : MainAPI() {
             }
         }
 
-        val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.title a, h2 a, h3 a, .entry-title a")
+        val titleElement = this.selectFirst("div.nk-post-meta h2 a, div.nk-jav-meta a, div.title a, h2 a, h3 a, .entry-title a")
             ?: return null
         val title = titleElement.text().trim().takeIf { it.isNotBlank() } ?: return null
         val rawHref = titleElement.attr("href").takeIf { it.isNotBlank() }
@@ -151,14 +152,39 @@ class NekopoiProvider : MainAPI() {
         }
     }
 
+    private val searchItemSelector =
+        "a.nk-search-item, div.nk-post-card, div.nk-hentai-grid ul li, " +
+        "div.nk-jav-grid ul li, div.nk-search-results ul li, div.result ul li"
+
     override suspend fun search(query: String): List<SearchResponse> {
-        return fetch.get("$mainUrl/?s=$query&post_type=anime").document
-            .select("div.nk-post-card, div.nk-hentai-grid ul li, div.result ul li")
-            .mapNotNull { it.toSearchResult() }
+        val q = URLEncoder.encode(query.trim(), "UTF-8")
+        val results = LinkedHashMap<String, SearchResponse>()
+
+        for (postType in listOf<String?>("anime", null)) {
+            for (page in 1..2) {
+                val base = if (page == 1) "$mainUrl/" else "$mainUrl/page/$page/"
+                val url = buildString {
+                    append(base).append("?s=").append(q)
+                    if (postType != null) append("&post_type=").append(postType)
+                }
+                val items = fetch.get(url).document
+                    .select(searchItemSelector)
+                    .mapNotNull { it.toSearchResult() }
+                if (items.isEmpty()) break
+                items.forEach { results.putIfAbsent(it.url, it) }
+            }
+        }
+        return results.values.toList()
     }
 
     override suspend fun load(url: String): LoadResponse {
         val document = fetch.get(url).document
+
+        val seriesHref = document.selectFirst("a.nk-player-series")?.attr("href")
+            ?.takeIf { it.isNotBlank() }?.let { fixUrl(it, mainUrl) }
+        if (seriesHref != null && seriesHref.trimEnd('/') != url.trimEnd('/')) {
+            return load(seriesHref)
+        }
 
         val title = document.selectFirst("div.nk-post-header h1, div.nk-series-header h1, span.desc b, div.eroinfo h1")?.text()?.trim() 
             ?: document.selectFirst("title")?.text()?.substringBefore(" – ")?.trim() 
@@ -168,6 +194,10 @@ class NekopoiProvider : MainAPI() {
         if (poster == null) {
             val bgStyle = document.selectFirst("div.nk-series-poster, div.nk-thumb-crop, div.nk-post-thumb, div.nk-series-thumb")?.attr("style")
             poster = fixUrlNull(Regex("""url\('([^']+)'\)""").find(bgStyle ?: "")?.groupValues?.getOrNull(1))
+        }
+
+        if (poster == null) {
+            poster = fixUrlNull(document.selectFirst("meta[property=og:image]")?.attr("content"))
         }
 
         val table = document.select("div.listinfo ul, div.konten")
@@ -187,7 +217,8 @@ class NekopoiProvider : MainAPI() {
             .filter { it.isDigit() }.toIntOrNull()
             
         val description =
-            document.selectFirst("div.konten p:contains(Sinopsis) + p, div.listinfo p:contains(Sinopsis) + p")?.text()?.takeIf { it.isNotBlank() }
+            parseSynopsis(document.selectFirst("div.konten"))
+            ?: document.selectFirst("div.konten p:contains(Sinopsis) + p, div.listinfo p:contains(Sinopsis) + p")?.text()?.takeIf { it.isNotBlank() }
             ?: document.select("div.konten > p:not(.separator)")
                 .firstOrNull { p ->
                     val t = p.text().trim()
@@ -214,7 +245,7 @@ class NekopoiProvider : MainAPI() {
                 newEpisode(link) { this.name = name }
             }
         } else {
-            mainContent.select("div.episodelist ul li, div.nk-episode-nav a, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
+            mainContent.select("div.episodelist ul li, ul.nk-episode-list li a, div.nk-post-card").mapNotNull {
                 if (it.hasClass("nk-post-card")) {
                     val aTag = it.selectFirst("div.nk-post-meta h2 a") ?: return@mapNotNull null
                     val rawName = aTag.text().trim()
@@ -266,13 +297,20 @@ class NekopoiProvider : MainAPI() {
                         ?: return@amap
                     
                     val src = fixUrl(rawSrc, mainUrl)
-                    
+
+                    val streamNum = iframe.parents()
+                        .firstOrNull { it.id().startsWith("nk-stream-") }
+                        ?.id()?.substringAfterLast("-")?.toIntOrNull()
+                    val streamQuality = streamNum?.let { parseStreamQuality(res, it) }
+                        ?: Qualities.Unknown.value
+
                     val loaded = loadExtractor(src, "$mainUrl/", subtitleCallback) { link ->
                         runBlocking {
                             callback.invoke(
                                 newExtractorLink(link.name, link.name, link.url, link.type) {
                                     referer = link.referer
-                                    this.quality = link.quality
+                                    this.quality =
+                                        if (link.quality == Qualities.Unknown.value) streamQuality else link.quality
                                     headers = link.headers
                                     extractorData = link.extractorData
                                 }
@@ -281,7 +319,7 @@ class NekopoiProvider : MainAPI() {
                     }
                     
                     if (!loaded) {
-                        extractCustomHost(src, subtitleCallback, callback, Qualities.Unknown.value)
+                        extractCustomHost(src, subtitleCallback, callback, streamQuality)
                     }
                 }
             },
@@ -524,6 +562,26 @@ class NekopoiProvider : MainAPI() {
 
         val best = qualities.maxOrNull() ?: return Qualities.Unknown.value
         return getQualityFromName("${best}p")
+    }
+
+    private fun parseSynopsis(konten: Element?): String? {
+        val paragraphs = konten?.children()?.filter { it.tagName() == "p" } ?: return null
+        val start = paragraphs.indexOfFirst { it.text().trim().startsWith("Sinopsis", ignoreCase = true) }
+        if (start < 0) return null
+
+        val stopWords = listOf("Genre", "Anime", "Producer", "Duration", "Durasi", "Size", "Catatan")
+        val inline = paragraphs[start].text().substringAfter(":", "").trim()
+        val body = paragraphs.drop(start + 1)
+            .takeWhile { p ->
+                val t = p.text().trim()
+                stopWords.none { t.startsWith(it, ignoreCase = true) }
+            }
+            .map { it.text().trim() }
+
+        return (listOf(inline) + body)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+            .takeIf { it.isNotBlank() }
     }
 
     private fun getIndexQuality(str: String?): Int {
