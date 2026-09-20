@@ -97,7 +97,7 @@ class OtakudesuProvider : MainAPI() {
         val document = app.get(url).document
 
         val title = document.selectFirst("div.infozingle > p:nth-child(1) > span")?.ownText()
-            ?.replace(":", "")?.trim().toString()
+            ?.replace(":", "")?.trim().orEmpty()
         val poster = document.selectFirst("div.fotoanime > img")?.attr("src")
         val tags = document.select("div.infozingle > p:nth-child(11) > span > a").map { it.text() }
         val type = getType(
@@ -181,7 +181,7 @@ class OtakudesuProvider : MainAPI() {
             document.select("div.isi-recommend-anime-series > div.isi-konten").map {
                 val recName = it.selectFirst("span.judul-anime > a")!!.text()
                 val recHref = it.selectFirst("a")!!.attr("href")
-                val recPosterUrl = it.selectFirst("a > img")?.attr("src").toString()
+                val recPosterUrl = it.selectFirst("a > img")?.attr("src")
                 newAnimeSearchResponse(recName, recHref, TvType.Anime) {
                     this.posterUrl = recPosterUrl
                 }

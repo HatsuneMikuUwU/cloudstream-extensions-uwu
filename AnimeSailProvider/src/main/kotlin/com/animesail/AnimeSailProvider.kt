@@ -89,7 +89,7 @@ class AnimeSailProvider : MainAPI() {
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse {
-        val rawHref = fixUrlNull(this.selectFirst("a")?.attr("href")).toString()
+        val rawHref = fixUrlNull(this.selectFirst("a")?.attr("href")).orEmpty()
         val href = getProperAnimeLink(rawHref)
 
         val rawTitle = this.selectFirst(".tt > h2")?.text() ?: ""
@@ -126,8 +126,11 @@ class AnimeSailProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = request(url).document
 
-        val title = document.selectFirst("h1.entry-title")?.text().toString()
-            .replace("Subtitle Indonesia", "").trim()
+        val title = (
+            document.selectFirst("h1.entry-title")?.text()
+                ?: document.selectFirst("meta[property=og:title]")?.attr("content")
+                ?: document.title()
+            ).replace("Subtitle Indonesia", "").trim()
         val poster = document.selectFirst("div.entry-content > img")?.attr("src")
         val type = getType(document.select("tbody th:contains(Tipe)").next().text().lowercase())
         val year = document.select("tbody th:contains(Dirilis)").next().text().trim().toIntOrNull()

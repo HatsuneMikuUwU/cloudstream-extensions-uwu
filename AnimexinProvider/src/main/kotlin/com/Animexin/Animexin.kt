@@ -54,11 +54,11 @@ val document = app.get("$mainUrl/${request.data}&page=$page").documentLarge
     @Suppress("SuspiciousIndentation")
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).documentLarge
-        val title = document.selectFirst("h1.entry-title")?.text()?.trim().toString()
+        val title = document.selectFirst("h1.entry-title")?.text()?.trim().orEmpty()
         val href=document.selectFirst("div.eplister > ul > li a")?.attr("href") ?:""
-        val poster = document.select("div.thumb img").attr("src").ifEmpty { document.selectFirst("meta[property=og:image]")?.attr("content")?.trim().toString() }
+        val poster = document.select("div.thumb img").attr("src").ifEmpty { document.selectFirst("meta[property=og:image]")?.attr("content")?.trim().orEmpty() }
         val description = document.selectFirst("div.entry-content")?.text()?.trim()
-        val type=document.selectFirst(".spe")?.text().toString()
+        val type=document.selectFirst(".spe")?.text().orEmpty()
         val tvtag=if (type.contains("Movie")) TvType.Movie else TvType.TvSeries
         return if (tvtag == TvType.TvSeries) {
             val episodeRegex = Regex("(\\d+)")

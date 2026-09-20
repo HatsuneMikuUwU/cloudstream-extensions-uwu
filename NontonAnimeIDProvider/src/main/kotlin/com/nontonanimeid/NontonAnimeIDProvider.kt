@@ -195,7 +195,7 @@ class NontonAnimeIDProvider : MainAPI() {
             val id = document.select("input[name=series_id]").attr("value")
             val numEp =
                 document.selectFirst(".latestepisode > a")?.text()?.replace(Regex("\\D"), "")
-                    .toString()
+                    .let { if (it.isNullOrBlank()) "1000" else it }
             Jsoup.parse(
                 app.post(
                     url = "$mainUrl/wp-admin/admin-ajax.php",
@@ -208,7 +208,7 @@ class NontonAnimeIDProvider : MainAPI() {
                 ).parsed<EpResponse>().content
             ).select("li").map {
                 val episode = Regex("Episode\\s?(\\d+)").find(
-                    it.selectFirst("a")?.text().toString()
+                    it.selectFirst("a")?.text().orEmpty()
                 )?.groupValues?.getOrNull(1) ?: it.selectFirst("a")?.text()
                 val link = fixUrl(it.selectFirst("a")!!.attr("href"))
                 newEpisode(link) { this.episode = episode?.toIntOrNull() }
@@ -216,7 +216,7 @@ class NontonAnimeIDProvider : MainAPI() {
         } else {
             document.select("ul.misha_posts_wrap2 > li, .lstepi > li, .episodelist > ul > li").map {
                 val episode = Regex("Episode\\s?(\\d+)").find(
-                    it.selectFirst("a")?.text().toString()
+                    it.selectFirst("a")?.text().orEmpty()
                 )?.groupValues?.getOrNull(1) ?: it.selectFirst("a")?.text()
                 val link = it.select("a").attr("href")
                 newEpisode(link) { this.episode = episode?.toIntOrNull() }

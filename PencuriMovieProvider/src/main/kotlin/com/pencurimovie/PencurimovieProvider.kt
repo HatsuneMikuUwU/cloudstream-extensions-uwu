@@ -70,7 +70,7 @@ class PencurimovieProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url, timeout = 50L).document
         val title =
-            document.selectFirst("div.mvic-desc h3")?.text()?.trim().toString().substringBefore("(")
+            document.selectFirst("div.mvic-desc h3")?.text()?.trim().orEmpty().substringBefore("(")
         val poster = document.select("meta[property=og:image]").attr("content").toString()
         val description = document.selectFirst("div.desc p.f-desc")?.text()?.trim()
         val tvtag = if (url.contains("series")) TvType.TvSeries else TvType.Movie
