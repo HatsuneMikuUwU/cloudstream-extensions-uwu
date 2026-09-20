@@ -11,11 +11,12 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.util.Calendar
+import java.util.concurrent.atomic.AtomicBoolean
 
 class KuramanimeProvider : MainAPI() {
     override var mainUrl = "https://v20.kuramanime.ing"
@@ -26,8 +27,7 @@ class KuramanimeProvider : MainAPI() {
     override var sequentialMainPage = true
     override val hasDownloadSupport = true
     
-    private var cachedAuth: Pair<String, String>? = null
-    private val lastResortAuth = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
+    var authorization: String? = "kJuHHkaqcBFXiGMHQf6bJw8YAyDcwGD8Ur"
     
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -74,41 +74,11 @@ class KuramanimeProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        if (page <= 1) {
-            try {
-                preloadAuth()
-            } catch (_: Exception) {
-            }
-        }
-
         val document = app.get(request.data + page).document
         val home = document.select("div.product__item").mapNotNull {
             it.toSearchResult()
         }
         return newHomePageResponse(request.name, home)
-    }
-
-    private suspend fun preloadAuth() {
-        if (cachedAuth?.second?.isNotBlank() == true) return
-
-        val homeDoc = try {
-            app.get(mainUrl).document
-        } catch (_: Exception) {
-            null
-        }
-
-        val tokenAuthUrl = homeDoc
-            ?.selectFirst("input#tokenAuthJs")
-            ?.attr("value")
-            ?.takeIf { it.isNotBlank() }
-
-        val authScriptUrl = when {
-            tokenAuthUrl == null -> "$mainUrl/storage/leviathan.js?v=${System.currentTimeMillis()}"
-            tokenAuthUrl.startsWith("http") -> tokenAuthUrl
-            else -> "$mainUrl$tokenAuthUrl"
-        }
-
-        getAuth(authScriptUrl, mainUrl)
     }
 
     private fun getProperAnimeLink(uri: String): String {
@@ -135,7 +105,6 @@ class KuramanimeProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        try { preloadAuth() } catch (_: Exception) {}
         return app.get("$mainUrl/anime?search=$query&order_by=latest").document.select("div.product__item").mapNotNull {
             it.toSearchResult()
         }
@@ -262,54 +231,12 @@ class KuramanimeProvider : MainAPI() {
         }
     }
 
-    private suspend fun invokeLocalSource(
-        url: String,
-        server: String,
-        headers: Map<String, String>,
-        authScriptUrl: String,
-        refererUrl: String,
-        kdriveServer: String?,
-        driveCheckPingRoute: String?,
-        driveCheckQuotaRoute: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        driveCheckPingRoute?.let { runCatching { app.get(it, headers = headers, cookies = cookies) } }
-        driveCheckQuotaRoute?.let { runCatching { app.get(it, headers = headers, cookies = cookies) } }
-
-        val auth = getAuth(authScriptUrl, refererUrl)
-        val postData = mutableMapOf("authorization" to auth)
-        if (!kdriveServer.isNullOrBlank()) {
-            postData["kdrive_server"] = kdriveServer
-        }
-
-        val request = app.post(
-            url,
-            data = postData,
-            headers = headers + ("Authorization" to "Bearer $auth"),
-            cookies = cookies
-        )
-        delay(1500)
-        val document = request.document
-        document.select("video#player > source, video source, source[src]").map {
-            val link = fixUrl(it.attr("src"))
-            if (link.isBlank()) return@map
-            val quality = it.attr("size").toIntOrNull()
-                ?: Regex("(\\d{3,4})p", RegexOption.IGNORE_CASE).find(link)?.groupValues?.getOrNull(1)?.toIntOrNull()
-            callback.invoke(newExtractorLink(fixTitle(server), fixTitle(server), link, INFER_TYPE) {
-                this.quality = quality ?: Qualities.Unknown.value
-                this.referer = "$mainUrl/"
-            })
-        }
-        if (server.contains("kuramadrive", true) || server.contains("archive", true)) {
-            document.select("div#animeDownloadLink a, #animeDownloadLink a, a[href*='kuramadrive'], a[href*='drive']").amap {
-                val href = it.attr("href")
-                if (href.isNotBlank()) {
-                    loadExtractor(fixUrl(href), "$mainUrl/", subtitleCallback, callback)
-                }
-            }
-        }
-    }
+    private data class StreamSession(
+        val csrf: String,
+        val token: String,
+        val assets: Assets,
+        val authScriptUrl: String,
+    )
 
     override suspend fun loadLinks(
         data: String,
@@ -317,165 +244,243 @@ class KuramanimeProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        val found = AtomicBoolean(false)
+        val trackedCallback: (ExtractorLink) -> Unit = {
+            found.set(true)
+            callback(it)
+        }
+
         val req = app.get(data)
-        val res = req.document
+        val doc = req.document
         cookies = req.cookies
 
-        val token = res.selectFirst("meta[name=csrf-token]")?.attr("content")
-        val dataKps = res.selectFirst("[data-kk]")?.attr("data-kk")
-            ?: res.selectFirst("div.col-lg-12.mt-3")?.attr("data-kk")
-        if (token.isNullOrBlank() || dataKps.isNullOrBlank()) return false
+        var authError: ErrorLoadingException? = null
 
-        val tokenAuthUrl = res.selectFirst("input#tokenAuthJs")?.attr("value")
-        val authScriptUrl = if (!tokenAuthUrl.isNullOrBlank()) {
-            if (tokenAuthUrl.startsWith("http")) tokenAuthUrl else "$mainUrl$tokenAuthUrl"
-        } else {
-            "$mainUrl/storage/leviathan.js?v=${System.currentTimeMillis()}"
-        }
+        try {
+            val session = createStreamSession(doc)
+            if (session != null) {
+                val servers = doc.select("select#changeServer option")
+                    .map { it.attr("value").trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .ifEmpty { listOf("kuramadrive") }
 
-        val isEpisodePage = res.selectFirst("input#isEpisode")?.attr("value") == "1"
-        val checkUrl = res.selectFirst(if (isEpisodePage) "input#checkEp" else "input#checkBatch")?.attr("value")
-        checkUrl?.let {
-            runCatching {
-                val checkRes = app.get(
-                    it,
-                    headers = mapOf("X-Requested-With" to "XMLHttpRequest", "X-CSRF-TOKEN" to token),
-                    cookies = cookies
-                )
-                cookies = cookies + checkRes.cookies
-            }
-        }
-
-        val kdriveServer = res.selectFirst("input#kdriveServer")?.attr("value")
-        val driveCheckPingRoute = res.selectFirst("input#driveCheckPingRoute")?.attr("value")
-        val driveCheckQuotaRoute = res.selectFirst("input#driveCheckQuotaRoute")?.attr("value")
-
-        val auth = getAuth(authScriptUrl, data)
-        val assets = getAssets(dataKps) ?: return false
-
-        var headers = mapOf(
-            "X-CSRF-TOKEN" to token,
-            "X-Fuck-ID" to "${assets.MIX_AUTH_KEY}:${assets.MIX_AUTH_TOKEN}",
-            "X-Request-ID" to randomId(),
-            "X-Request-Index" to "0",
-            "X-Requested-With" to "XMLHttpRequest",
-            "Authorization" to "Bearer $auth",
-        )
-
-        val authRoute = "${assets.MIX_PREFIX_AUTH_ROUTE_PARAM}${assets.MIX_AUTH_ROUTE_PARAM}"
-        val tokenRes = app.get(
-            "$mainUrl/$authRoute".replace("//", "/").replace(":/", "://"),
-            headers = headers,
-            cookies = cookies
-        )
-        val tokenKey = tokenRes.text.trim()
-        if (tokenKey.isBlank() || tokenKey.startsWith("<")) return false
-        cookies = tokenRes.cookies
-
-        headers = mapOf(
-            "X-CSRF-TOKEN" to token,
-            "X-Requested-With" to "XMLHttpRequest",
-            "Authorization" to "Bearer $auth",
-        )
-
-        val servers = res.select("select#changeServer option")
-        if (servers.isEmpty()) return false
-
-        servers.amap { source ->
-            val server = source.attr("value").ifBlank { return@amap }
-            val link = "$data?${assets.MIX_PAGE_TOKEN_KEY}=$tokenKey&${assets.MIX_STREAM_SERVER_KEY}=$server"
-
-            try {
-                if (server.contains(Regex("(?i)kuramadrive|archive"))) {
-                    invokeLocalSource(
-                        link, server, headers, authScriptUrl, data,
-                        kdriveServer, driveCheckPingRoute, driveCheckQuotaRoute,
-                        subtitleCallback, callback
-                    )
-                } else {
-                    val request = app.post(
-                        link,
-                        data = mapOf("authorization" to auth),
-                        referer = data,
-                        headers = headers,
-                        cookies = cookies
-                    )
-                    delay(1500)
-                    val doc = request.document
-                    val videoUrl = doc.selectFirst("div.iframe-container iframe")?.attr("src")
-                        ?: doc.selectFirst("iframe[src]")?.attr("src")
-                        ?: doc.selectFirst("div.plyr__video-wrapper iframe")?.attr("src")
-                        ?: doc.selectFirst("video source")?.attr("src")
-                    if (!videoUrl.isNullOrBlank()) {
-                        loadExtractor(fixUrl(videoUrl), "$mainUrl/", subtitleCallback, callback)
+                servers.amap { server ->
+                    try {
+                        loadServer(data, server, session, subtitleCallback, trackedCallback)
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        if (e is ErrorLoadingException) authError = e
                     }
+                    Unit
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (e is ErrorLoadingException) authError = e
+        }
+
+        if (!found.get()) {
+            doc.getElementsByTag("iframe").forEach { iframe ->
+                val src = iframe.attr("src").ifBlank { null } ?: return@forEach
+                val fullSrc = if (src.startsWith("//")) "https:$src" else src
+                loadExtractor(fixUrl(fullSrc), data, subtitleCallback, trackedCallback)
             }
         }
-        return true
+
+        if (!found.get()) authError?.let { throw it }
+        return found.get()
     }
 
-    private suspend fun getAssets(bpjs: String?): Assets? {
-        if (bpjs.isNullOrBlank()) return null
-        val env = try {
-            app.get("$mainUrl/assets/js/$bpjs.js").text
-        } catch (_: Exception) {
+    private suspend fun createStreamSession(doc: Document): StreamSession? {
+        val csrf = doc.selectFirst("meta[name=csrf-token]")?.attr("content")?.ifBlank { null }
+            ?: return null
+        val kk = doc.selectFirst("[data-kk]")?.attr("data-kk")?.ifBlank { null }
+            ?: Regex("data-kk=\"([^\"]+)\"").find(doc.outerHtml())?.groupValues?.getOrNull(1)
+            ?: return null
+
+        val assets = getAssets(kk)
+        if (assets.authRouteParam.isBlank() || assets.pageTokenKey.isBlank() || assets.streamServerKey.isBlank()) {
             return null
         }
-        if (env.isBlank() || env.trim().startsWith("<")) return null
 
-        fun read(key: String): String? {
-            return Regex("""$key\s*[:=]\s*['"]([^'"]*)['"]""")
-                .find(env)?.groupValues?.getOrNull(1)
-                ?: env.substringAfter("$key: '").substringBefore("',").takeIf { it.isNotBlank() && !it.contains("\n") }
-                ?: env.substringAfter("$key: \"").substringBefore("\",").takeIf { it.isNotBlank() && !it.contains("\n") }
-        }
+        val tokenAuthUrl = doc.selectFirst("input#tokenAuthJs")?.attr("value")?.ifBlank { null }
+        val authScriptUrl = if (tokenAuthUrl != null) fixUrl(tokenAuthUrl)
+        else "$mainUrl/storage/leviathan.js?v=${System.currentTimeMillis()}"
 
-        val prefix = read("MIX_PREFIX_AUTH_ROUTE_PARAM") ?: return null
-        val route = read("MIX_AUTH_ROUTE_PARAM") ?: return null
-        val key = read("MIX_AUTH_KEY") ?: return null
-        val token = read("MIX_AUTH_TOKEN") ?: return null
-        val pageKey = read("MIX_PAGE_TOKEN_KEY") ?: return null
-        val serverKey = read("MIX_STREAM_SERVER_KEY") ?: return null
-
-        return Assets(prefix, route, key, token, pageKey, serverKey)
+        val token = fetchPageToken(csrf, assets) ?: return null
+        return StreamSession(csrf, token, assets, authScriptUrl)
     }
 
-    private suspend fun getAuth(tokenUrl: String, referer: String): String {
-        cachedAuth?.takeIf { it.first == tokenUrl && it.second.isNotBlank() }?.let { return it.second }
+    private suspend fun fetchPageToken(csrf: String, assets: Assets): String? {
+        val headers = mapOf(
+            "X-Fuck-ID" to assets.fuckId,
+            "X-Request-ID" to randomId(),
+            "X-Request-Index" to "0",
+            "X-CSRF-TOKEN" to csrf,
+            "X-Requested-With" to "XMLHttpRequest",
+        )
 
-        return try {
-            fetchAuth(tokenUrl, referer).also {
-                cachedAuth = tokenUrl to it
+        val routes = listOf(
+            "assets/${assets.authRouteParam}",
+            "${assets.prefixAuthRoute}${assets.authRouteParam}",
+        ).distinct()
+
+        for (route in routes) {
+            val res = try {
+                app.get("$mainUrl/$route", headers = headers, cookies = cookies)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                continue
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            lastResortAuth
+            val text = res.text.trim()
+            if (res.isSuccessful && text.isNotBlank() && !text.startsWith("<")) {
+                cookies = cookies + res.cookies
+                return text
+            }
+        }
+        return null
+    }
+
+    private suspend fun loadServer(
+        data: String,
+        server: String,
+        session: StreamSession,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val assets = session.assets
+        val link = "$data?${assets.pageTokenKey}=${session.token}&${assets.streamServerKey}=$server&page=1"
+
+        val postDoc = app.post(
+            link,
+            headers = mapOf(
+                "Accept" to "text/html, */*; q=0.01",
+                "X-Requested-With" to "XMLHttpRequest",
+                "X-CSRF-TOKEN" to session.csrf,
+                "Origin" to mainUrl,
+                "Referer" to data,
+            ),
+            data = mapOf("authorization" to getAuth(session.authScriptUrl, data)),
+            cookies = cookies
+        ).document
+
+        if (server.contains(Regex("(?i)kuramadrive|archive"))) {
+            invokeLocalSource(postDoc, server, subtitleCallback, callback)
+        } else {
+            val iframeSrc = postDoc.select("div.iframe-container iframe").attr("src")
+                .ifBlank { postDoc.select("iframe").attr("src") }
+            if (iframeSrc.isNotBlank()) {
+                loadExtractor(fixUrl(iframeSrc), "$mainUrl/", subtitleCallback, callback)
+            }
         }
     }
 
-    private suspend fun fetchAuth(tokenUrl: String, referer: String): String {
+    private fun qualityFromSize(size: Int?): Int {
+        return when (size) {
+            1080 -> Qualities.P1080.value
+            720 -> Qualities.P720.value
+            480 -> Qualities.P480.value
+            360 -> Qualities.P360.value
+            else -> size ?: Qualities.Unknown.value
+        }
+    }
+
+    private fun qualityFromText(text: String): Int {
+        return when {
+            text.contains("1080") -> Qualities.P1080.value
+            text.contains("720") -> Qualities.P720.value
+            text.contains("480") -> Qualities.P480.value
+            text.contains("360") -> Qualities.P360.value
+            else -> Qualities.Unknown.value
+        }
+    }
+
+    private suspend fun invokeLocalSource(
+        document: Document,
+        server: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        document.select("video#player source[src]").forEach { source ->
+            val src = source.attr("src").ifBlank { null } ?: return@forEach
+            val size = source.attr("size").toIntOrNull()
+            callback.invoke(
+                newExtractorLink(
+                    fixTitle(server),
+                    fixTitle(server),
+                    fixUrl(src),
+                    INFER_TYPE
+                ) {
+                    this.quality = qualityFromSize(size)
+                    this.referer = mainUrl
+                }
+            )
+        }
+
+        if (server == "kuramadrive") {
+            val downloads = mutableListOf<Pair<Int, String>>()
+            var currentQuality = Qualities.Unknown.value
+            document.selectFirst("#animeDownloadLink")?.children()?.forEach { element ->
+                if (element.tagName() == "h6") {
+                    currentQuality = qualityFromText(element.text())
+                } else {
+                    element.select("a[href]").forEach { a ->
+                        val href = a.attr("href").ifBlank { null } ?: return@forEach
+                        downloads.add(currentQuality to href)
+                    }
+                }
+            }
+
+            downloads.distinctBy { it.second }.amap { (linkQuality, href) ->
+                val pdId = Regex("pixeldrain\\.\\w+/[du]/(\\w+)").find(href)?.groupValues?.getOrNull(1)
+                if (pdId != null) {
+                    callback.invoke(
+                        newExtractorLink("PixelDrain", "PixelDrain", "https://pixeldrain.com/api/file/$pdId") {
+                            this.quality = linkQuality
+                            this.referer = mainUrl
+                        }
+                    )
+                } else {
+                    loadExtractor(href, "$mainUrl/", subtitleCallback, callback)
+                }
+            }
+        }
+    }
+
+    private suspend fun getAssets(bpjs: String): Assets {
+        val cfg = app.get("$mainUrl/assets/js/$bpjs.js").text
+
+        fun cfgValue(key: String): String =
+            Regex("\\b$key\\s*:\\s*['\"]([^'\"]+)['\"]").find(cfg)?.groupValues?.getOrNull(1) ?: ""
+
+        return Assets(
+            prefixAuthRoute = cfgValue("MIX_PREFIX_AUTH_ROUTE_PARAM"),
+            authRouteParam = cfgValue("MIX_AUTH_ROUTE_PARAM"),
+            authKey = cfgValue("MIX_AUTH_KEY"),
+            authToken = cfgValue("MIX_AUTH_TOKEN"),
+            pageTokenKey = cfgValue("MIX_PAGE_TOKEN_KEY"),
+            streamServerKey = cfgValue("MIX_STREAM_SERVER_KEY"),
+        )
+    }
+
+    suspend fun getAuth(tokenUrl: String, referer: String): String {
+        return authorization ?: fetchAuth(tokenUrl, referer).also { authorization = it }
+    }
+
+    suspend fun fetchAuth(tokenUrl: String, referer: String): String {
         val jsReqHeaders = mapOf(
             "Accept" to "*/*",
             "Referer" to referer,
             "X-Requested-With" to "XMLHttpRequest"
         )
+        
+        val jsCode = app.get(tokenUrl, headers = jsReqHeaders, cookies = cookies).text
 
-        var jsCode = app.get(tokenUrl, headers = jsReqHeaders, cookies = cookies).text
-
-        if (jsCode.isBlank() || jsCode.trim().startsWith("<")) {
-            throw ErrorLoadingException("Failed: leviathan.js intercepted by Cloudflare / empty response.")
+        if (jsCode.trim().startsWith("<")) {
+            throw ErrorLoadingException("Failed: leviathan.js intercepted by Cloudflare. Try disabling your proxy/VPN for a while.")
         }
-
-        jsCode = jsCode.replace(
-            Regex("""while\s*\(\s*!!\s*\[\s*\]\s*\)\s*\{"""),
-            "var __rotCount=0; while(!![] && (++__rotCount)<500){"
-        )
-
+        
         val host = URI(mainUrl).host
 
         val script = """
@@ -484,55 +489,41 @@ class KuramanimeProvider : MainAPI() {
             var document = { createElement: function() { return {}; } };
             var navigator = { userAgent: "Mozilla/5.0" };
             var location = { hostname: "$host", href: "$mainUrl" };
-
+            
             var extractedToken = "FAILED_EMPTY";
 
-            function captureAuth(headers) {
-                if (!headers) return;
-                var v = headers['Authorization'] || headers['authorization'];
-                if (v) extractedToken = v;
-            }
-
             var fetch = function(reqUrl, options) {
-                if (options && options.headers) captureAuth(options.headers);
-                return { then: function(cb) { try { cb({ ok: true }); } catch(e) {} return this; } };
+                if (options && options.headers && options.headers['Authorization']) {
+                    extractedToken = options.headers['Authorization'];
+                }
             };
 
             var ${'$'} = function(options) {
-                if (options && options.headers) captureAuth(options.headers);
-                return { done: function(){ return this; }, fail: function(){ return this; }, always: function(){ return this; } };
+                if (options && options.headers && options.headers['Authorization']) {
+                    extractedToken = options.headers['Authorization'];
+                }
+                return { done: function(){ return this; }, fail: function(){ return this; } };
             };
             ${'$'}.ajax = ${'$'};
             window.${'$'} = ${'$'};
             window.jQuery = ${'$'};
-
+            
             try {
                 $jsCode
             } catch(e) {
-                extractedToken = "ERROR_EVAL: " + (e && e.message ? e.message : e);
+                extractedToken = "ERROR_EVAL: " + e.message;
             }
 
-            try {
-                if (typeof window.jAjaxSecure === 'function') {
-                    window.jAjaxSecure('https://dummy', 'POST', '{}', null, null, null, null);
-                }
-            } catch(e) {}
-            try {
-                if (typeof window.fetchSecure === 'function') {
-                    window.fetchSecure('https://dummy', 'POST', {});
-                }
-            } catch(e) {}
-
-            if (extractedToken === "FAILED_EMPTY" || (extractedToken && extractedToken.indexOf("ERROR_") === 0)) {
+            if (extractedToken === "FAILED_EMPTY") {
                 for (var key in window) {
-                    if (typeof window[key] !== 'function') continue;
-                    if (key === 'fetch' || key === '${'$'}' || key === 'eval' || key === 'Function' || key === 'captureAuth') continue;
-                    try { window[key]('https://dummy', 'POST', '{}'); } catch(e) {}
-                    try { window[key]('https://dummy', 'GET', '{}'); } catch(e) {}
-                    try { window[key]('https://dummy', 'POST', {}, null, null, null, null); } catch(e) {}
+                    if (typeof window[key] === 'function' && key !== 'fetch' && key !== '${'$'}' && key !== 'evaluate') {
+                        try {
+                            window[key]('https://dummy', 'GET', "{}");
+                        } catch(e) {}
+                    }
                 }
             }
-
+            
             extractedToken;
         """.trimIndent()
 
@@ -540,10 +531,7 @@ class KuramanimeProvider : MainAPI() {
             ctx.evaluate(script) as String?
         }
 
-        if (authHeader.isNullOrEmpty() ||
-            authHeader.startsWith("FAILED") ||
-            authHeader.startsWith("ERROR")
-        ) {
+        if (authHeader.isNullOrEmpty() || authHeader.startsWith("FAILED") || authHeader.startsWith("ERROR")) {
             throw ErrorLoadingException("QuickJs failed to extract token: $authHeader")
         }
 
@@ -556,11 +544,13 @@ class KuramanimeProvider : MainAPI() {
     }
 
     data class Assets(
-        val MIX_PREFIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_ROUTE_PARAM: String,
-        val MIX_AUTH_KEY: String,
-        val MIX_AUTH_TOKEN: String,
-        val MIX_PAGE_TOKEN_KEY: String,
-        val MIX_STREAM_SERVER_KEY: String,
-    )
+        val prefixAuthRoute: String,
+        val authRouteParam: String,
+        val authKey: String,
+        val authToken: String,
+        val pageTokenKey: String,
+        val streamServerKey: String,
+    ) {
+        val fuckId: String get() = "$authKey:$authToken"
+    }
 }
