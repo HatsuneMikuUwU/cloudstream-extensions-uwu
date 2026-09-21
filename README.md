@@ -35,6 +35,7 @@
 | 13 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
 | 14 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
 | 15 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
+| 16 | **Winbu** | 🇮🇩 ID | 🌸 Anime, 🐉 Donghua, 🎬 Movies & Series |
 
 > [!WARNING]
 > **Disclaimer & Legal Notice**
