@@ -352,17 +352,13 @@ class WinbuProvider : MainAPI() {
                         callback
                     )
 
-                    val isDirectFriendly = fixed.contains("blogger.com", true) ||
-                            fixed.contains("video.g", true) ||
-                            fixed.contains("filedon", true) ||
-                            fixed.contains("mega.nz", true) ||
-                            fixed.contains("hydrax", true) ||
-                            fixed.contains("p2p", true) ||
-                            fixed.contains("gofile", true) ||
-                            fixed.contains("buzzheavier", true) ||
-                            fixed.contains("pixeldrain", true)
+                    val looksLikeMedia = fixed.contains(".mp4", true) ||
+                            fixed.contains(".m3u8", true) ||
+                            fixed.contains("googlevideo.com", true) ||
+                            fixed.contains("blogger.googleusercontent", true) ||
+                            fixed.contains("videoplayback", true)
 
-                    if (isDirectFriendly) {
+                    if (looksLikeMedia) {
                         callback.invoke(
                             newExtractorLink(
                                 source = name,

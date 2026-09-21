@@ -14,7 +14,6 @@ class WinbuProviderPlugin : Plugin() {
         registerExtractorAPI(BuzzheavierExtractor())
         registerExtractorAPI(AbyssExtractor())
         registerExtractorAPI(BloggerExtractor())
-        registerExtractorAPI(MegaEmbedExtractor())
         registerExtractorAPI(StrP2PExtractor())
     }
 }

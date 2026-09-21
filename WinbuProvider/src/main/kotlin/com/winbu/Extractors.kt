@@ -570,8 +570,12 @@ class BloggerExtractor : ExtractorApi() {
 }
 
 /**
- * Mega.nz embed – pass-through (CloudStream core may not resolve Mega).
- * Keeps the embed URL so at least the link appears in the list.
+ * Mega.nz embed – TIDAK didukung.
+ * URL embed (`mega.nz/embed/...`) adalah halaman HTML, bukan stream media.
+ * Mengirimnya ke ExoPlayer menyebabkan:
+ *   ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED (3003)
+ * Mega memakai enkripsi client-side; butuh SDK resmi, tidak bisa di-extract
+ * sebagai direct mp4/m3u8 seperti host biasa.
  */
 class MegaEmbedExtractor : ExtractorApi() {
     override val name = "Mega"
@@ -584,17 +588,11 @@ class MegaEmbedExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val fixed = if (url.startsWith("//")) "https:$url" else url
-        if (!fixed.contains("mega.nz", true)) return
-
-        callback.invoke(
-            newExtractorLink(name, name, fixed, INFER_TYPE) {
-                this.referer = referer ?: mainUrl
-                this.headers = mapOf("User-Agent" to USER_AGENT)
-            }
-        )
+        // No-op: jangan emit link HTML ke player
+        return
     }
 }
+
 
 /**
  * strp2p / P2P player (winbu.strp2p.com and similar)
