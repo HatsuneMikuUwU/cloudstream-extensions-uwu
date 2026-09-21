@@ -8,5 +8,13 @@ import android.content.Context
 class WinbuProviderPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(WinbuProvider())
+        registerExtractorAPI(FiledonExtractor())
+        registerExtractorAPI(PixeldrainExtractor())
+        registerExtractorAPI(GofileExtractor())
+        registerExtractorAPI(BuzzheavierExtractor())
+        registerExtractorAPI(AbyssExtractor())
+        registerExtractorAPI(BloggerExtractor())
+        registerExtractorAPI(MegaEmbedExtractor())
+        registerExtractorAPI(StrP2PExtractor())
     }
 }
