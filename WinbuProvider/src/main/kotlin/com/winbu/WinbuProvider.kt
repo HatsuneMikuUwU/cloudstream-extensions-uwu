@@ -143,10 +143,27 @@ class WinbuProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = request("$mainUrl/?s=${URLEncoder.encode(query, "UTF-8")}").document
-        return document.select("div.ml-item, div.ml-item-anime").mapNotNull {
-            it.toSearchResult()
+        val keyword = URLEncoder.encode(query, "UTF-8")
+        val results = LinkedHashMap<String, SearchResponse>()
+
+        for (page in 1..3) {
+            val url = if (page == 1) "$mainUrl/?s=$keyword" else "$mainUrl/page/$page/?s=$keyword"
+            val document = request(url).document
+
+            val before = results.size
+            document.select("div.a-item, div.ml-item, div.ml-item-anime")
+                .mapNotNull { it.toSearchResult() }
+                .forEach { results.putIfAbsent(it.url, it) }
+            if (results.size == before) break
+
+            val hasNext = document.select("ul.pagination a[href]").any { a ->
+                Regex("""/page/(\d+)""").find(a.attr("href"))
+                    ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    ?.let { it > page } == true
+            }
+            if (!hasNext) break
         }
+        return results.values.toList()
     }
 
     override suspend fun load(url: String): LoadResponse {
