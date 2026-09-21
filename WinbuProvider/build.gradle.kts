@@ -5,7 +5,7 @@ cloudstream {
     language = "id"
     // All of these properties are optional, you can safely remove them
 
-    description = "Winbu — Nonton Anime & Serial Sub Indo"
+    description = "Winbu — Streaming Anime & Series with Indonesian Subtitles"
     authors = listOf("Miku")
 
     /**

@@ -23,7 +23,8 @@ class WinbuProvider : MainAPI() {
         TvType.Anime,
         TvType.AnimeMovie,
         TvType.OVA,
-        TvType.TvSeries
+        TvType.TvSeries,
+        TvType.Movie
     )
 
     companion object {
@@ -40,8 +41,24 @@ class WinbuProvider : MainAPI() {
         fun getStatus(t: String?): ShowStatus {
             return when {
                 t.isNullOrBlank() -> ShowStatus.Completed
-                t.contains("Ongoing", true) || t.contains("Ongoing", true) -> ShowStatus.Ongoing
+                t.contains("Ongoing", true) -> ShowStatus.Ongoing
                 else -> ShowStatus.Completed
+            }
+        }
+
+        fun parseQuality(text: String?): Int {
+            if (text.isNullOrBlank()) return Qualities.Unknown.value
+            val q = getQualityFromName(text)
+            if (q != Qualities.Unknown.value) return q
+            val num = Regex("""(\d{3,4})p?""", RegexOption.IGNORE_CASE).find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
+            return when (num) {
+                360 -> Qualities.P360.value
+                480 -> Qualities.P480.value
+                720 -> Qualities.P720.value
+                1080 -> Qualities.P1080.value
+                1440 -> Qualities.P1440.value
+                2160, 4 -> Qualities.P2160.value
+                else -> Qualities.Unknown.value
             }
         }
     }
@@ -66,7 +83,7 @@ class WinbuProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page == 1) {
-            request.data.removeSuffix("page/")
+            request.data.replace("/page/", "/")
         } else {
             request.data + page
         }
@@ -89,11 +106,10 @@ class WinbuProvider : MainAPI() {
             ?: this.selectFirst("i.info-hidden")?.attr("data-episode")
         val epNum = Regex("(?i)(?:Episode\\s*)?(\\d+)").find(epText.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
 
-        // .mli-mvi pertama = rating (ikon bintang/mata), label tipe ("TV Show") tidak punya ikon
         val typeText = this.select(".mli-mvi").firstOrNull { it.selectFirst("i.fa") == null }?.text()
         val type = when {
-            href.contains("/film/") -> TvType.AnimeMovie
-            href.contains("/series/") -> TvType.TvSeries
+            href.contains("/film/") -> TvType.Movie
+            href.contains("/series/") || href.contains("/tvshow/") -> TvType.TvSeries
             else -> getType(typeText)
         }
 
@@ -113,7 +129,6 @@ class WinbuProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = request(url).document
 
-        // Title
         val title = document.selectFirst(".m-info .judul")?.text()?.trim()
             ?: document.selectFirst("meta[property=og:title]")?.attr("content")
                 ?.replace(Regex("(?i)\\s*-\\s*Winbu.*"), "")
@@ -133,20 +148,23 @@ class WinbuProvider : MainAPI() {
         val ratingText = document.selectFirst(".m-info span[itemprop=ratingValue]")?.text()
         val rating = ratingText?.toFloatOrNull()
 
-        // Year / Season
         val seasonText = document.selectFirst(".m-info a[href*=/season/]")?.text().orEmpty()
         val year = Regex("(\\d{4})").find(seasonText)?.groupValues?.getOrNull(1)?.toIntOrNull()
             ?: document.selectFirst("meta[property=article:published_time]")?.attr("content")
                 ?.take(4)?.toIntOrNull()
+            ?: Regex("""\((\d{4})\)""").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
-        // Episodes
-        val episodes = document.select("div.les-content a, div.tvseason a")
+        val episodes = document.select("div.les-content a, div.tvseason a, ul.episod li a, .eplister a")
             .mapNotNull { a ->
                 val epHref = fixUrl(a.attr("href"))
-                if (!epHref.contains("episode", ignoreCase = true)) return@mapNotNull null
+                if (epHref.isBlank()) return@mapNotNull null
+                if (!epHref.contains("episode", ignoreCase = true) &&
+                    !epHref.contains("/eps/", ignoreCase = true)
+                ) return@mapNotNull null
                 val name = a.text().trim().ifBlank { a.attr("title") }
                 val epNum = Regex("(?i)Episode\\s*(\\d+)").find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
                     ?: Regex("(?i)-episode-(\\d+)").find(epHref)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    ?: Regex("(?i)/eps/(\\d+)").find(epHref)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 newEpisode(epHref) {
                     this.name = name.ifBlank { "Episode $epNum" }
                     this.episode = epNum
@@ -165,7 +183,7 @@ class WinbuProvider : MainAPI() {
         }
 
         val type = when {
-            url.contains("/film/") || title.contains("Movie", true) -> TvType.AnimeMovie
+            url.contains("/film/") || title.contains("Movie", true) -> TvType.Movie
             url.contains("/tvshow/") || url.contains("/series/") -> TvType.TvSeries
             else -> TvType.Anime
         }
@@ -221,16 +239,19 @@ class WinbuProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        document.select("div.download-eps li a[href]")
+        document.select("div.download-eps li a[href], .download-eps a[href], .boxdl a[href]")
             .distinctBy { it.attr("href") }
             .amap { a ->
                 val href = a.attr("href")
-                if (href.isBlank() || href.startsWith("javascript", true)) return@amap
-                val quality = getQualityFromName(a.parent()?.parent()?.selectFirst("strong")?.text())
+                if (href.isBlank() || href.startsWith("javascript", true) || href == "#") return@amap
+                val qualityText = a.parents().firstOrNull { it.tagName() == "li" }
+                    ?.selectFirst("strong")?.text()
+                    ?: a.parent()?.selectFirst("strong")?.text()
+                val quality = parseQuality(qualityText)
                 try {
                     loadFixedExtractor(
                         fixUrl(href),
-                        null,
+                        a.text().trim().ifBlank { null },
                         quality,
                         referer,
                         subtitleCallback,
@@ -253,24 +274,45 @@ class WinbuProvider : MainAPI() {
             val post = el.attr("data-post")
             val nume = el.attr("data-nume")
             if (post.isBlank() || nume.isBlank()) return@mapNotNull null
-            val quality = getQualityFromName(
+
+            val serverName = el.selectFirst("span")?.text()?.trim()?.ifBlank { null } ?: "Server $nume"
+
+            val qualityFromServer = parseQuality(serverName)
+            val qualityFromDropdown = parseQuality(
                 el.parents().firstOrNull { it.hasClass("dropdown") }
                     ?.selectFirst("button.dropdown-toggle")?.text()
             )
+            val quality = when {
+                qualityFromServer != Qualities.Unknown.value -> qualityFromServer
+                qualityFromDropdown != Qualities.Unknown.value -> qualityFromDropdown
+                else -> Qualities.Unknown.value
+            }
+
             PlayerOption(
                 post = post,
                 nume = nume,
                 type = el.attr("data-type").ifBlank { "schtml" },
-                serverName = el.selectFirst("span")?.text()?.trim()?.ifBlank { null } ?: "Server $nume",
+                serverName = serverName,
                 quality = quality
             )
         }
 
         if (options.isEmpty()) {
-            document.select("div.pframe iframe, .movieplay iframe").forEach { iframe ->
+            document.select("div.pframe iframe, .movieplay iframe, .player iframe, iframe[src]").forEach { iframe ->
                 val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
-                if (src.isNotBlank()) {
-                    loadExtractor(fixUrl(src), data, subtitleCallback, callback)
+                if (src.isNotBlank() && !src.contains("youtube.com", true) && !src.contains("youtu.be", true)) {
+                    val fixed = fixUrl(src)
+                    loadExtractor(fixed, data, subtitleCallback, callback)
+                    callback.invoke(
+                        newExtractorLink(
+                            source = name,
+                            name = "Direct",
+                            url = fixed,
+                            type = INFER_TYPE
+                        ) {
+                            this.referer = data
+                        }
+                    )
                 }
             }
             loadDownloadLinks(document, data, subtitleCallback, callback)
@@ -300,6 +342,7 @@ class WinbuProvider : MainAPI() {
 
                 if (!iframeSrc.isNullOrBlank()) {
                     val fixed = fixUrl(iframeSrc)
+
                     loadFixedExtractor(
                         fixed,
                         option.serverName,
@@ -308,7 +351,18 @@ class WinbuProvider : MainAPI() {
                         subtitleCallback,
                         callback
                     )
-                    if (fixed.contains("blogger.com") || fixed.contains("video.g")) {
+
+                    val isDirectFriendly = fixed.contains("blogger.com", true) ||
+                            fixed.contains("video.g", true) ||
+                            fixed.contains("filedon", true) ||
+                            fixed.contains("mega.nz", true) ||
+                            fixed.contains("hydrax", true) ||
+                            fixed.contains("p2p", true) ||
+                            fixed.contains("gofile", true) ||
+                            fixed.contains("buzzheavier", true) ||
+                            fixed.contains("pixeldrain", true)
+
+                    if (isDirectFriendly) {
                         callback.invoke(
                             newExtractorLink(
                                 source = name,
@@ -325,6 +379,7 @@ class WinbuProvider : MainAPI() {
             } catch (_: Exception) {
             }
         }
+
         loadDownloadLinks(document, data, subtitleCallback, callback)
 
         return true
