@@ -505,7 +505,7 @@ class BloggerExtractor : ExtractorApi() {
         }
     }
 
-    private fun emit(videoUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun emit(videoUrl: String, pageUrl: String, callback: (ExtractorLink) -> Unit) {
         val directReferer = if (videoUrl.contains("googlevideo.com/", true)) {
             googleVideoReferer
         } else {
