@@ -134,14 +134,14 @@
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DubbindoProvider.cs3",
         "status": 1,
-        "version": 1,
+        "version": 2,
         "name": "DubbindoProvider",
         "internalName": "DubbindoProvider",
         "authors": [
             "Miku"
         ],
         "description": "Dubbindo \u2014 Streaming Anime, Movie and TV Series",
-        "fileSize": 27349,
+        "fileSize": 33136,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -152,7 +152,7 @@
         ],
         "iconUrl": "https://www.google.com/s2/favicons?domain=www.dubbindo.site&sz=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-7be0773e15b5f24007177963147fa7b280d1027a48c522cfc1a84e90937fc20e"
+        "fileHash": "sha256-4e753074b6c5d5f932bbde02fa878ded5c4e65e259848c1aa7d1f85e3585b1cb"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/HidoriStreamProvider.cs3",
