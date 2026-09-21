@@ -81,6 +81,8 @@ class WinbuProvider : MainAPI() {
         "$mainUrl/others/page/" to "Other"
     )
 
+    private val pageHistory = java.util.concurrent.ConcurrentHashMap<String, MutableMap<Int, Set<String>>>()
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val base = request.data.trimEnd('/').removeSuffix("/page")
         val url = if (page <= 1) "$base/" else "$base/page/$page/"
@@ -89,6 +91,20 @@ class WinbuProvider : MainAPI() {
         val home = document.select("div.ml-item, div.ml-item-anime")
             .mapNotNull { it.toSearchResult() }
             .distinctBy { it.url }
+
+        val servedPage = document.selectFirst("ul.pagination li.active")
+            ?.text()?.trim()?.toIntOrNull()
+        if (page > 1 && servedPage != null && servedPage != page) {
+            return newHomePageResponse(request.name, emptyList(), false)
+        }
+
+        val history = pageHistory.getOrPut(request.data) { java.util.concurrent.ConcurrentHashMap() }
+        if (page <= 1) history.clear()
+        val previous = history.filterKeys { it < page }.values.flatten().toSet()
+        if (page > 1 && home.isNotEmpty() && home.all { it.url in previous }) {
+            return newHomePageResponse(request.name, emptyList(), false)
+        }
+        history[page] = home.map { it.url }.toSet()
 
         val hasNext = home.isNotEmpty() && (
             document.select("ul.pagination a[href]").any { a ->
