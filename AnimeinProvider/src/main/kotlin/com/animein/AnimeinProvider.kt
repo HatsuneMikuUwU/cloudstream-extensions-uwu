@@ -190,10 +190,11 @@ class AnimeinProvider : MainAPI() {
     private suspend fun enrich(items: List<SearchResponse>): List<SearchResponse> {
         if (items.isEmpty()) return items
         return items.amap { item ->
+            val type = item.type ?: TvType.Anime
             val tracker = runCatching {
-                APIHolder.getTracker(listOf(item.name), TrackerType.getTypes(item.type), null, true)
+                APIHolder.getTracker(listOf(item.name), TrackerType.getTypes(type), null, true)
             }.getOrNull()
-            newAnimeSearchResponse(item.name, item.url, item.type) {
+            newAnimeSearchResponse(item.name, item.url, type) {
                 this.posterUrl = tracker?.image ?: tracker?.cover
             }
         }
@@ -202,7 +203,7 @@ class AnimeinProvider : MainAPI() {
     private fun parseList(raw: String): List<SearchResponse> {
         if (raw.isBlank()) return emptyList()
         return try {
-            val arrays = findObjectArrays(parseJson<JsonNode>(raw)) { n ->
+            val arrays = findObjectArrays(parseJson<JsonNode>(raw)) { n: JsonNode ->
                 n.has("title") || n.has("name") || n.has("id_movie") || n.has("image_poster")
             }
             val list = arrays.firstOrNull() ?: return emptyList()
@@ -220,7 +221,7 @@ class AnimeinProvider : MainAPI() {
     private fun parseEpisodes(raw: String, movieId: String): List<Episode> {
         if (raw.isBlank()) return emptyList()
         return try {
-            val arrays = findObjectArrays(parseJson<JsonNode>(raw)) { n ->
+            val arrays = findObjectArrays(parseJson<JsonNode>(raw)) { n: JsonNode ->
                 n.has("id") || n.has("id_episode") || n.has("index")
             }
             val list = arrays.firstOrNull() ?: return emptyList()
@@ -266,14 +267,18 @@ class AnimeinProvider : MainAPI() {
         }
     }
 
-    private fun findObjectArrays(node: JsonNode, pred: (JsonNode) -> Boolean, depth: Int = 0): List<JsonNode> {
+    private fun findObjectArrays(
+        node: JsonNode,
+        depth: Int = 0,
+        pred: (JsonNode) -> Boolean
+    ): List<JsonNode> {
         if (depth > 5) return emptyList()
         val found = mutableListOf<JsonNode>()
         when {
             node.isArray && node.size() > 0 && node[0].isObject && pred(node[0]) -> found.add(node)
-            node.isArray -> node.forEach { found.addAll(findObjectArrays(it, pred, depth + 1)) }
+            node.isArray -> node.forEach { found.addAll(findObjectArrays(it, depth + 1, pred)) }
             node.isObject -> node.fields().forEachRemaining { (_, v) ->
-                found.addAll(findObjectArrays(v, pred, depth + 1))
+                found.addAll(findObjectArrays(v, depth + 1, pred))
             }
         }
         return found
