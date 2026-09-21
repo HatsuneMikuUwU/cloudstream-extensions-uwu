@@ -18,6 +18,9 @@ import kotlin.random.Random
 
 private const val DEFAULT_EMBED_ORIGIN = "https://videonode.de"
 
+private fun originOf(url: String): String? =
+    runCatching { URI(url).let { "${it.scheme}://${it.host}" } }.getOrNull()
+
 private fun embedOriginOf(referer: String?): String {
     if (referer.isNullOrBlank()) return DEFAULT_EMBED_ORIGIN
     return runCatching { URI(referer).let { "${it.scheme}://${it.host}" } }
@@ -35,18 +38,19 @@ open class EmturbovidExtractor : ExtractorApi() {
         
         try {
             val response = app.get(url, referer = finalReferer)
-            val playerScript = response.document.selectXpath("//script[contains(text(),'var urlPlay')]").html()
-            
-            if (playerScript.isNotBlank()) {
-                val m3u8Url = playerScript.substringAfter("var urlPlay = '").substringBefore("'")
+            val text = response.text.replace("\\/", "/")
+            val m3u8Url = Regex("""urlPlay\s*=\s*["']([^"']+)["']""").find(text)?.groupValues?.get(1)
+                ?: Regex("""https?://[^\s"'<>\\]+\.m3u8[^\s"'<>\\]*""").find(text)?.value
+
+            if (!m3u8Url.isNullOrBlank()) {
                 val originUrl = try { URI(finalReferer).let { "${it.scheme}://${it.host}" } } catch (e: Exception) { mainUrl }
-                
+
                 val headers = mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Referer" to finalReferer,
                     "Origin" to originUrl
                 )
-                
+
                 sources.add(newExtractorLink(source = name, name = name, url = m3u8Url, type = ExtractorLinkType.M3U8) {
                     this.referer = finalReferer
                     this.quality = Qualities.Unknown.value
@@ -72,15 +76,17 @@ open class P2PExtractor : ExtractorApi() {
     data class HownetworkResponse(val file: String?, val link: String?, val label: String?)
 
     override suspend fun getUrl(url: String, referer: String?): List<ExtractorLink>? {
-        val id = url.substringAfter("id=").substringBefore("&")
-        val apiUrl = "$mainUrl/api2.php?id=$id"
+        val origin = originOf(url) ?: mainUrl
+        val id = url.substringAfter("id=", "").substringBefore("&")
+            .ifBlank { url.substringAfterLast("/").substringBefore("?") }
+        val apiUrl = "$origin/api2.php?id=$id"
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
             "Referer" to url,
-            "Origin" to mainUrl,
+            "Origin" to origin,
             "X-Requested-With" to "XMLHttpRequest"
         )
-        val formBody = mapOf("r" to "${embedOriginOf(referer)}/", "d" to "cloud.hownetwork.xyz")
+        val formBody = mapOf("r" to "${embedOriginOf(referer)}/", "d" to origin.substringAfter("://"))
         val sources = mutableListOf<ExtractorLink>()
         try {
             val response = app.post(apiUrl, headers = headers, data = formBody).text
@@ -88,7 +94,7 @@ open class P2PExtractor : ExtractorApi() {
             val videoUrl = json?.file ?: json?.link
             if (!videoUrl.isNullOrBlank()) {
                 sources.add(newExtractorLink(source = name, name = name, url = videoUrl, type = ExtractorLinkType.M3U8) {
-                    this.referer = mainUrl
+                    this.referer = origin
                     this.quality = Qualities.Unknown.value
                 })
             }
@@ -123,9 +129,10 @@ open class F16Extractor : ExtractorApi() {
         val sources = mutableListOf<ExtractorLink>()
         
         try {
+            val origin = originOf(url) ?: mainUrl
             val videoId = url.substringAfter("/e/").substringBefore("?")
-            val apiUrl = "$mainUrl/api/videos/$videoId/embed/playback"
-            val pageUrl = "$mainUrl/e/$videoId"
+            val apiUrl = "$origin/api/videos/$videoId/embed/playback"
+            val pageUrl = "$origin/e/$videoId"
             
             val viewerId = randomHex(32) 
             val deviceId = randomHex(32)
@@ -141,7 +148,7 @@ open class F16Extractor : ExtractorApi() {
             val headers = mapOf(
                 "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
                 "Referer" to pageUrl,
-                "Origin" to mainUrl,
+                "Origin" to origin,
                 "Content-Type" to "application/json",
                 "x-embed-origin" to embedOrigin.substringAfter("://"),
                 "x-embed-parent" to pageUrl,
@@ -179,7 +186,7 @@ open class F16Extractor : ExtractorApi() {
                                 url = source.url,
                                 type = ExtractorLinkType.M3U8
                             ) {
-                                this.referer = "$mainUrl/"
+                                this.referer = "$origin/"
                                 this.quality = getQualityFromName(source.label)
                             })
                         }

@@ -8,6 +8,8 @@ import org.json.JSONObject
 import org.jsoup.nodes.Element
 import java.net.URI
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import kotlinx.coroutines.CancellationException
 
 class LayarKacaProvider : MainAPI() {
@@ -15,6 +17,8 @@ class LayarKacaProvider : MainAPI() {
     override var mainUrl = "https://tv12.lk21official.cc"
     private var seriesUrl = "https://tv9.nontondrama.my"
     private var searchurl= "https://gudangvape.com"
+
+    private val cloudflareKiller by lazy { CloudflareKiller() }
 
     override var name = "LayarKaca"
     override val hasMainPage = true
@@ -94,7 +98,7 @@ class LayarKacaProvider : MainAPI() {
                 val title = item.getString("title")
                 val slug = item.getString("slug")
                 val type = item.getString("type")
-                val posterUrl = "https://poster.lk21.party/wp-content/uploads/" + item.optString("poster")
+                val posterUrl = "https://poster.assetsy.de/wp-content/uploads/" + item.optString("poster")
                 val posterheaders = mapOf("Referer" to getSafeBaseUrl(posterUrl))
 
                 when (type) {
@@ -236,43 +240,106 @@ class LayarKacaProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val response = app.get(serverUrl, referer = "${getSafeBaseUrl(pageUrl)}/")
-        val body = response.text.replace("\\/", "/")
-        val candidates = linkedSetOf<String>()
+        val server = Regex("""/iframe\d*/([^/?#]+)/""").find(serverUrl)?.groupValues?.get(1)?.lowercase()
+        val referer = "${getSafeBaseUrl(pageUrl)}/"
 
-        response.document.select("div.embed-container iframe, iframe").forEach { frame ->
-            frame.attr("data-src").ifBlank { frame.attr("src") }
-                .takeIf { it.isNotBlank() }
-                ?.let { candidates.add(it) }
+        val withV = if (serverUrl.contains("?")) serverUrl else "$serverUrl?v=1"
+        for (candidate in listOf(withV, serverUrl).distinct()) {
+            val count = AtomicInteger(0)
+            val counting: (ExtractorLink) -> Unit = { count.incrementAndGet(); callback(it) }
+            try {
+                scanPage(candidate, referer, server, 0, mutableSetOf(), subtitleCallback, counting)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e("LayarKaca", "Scan failed: $candidate (${e.message})")
+            }
+            if (count.get() > 0) return
+        }
+        Log.e("LayarKaca", "No links found for server=$server url=$serverUrl")
+    }
+
+    private suspend fun scanPage(
+        url: String,
+        referer: String,
+        server: String?,
+        depth: Int,
+        seen: MutableSet<String>,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        if (depth > 2 || !seen.add(url)) return
+
+        val response = app.get(url, referer = referer, interceptor = cloudflareKiller)
+        var body = response.text.replace("\\/", "/")
+        Log.d("LayarKaca", "scan[$depth] ${response.code} $url (${body.length} chars)")
+
+        if (body.contains("eval(function(p,a,c,k,e,d)")) {
+            runCatching { getAndUnpack(body) }.getOrNull()?.let { body += "\n" + it.replace("\\/", "/") }
         }
 
-        if (candidates.isEmpty()) {
-            Regex("""https?://[^\s"'<>\\]+\.m3u8[^\s"'<>\\]*""")
-                .findAll(body)
-                .forEach { candidates.add(it.value) }
-            Regex("""(?i)(?:iframe|embed|src|file|url)\s*[:=]\s*["']((?:https?:)?//[^"']+)["']""")
-                .findAll(body)
-                .forEach { candidates.add(it.groupValues[1]) }
-        }
+        val media = linkedSetOf<String>()
+        Regex("""https?://[^\s"'<>\\]+\.(?:m3u8|mp4)[^\s"'<>\\]*""", RegexOption.IGNORE_CASE)
+            .findAll(body).forEach { media.add(it.value) }
+        Regex("""urlPlay\s*=\s*["']([^"']+)["']""").find(body)?.groupValues?.get(1)
+            ?.let { resolveUrl(it, url) }?.let { media.add(it) }
 
-        if (candidates.isEmpty()) candidates.add(response.url.ifBlank { serverUrl })
-
-        candidates
-            .mapNotNull { resolveUrl(it, serverUrl) }
-            .filterNot { isJunkUrl(it) }
-            .distinct()
-            .forEach { link ->
-                Log.d("LayarKaca", "Resolved: $link")
+        val mediaLinks = media.filterNot { isJunkUrl(it) }
+        if (mediaLinks.isNotEmpty()) {
+            mediaLinks.forEach { link ->
+                Log.d("LayarKaca", "Media: $link")
                 if (link.contains(".m3u8", true)) {
-                    M3u8Helper.generateM3u8(
-                        source = name,
-                        streamUrl = link,
-                        referer = serverUrl
-                    ).forEach(callback)
+                    M3u8Helper.generateM3u8(source = name, streamUrl = link, referer = url).forEach(callback)
                 } else {
-                    loadExtractor(link, serverUrl, subtitleCallback, callback)
+                    callback(
+                        newExtractorLink(source = name, name = name, url = link) {
+                            this.referer = url
+                            this.quality = Qualities.Unknown.value
+                        }
+                    )
                 }
             }
+            return
+        }
+
+        val nested = linkedSetOf<String>()
+        response.document.select("iframe").forEach { frame ->
+            frame.attr("data-src").ifBlank { frame.attr("src") }
+                .takeIf { it.isNotBlank() }?.let { nested.add(it) }
+        }
+        if (nested.isEmpty()) {
+            Regex("""(?i)(?:iframe|embed|src|file|url)\s*[:=]\s*["']((?:https?:)?//[^"']+)["']""")
+                .findAll(body).forEach { nested.add(it.groupValues[1]) }
+        }
+
+        nested
+            .mapNotNull { resolveUrl(it, url) }
+            .filterNot { isJunkUrl(it) || it == url }
+            .distinct()
+            .forEach { link ->
+                Log.d("LayarKaca", "Nested[$depth]: $link")
+                val local = AtomicInteger(0)
+                val cb: (ExtractorLink) -> Unit = { local.incrementAndGet(); callback(it) }
+
+                try {
+                    loadExtractor(link, url, subtitleCallback, cb)
+                    if (local.get() == 0) serverFallback(server, link, url)?.forEach(cb)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.e("LayarKaca", "Extractor failed: $link (${e.message})")
+                }
+                if (local.get() == 0) {
+                    scanPage(link, url, server, depth + 1, seen, subtitleCallback, cb)
+                }
+            }
+    }
+
+    private suspend fun serverFallback(server: String?, link: String, referer: String): List<ExtractorLink>? {
+        return when (server) {
+            "p2p" -> if (link.contains("id=")) P2PExtractor().getUrl(link, referer) else null
+            "cast" -> if (link.contains("/e/")) F16Extractor().getUrl(link, referer) else null
+            "turbovip" -> EmturbovidExtractor().getUrl(link, referer)
+            else -> null
+        }
     }
 
     private fun resolveUrl(url: String, base: String): String? {
