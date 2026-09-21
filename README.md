@@ -2,7 +2,7 @@
 
 # 🩵 Hatsune Repo for CloudStream
 
-**A curated collection of CloudStream extensions for anime, donghua, movies, and TV series with Indonesian subtitles 🇮🇩**
+**A curated collection of CloudStream extensions for anime and donghua, with Indonesian subtitles 🇮🇩**
 
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
@@ -25,30 +25,16 @@
 | 3 | **AnimeSail** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
 | 4 | **Animexin** | 🇮🇩 ID | 🐉 Donghua |
 | 5 | **AnoBoy** | 🇮🇩 ID | 🌸 Anime |
-| 6 | **CineMax21** | 🇮🇩 ID | 🎬 Movies & Series |
-| 7 | **Donghub** | 🇮🇩 ID | 🐉 Donghua |
-| 8 | **Drakor** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
-| 9 | **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series |
-| 10 | **Dutamovie** | 🇮🇩 ID | 🎬 Movies & Series |
-| 11 | **HidoriStream** | 🇮🇩 ID | 🌸 Anime |
-| 12 | **Idlix** | 🇮🇩 ID | 🎬 Movies & Series |
-| 13 | **IndoMax21** | 🇮🇩 ID | 🔞 NSFW, 🎬 Movies & Series |
-| 14 | **JavHey** | 🇮🇩 ID | 🔞 NSFW |
-| 15 | **KlikXXI** | 🇮🇩 ID | 🎬 Movies & Series |
-| 16 | **Kuramanime** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
-| 17 | **Kuronime** | 🇮🇩 ID | 🌸 Anime |
-| 18 | **LayarAsia** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
-| 19 | **LayarKaca** | 🇮🇩 ID | 🎬 Movies & Series |
-| 20 | **MovieBox** | 🇮🇩 ID | 🎬 Movies & Series |
-| 21 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai |
-| 22 | **NgeFilm21** | 🇮🇩 ID | 🎬 Movies & Series |
-| 23 | **Nimegami** | 🇮🇩 ID | 🌸 Anime |
-| 24 | **Nomat** | 🇮🇩 ID | 🎬 Movies & Series |
-| 25 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
-| 26 | **OppaDrama** | 🇮🇩 ID | 🎭 K-Drama, 🎬 Movies & Series |
-| 27 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
-| 28 | **PencuriMovie** | 🇮🇩 ID | 🎬 Movies & Series |
-| 29 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
+| 6 | **Donghub** | 🇮🇩 ID | 🐉 Donghua |
+| 7 | **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series |
+| 8 | **HidoriStream** | 🇮🇩 ID | 🌸 Anime |
+| 9 | **Kuramanime** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
+| 10 | **Kuronime** | 🇮🇩 ID | 🌸 Anime |
+| 11 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai |
+| 12 | **Nimegami** | 🇮🇩 ID | 🌸 Anime |
+| 13 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
+| 14 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
+| 15 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
 
 > [!WARNING]
 > **Disclaimer & Legal Notice**
