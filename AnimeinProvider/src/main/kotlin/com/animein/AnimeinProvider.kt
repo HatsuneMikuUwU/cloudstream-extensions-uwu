@@ -2,6 +2,7 @@ package com.animein
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
@@ -9,6 +10,7 @@ import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import okhttp3.Interceptor
 
 class AnimeinProvider : MainAPI() {
     override var mainUrl = "https://xyz-api.animein.net"
@@ -26,9 +28,10 @@ class AnimeinProvider : MainAPI() {
     private val naniplayBase = "https://www.naniplay.com"
     private val apkVer = "5.2.2"
 
-    // Optional: can be filled after device auth / login
     private var keyClient: String = ""
     private var idUser: String = ""
+
+    private val cloudflareKiller by lazy { CloudflareKiller() }
 
     companion object {
         private const val MAX_SAFE_TEXT_BYTES = 4_500_000L
@@ -52,23 +55,32 @@ class AnimeinProvider : MainAPI() {
     }
 
     private fun commonParams(extra: Map<String, String> = emptyMap()): Map<String, String> {
-        val base = mutableMapOf(
-            "apk_ver" to apkVer
-        )
+        val base = mutableMapOf("apk_ver" to apkVer)
         if (keyClient.isNotBlank()) base["key_client"] = keyClient
         if (idUser.isNotBlank()) base["id_user"] = idUser
         base.putAll(extra)
         return base
     }
 
-    private fun headers(): Map<String, String> = mapOf(
-        "Accept" to "application/json, text/plain, */*",
-        "User-Agent" to "okhttp/4.12.0",
-        "Accept-Language" to "id-ID,id;q=0.9,en;q=0.8",
-        "X-Requested-With" to "com.okeko.animein",
-        "Origin" to "https://animein.net",
-        "Referer" to "https://animein.net/"
-    )
+    private fun headers(): Map<String, String> {
+        val h = mutableMapOf(
+            "Accept" to "application/json, text/plain, */*",
+            "User-Agent" to "okhttp/4.12.0",
+            "Accept-Language" to "id-ID,id;q=0.9,en;q=0.8",
+            "X-Requested-With" to "com.okeko.animein",
+            "Origin" to "https://animein.net",
+            "Referer" to "https://animein.net/"
+        )
+        // Merge CF cookies if available
+        runCatching {
+            cloudflareKiller.getCookieHeaders(mainUrl).forEach { (k, v) ->
+                h[k] = v
+            }
+        }
+        return h
+    }
+
+    private fun interceptor(): Interceptor = cloudflareKiller
 
     private fun NiceResponse.safeText(): String {
         val contentLength = headers["Content-Length"]?.toLongOrNull()
@@ -97,9 +109,9 @@ class AnimeinProvider : MainAPI() {
         if (body.contains("Just a moment", ignoreCase = true) ||
             body.contains("cf-browser-verification", ignoreCase = true) ||
             body.contains("cf-challenge", ignoreCase = true) ||
-            (body.contains("<html", ignoreCase = true) && !body.trimStart().startsWith("{"))
+            (body.contains("<html", ignoreCase = true) && !body.trimStart().startsWith("{") && !body.trimStart().startsWith("["))
         ) {
-            throw Exception("Cloudflare challenge or HTML response received")
+            throw Exception("Cloudflare challenge or HTML response")
         }
 
         return body
@@ -111,11 +123,12 @@ class AnimeinProvider : MainAPI() {
             "$mainUrl/$clean"
         }
         val allParams = commonParams(params)
-        val query = allParams.entries.joinToString("&") {
-            "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
-        }
-        val fullUrl = if (query.isNotEmpty()) "$base?$query" else base
-        val response = app.get(fullUrl, headers = headers())
+        val response = app.get(
+            base,
+            headers = headers(),
+            params = allParams,
+            interceptor = interceptor()
+        )
         return response.safeText()
     }
 
@@ -123,7 +136,10 @@ class AnimeinProvider : MainAPI() {
         try {
             val response = app.get(
                 "$bootUrl/data/setup/data",
-                headers = headers(),
+                headers = mapOf(
+                    "Accept" to "application/json",
+                    "User-Agent" to "okhttp/4.12.0"
+                ),
                 params = mapOf("apk_ver" to apkVer)
             )
             val resp = response.safeText()
@@ -133,6 +149,7 @@ class AnimeinProvider : MainAPI() {
                 mainUrl = domain.trimEnd('/')
             }
         } catch (_: Exception) {
+            // keep default
         }
     }
 
@@ -148,33 +165,34 @@ class AnimeinProvider : MainAPI() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         ensureDomain()
-        val raw = apiGet(request.data, mapOf("page" to page.toString()))
-        val items = parseMovieList(raw)
-        return newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
+        return try {
+            val raw = apiGet(request.data, mapOf("page" to page.toString()))
+            val items = parseMovieList(raw)
+            newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
+        } catch (_: Exception) {
+            newHomePageResponse(request.name, emptyList(), hasNext = false)
+        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         ensureDomain()
-        val raw = try {
-            apiGet("data/movie/find", mapOf(
-                "q" to query,
-                "query" to query,
-                "search" to query,
-                "keyword" to query,
-                "page" to "1"
-            ))
-        } catch (_: Exception) {
-            ""
+        val attempts = listOf(
+            "data/movie/find" to mapOf(
+                "q" to query, "query" to query, "search" to query,
+                "keyword" to query, "page" to "1"
+            ),
+            "3/2/explore/movie" to mapOf("q" to query, "search" to query, "page" to "1"),
+            "data/home/list" to mapOf("q" to query, "search" to query, "page" to "1")
+        )
+        for ((path, params) in attempts) {
+            try {
+                val raw = apiGet(path, params)
+                val list = parseMovieList(raw)
+                if (list.isNotEmpty()) return list
+            } catch (_: Exception) {
+            }
         }
-        val list = parseMovieList(raw)
-        if (list.isNotEmpty()) return list
-
-        return try {
-            val raw2 = apiGet("3/2/explore/movie", mapOf("q" to query, "search" to query))
-            parseMovieList(raw2)
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return emptyList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -187,36 +205,35 @@ class AnimeinProvider : MainAPI() {
             return null
         }
         val detailNode = try {
-            parseJson<JsonNode>(detailRaw).path("data")
+            val root = parseJson<JsonNode>(detailRaw)
+            when {
+                root.has("data") && root.path("data").isObject -> root.path("data")
+                root.isObject -> root
+                else -> return null
+            }
         } catch (_: Exception) {
             return null
         }
 
-        val title = detailNode.path("title").asText(null)
-            ?: detailNode.path("name").asText(null)
-            ?: "Anime $id"
-        val poster = detailNode.path("image_poster").asText(null)
-            ?: detailNode.path("image").asText(null)
-            ?: detailNode.path("poster").asText(null)
-        val cover = detailNode.path("image_cover").asText(null)
-        val plot = detailNode.path("synopsis").asText(null)
-            ?: detailNode.path("sinopsis").asText(null)
-        val year = detailNode.path("year").asText(null)?.toIntOrNull()
-        val status = getStatus(detailNode.path("status").asText(null))
-        val type = getType(detailNode.path("type").asText(null))
+        val title = firstText(detailNode, "title", "name", "judul") ?: "Anime $id"
+        val poster = firstText(detailNode, "image_poster", "image", "poster", "cover", "thumbnail")
+        val cover = firstText(detailNode, "image_cover", "cover", "banner")
+        val plot = firstText(detailNode, "synopsis", "sinopsis", "description", "plot")
+        val year = firstText(detailNode, "year", "tahun")?.toIntOrNull()
+        val status = getStatus(firstText(detailNode, "status", "status_movie"))
+        val type = getType(firstText(detailNode, "type", "tipe"))
         val tags = mutableListOf<String>()
         val genreNode = detailNode.path("genre")
-        if (genreNode.isArray) {
-            genreNode.forEach { tags.add(it.asText()) }
-        } else if (genreNode.isTextual) {
-            tags.addAll(genreNode.asText().split(",", "|").map { it.trim() }.filter { it.isNotBlank() })
+        when {
+            genreNode.isArray -> genreNode.forEach { tags.add(it.asText()) }
+            genreNode.isTextual -> tags.addAll(
+                genreNode.asText().split(",", "|", "/").map { it.trim() }.filter { it.isNotBlank() }
+            )
         }
-        val studio = detailNode.path("studio").asText(null)
-        if (!studio.isNullOrBlank()) tags.add(studio)
+        firstText(detailNode, "studio")?.let { tags.add(it) }
 
         val episodes = try {
-            val epRaw = apiGet("3/2/movie/episode/$id")
-            parseEpisodes(epRaw)
+            parseEpisodes(apiGet("3/2/movie/episode/$id"))
         } catch (_: Exception) {
             emptyList()
         }
@@ -245,11 +262,10 @@ class AnimeinProvider : MainAPI() {
             apiGet("3/2/episode/streamnew/$epId")
         } catch (_: Exception) {
             try {
-                apiGet("data/movie/stream/use_server_user", mapOf(
-                    "idEpisode" to epId,
-                    "id_episode" to epId,
-                    "id" to epId
-                ))
+                apiGet(
+                    "data/movie/stream/use_server_user",
+                    mapOf("idEpisode" to epId, "id_episode" to epId, "id" to epId)
+                )
             } catch (_: Exception) {
                 ""
             }
@@ -261,25 +277,15 @@ class AnimeinProvider : MainAPI() {
             try {
                 val root = parseJson<JsonNode>(streamRaw)
                 val dataNode = if (root.has("data")) root.path("data") else root
-
-                val servers = mutableListOf<Pair<String, String>>() // name to link
+                val servers = mutableListOf<Pair<String, String>>()
 
                 fun collect(node: JsonNode) {
                     when {
                         node.isArray -> node.forEach { collect(it) }
                         node.isObject -> {
-                            val link = node.path("link").asText(null)
-                                ?: node.path("url").asText(null)
-                                ?: node.path("file").asText(null)
-                                ?: node.path("src").asText(null)
-                            val name = node.path("name").asText(null)
-                                ?: node.path("quality").asText(null)
-                                ?: node.path("server").asText(null)
-                                ?: node.path("label").asText(null)
-                                ?: "Server"
-                            if (!link.isNullOrBlank()) {
-                                servers.add(name to link)
-                            }
+                            val link = firstText(node, "link", "url", "file", "src", "stream")
+                            val name = firstText(node, "name", "quality", "server", "label") ?: "Server"
+                            if (!link.isNullOrBlank()) servers.add(name to link)
                             listOf("list", "servers", "sources", "data", "stream", "videos").forEach { key ->
                                 if (node.has(key)) collect(node.path(key))
                             }
@@ -295,7 +301,7 @@ class AnimeinProvider : MainAPI() {
                         }
                         link.contains(".m3u8") || link.contains(".mp4") ||
                         (link.startsWith("http") && !link.contains("naniplay")) -> {
-                            callback.invoke(
+                            callback(
                                 newExtractorLink(
                                     source = this.name,
                                     name = name,
@@ -323,41 +329,67 @@ class AnimeinProvider : MainAPI() {
                 if (loadNaniplay("$naniplayBase/api/source/$epId", "Naniplay", callback)) {
                     found = true
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
 
         return found
+    }
+
+    // ---------- helpers ----------
+
+    private fun firstText(node: JsonNode, vararg keys: String): String? {
+        for (k in keys) {
+            val v = node.path(k)
+            if (!v.isMissingNode && !v.isNull) {
+                val t = v.asText(null)
+                if (!t.isNullOrBlank() && t != "null") return t
+            }
+        }
+        return null
     }
 
     private fun parseMovieList(raw: String): List<SearchResponse> {
         if (raw.isBlank()) return emptyList()
         return try {
             val root = parseJson<JsonNode>(raw)
-            val dataNode = if (root.has("data")) root.path("data") else root
+            val candidates = mutableListOf<JsonNode>()
 
-            val listNode = when {
-                dataNode.isArray -> dataNode
-                dataNode.has("list") -> dataNode.path("list")
-                dataNode.has("data") -> dataNode.path("data")
-                dataNode.has("movies") -> dataNode.path("movies")
-                dataNode.has("items") -> dataNode.path("items")
-                else -> dataNode
+            fun collectArrays(node: JsonNode, depth: Int = 0) {
+                if (depth > 4) return
+                when {
+                    node.isArray && node.size() > 0 -> {
+                        // Heuristic: array of objects that look like movies
+                        val first = node[0]
+                        if (first != null && first.isObject &&
+                            (first.has("id") || first.has("id_movie") || first.has("title") || first.has("image_poster"))
+                        ) {
+                            candidates.add(node)
+                        } else {
+                            node.forEach { collectArrays(it, depth + 1) }
+                        }
+                    }
+                    node.isObject -> {
+                        listOf("list", "data", "movies", "items", "results", "anime", "home").forEach { key ->
+                            if (node.has(key)) collectArrays(node.path(key), depth + 1)
+                        }
+                        // also walk all fields
+                        node.fields().forEachRemaining { (_, v) ->
+                            if (v.isArray || v.isObject) collectArrays(v, depth + 1)
+                        }
+                    }
+                }
             }
+            collectArrays(root)
 
-            if (!listNode.isArray) return emptyList()
+            val listNode = candidates.firstOrNull() ?: return emptyList()
 
             listNode.mapNotNull { item ->
-                val id = item.path("id").asText(null)
-                    ?: item.path("id_movie").asText(null)
-                    ?: return@mapNotNull null
-                val title = item.path("title").asText(null)
-                    ?: item.path("name").asText(null)
-                    ?: return@mapNotNull null
-                val poster = item.path("image_poster").asText(null)
-                    ?: item.path("image").asText(null)
-                    ?: item.path("poster").asText(null)
-                    ?: item.path("cover").asText(null)
-                val type = getType(item.path("type").asText(null))
+                if (!item.isObject) return@mapNotNull null
+                val id = firstText(item, "id", "id_movie", "movie_id", "idMovie") ?: return@mapNotNull null
+                val title = firstText(item, "title", "name", "judul") ?: return@mapNotNull null
+                val poster = firstText(item, "image_poster", "image", "poster", "cover", "thumbnail", "poster_url")
+                val type = getType(firstText(item, "type", "tipe"))
                 val href = "$mainUrl/movie/$id"
 
                 newAnimeSearchResponse(title, href, type) {
@@ -373,29 +405,44 @@ class AnimeinProvider : MainAPI() {
         if (raw.isBlank()) return emptyList()
         return try {
             val root = parseJson<JsonNode>(raw)
-            val dataNode = if (root.has("data")) root.path("data") else root
+            val candidates = mutableListOf<JsonNode>()
 
-            val listNode = when {
-                dataNode.isArray -> dataNode
-                dataNode.has("list") -> dataNode.path("list")
-                dataNode.has("episodes") -> dataNode.path("episodes")
-                dataNode.has("data") -> dataNode.path("data")
-                else -> dataNode
+            fun collectArrays(node: JsonNode, depth: Int = 0) {
+                if (depth > 4) return
+                when {
+                    node.isArray && node.size() > 0 -> {
+                        val first = node[0]
+                        if (first != null && first.isObject &&
+                            (first.has("id") || first.has("id_episode") || first.has("index") || first.has("title"))
+                        ) {
+                            candidates.add(node)
+                        } else {
+                            node.forEach { collectArrays(it, depth + 1) }
+                        }
+                    }
+                    node.isObject -> {
+                        listOf("list", "data", "episodes", "items", "results").forEach { key ->
+                            if (node.has(key)) collectArrays(node.path(key), depth + 1)
+                        }
+                        node.fields().forEachRemaining { (_, v) ->
+                            if (v.isArray || v.isObject) collectArrays(v, depth + 1)
+                        }
+                    }
+                }
             }
+            collectArrays(root)
 
-            if (!listNode.isArray) return emptyList()
+            val listNode = candidates.firstOrNull() ?: return emptyList()
 
             listNode.mapIndexed { index, item ->
-                val epId = item.path("id").asText(null)
-                    ?: item.path("id_episode").asText(null)
-                    ?: (index + 1).toString()
-                val title = item.path("title").asText(null)
-                    ?: item.path("name").asText(null)
+                if (!item.isObject) return@mapIndexed null
+                val epId = firstText(item, "id", "id_episode", "episode_id") ?: (index + 1).toString()
+                val title = firstText(item, "title", "name")
                 val num = item.path("index").asInt(0).takeIf { it > 0 }
                     ?: item.path("number").asInt(0).takeIf { it > 0 }
                     ?: item.path("episode").asInt(0).takeIf { it > 0 }
                     ?: (index + 1)
-                val poster = item.path("image").asText(null)
+                val poster = firstText(item, "image", "poster", "thumbnail")
 
                 newEpisode("$mainUrl/episode/$epId") {
                     this.name = title ?: "Episode $num"
@@ -403,7 +450,7 @@ class AnimeinProvider : MainAPI() {
                     this.posterUrl = fixUrlNull(poster)
                     this.data = epId
                 }
-            }.sortedBy { it.episode }
+            }.filterNotNull().sortedBy { it.episode }
         } catch (_: Exception) {
             emptyList()
         }
@@ -423,13 +470,10 @@ class AnimeinProvider : MainAPI() {
                     "Accept" to "application/json",
                     "Content-Type" to "application/x-www-form-urlencoded"
                 ),
-                data = mapOf(
-                    "r" to "",
-                    "d" to "www.naniplay.com"
-                )
+                data = mapOf("r" to "", "d" to "www.naniplay.com"),
+                interceptor = interceptor()
             )
             val resp = response.safeText()
-
             val root = parseJson<JsonNode>(resp)
             val dataList = root.path("data")
             if (!dataList.isArray) return false
@@ -438,7 +482,7 @@ class AnimeinProvider : MainAPI() {
             dataList.forEach { src ->
                 val file = src.path("file").asText(null) ?: return@forEach
                 val label = src.path("label").asText(null) ?: src.path("type").asText(null) ?: "Default"
-                callback.invoke(
+                callback(
                     newExtractorLink(
                         source = sourceName,
                         name = "$sourceName - $label",
