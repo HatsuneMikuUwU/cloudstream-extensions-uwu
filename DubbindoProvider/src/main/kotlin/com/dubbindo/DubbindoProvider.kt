@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import com.dubbindo.BuildConfig
+import java.net.URLEncoder
 
 class DubbindoProvider : MainAPI() {
     override var mainUrl = "https://www.dubbindo.site"
@@ -24,6 +25,7 @@ class DubbindoProvider : MainAPI() {
         TvType.Movie,
         TvType.Cartoon,
         TvType.Anime,
+        TvType.AnimeMovie,
     )
 
     private val USERNAME = BuildConfig.DUBBINDO_USERNAME
@@ -152,72 +154,151 @@ class DubbindoProvider : MainAPI() {
         document.selectFirst("div.pt_video_player div.video-processing") != null
 
     override val mainPage = mainPageOf(
-        "$mainUrl/videos/latest"              to "Latest Update",
-        "$mainUrl/videos/top"                  to "Most Viewed",
-        "$mainUrl/videos/trending"         to "Trending",
-        "$mainUrl/videos/category/1"      to "Movie",
+        "$mainUrl/videos/latest"          to "Latest Update",
+        "$mainUrl/videos/top"            to "Most Viewed",
+        "$mainUrl/videos/trending"       to "Trending",
+        "$mainUrl/videos/category/1"     to "Movie",
         "$mainUrl/videos/category/3"     to "TV Series",
         "$mainUrl/videos/category/5"     to "Anime Series",
         "$mainUrl/videos/category/4"     to "Anime Movie",
         "$mainUrl/videos/category/other" to "Other"
     )
 
+    private val cardSelector = "div.video-list, div.video-wrapper"
+
+    private val invisibleRegex = Regex("""[\u2063\u200B\u200C\u200D\uFEFF]""")
+    private val dubbingRegex   = Regex("""(?i)\s*[\[(]?\s*dub(?:b(?:ing)?)?\s+indo(?:o*nesia)?\b\s*[\])]?""")
+    private val yearRegex      = Regex("""\((\d{4})\)""")
+
+    private fun String.clean(): String = this
+        .replace(invisibleRegex, "")
+        .replace(Regex("""&(?:amp;)+"""), "&")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+
+    private fun String.cleanTitle(): String {
+        val base = clean().replace(" | UVideo", "").trim()
+        val cleaned = base
+            .replace(dubbingRegex, " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+            .trimEnd('-', '.', ' ')
+            .trimStart('-', ' ')
+        return cleaned.ifBlank { base }
+    }
+
+    private fun parseEpisodeInfo(title: String): Pair<Int?, Int?>? {
+        Regex("""(?i)\bS(\d{1,2})\s*E(\d{1,4})\b""").find(title)?.let {
+            return it.groupValues[1].toIntOrNull() to it.groupValues[2].toIntOrNull()
+        }
+        val season = Regex("""(?i)\b(?:season|musim)\s*(\d{1,2})\b""").find(title)
+            ?.groupValues?.get(1)?.toIntOrNull()
+        val episode = Regex("""(?i)\bep(?:isode|s)?\.?\s*\(?\s*(\d{1,4})\b""").find(title)
+            ?.groupValues?.get(1)?.toIntOrNull()
+            ?: Regex("""\s*-\s*(\d{1,3})(?=\s*(?:[(\[]|$))""").find(title)
+                ?.groupValues?.get(1)?.toIntOrNull()
+        if (season != null || episode != null) return season to episode
+        if (Regex("""(?i)\b(?:eps?|episode)\b""").containsMatchIn(title)) return null to null
+        return null
+    }
+
+    private fun typeFromCategory(url: String?): TvType? =
+        when (url?.trimEnd('/')?.substringAfterLast('/')) {
+            "1"  -> TvType.Movie
+            "3"  -> TvType.TvSeries
+            "4"  -> TvType.AnimeMovie
+            "5"  -> TvType.Anime
+            else -> null
+        }
+
+    private fun isMovieType(type: TvType) = type == TvType.Movie || type == TvType.AnimeMovie
+
+    private fun Element.toVideoResult(typeHint: TvType? = null): SearchResponse? {
+        val anchor = selectFirst("div.video-list-image a, div.video-thumb a, div.ra-thumb a, a[href*='/watch/']")
+            ?: selectFirst("a[href]")
+            ?: return null
+        val href = fixUrlNull(anchor.attr("href")) ?: return null
+
+        val rawTitle = selectFirst("h4[title]")?.attr("title")
+            ?: selectFirst("div.video-list-title h4, div.video-title h4, div.video-title a")?.text()
+            ?: selectFirst("h4")?.text()
+            ?: selectFirst("img[alt]")?.attr("alt")
+            ?: return null
+        val title = rawTitle.cleanTitle()
+        if (title.isEmpty()) return null
+
+        val img = selectFirst("img")
+        val poster = fixUrlNull(img?.attr("data-src")?.ifBlank { null } ?: img?.attr("src"))
+
+        val type = typeHint ?: if (parseEpisodeInfo(title) != null) TvType.TvSeries else TvType.Movie
+
+        return if (isMovieType(type)) {
+            newMovieSearchResponse(title, href, type) {
+                posterUrl     = poster
+                posterHeaders = mapOf("Referer" to mainUrl)
+            }
+        } else {
+            newTvSeriesSearchResponse(title, href, type) {
+                posterUrl     = poster
+                posterHeaders = mapOf("Referer" to mainUrl)
+            }
+        }
+    }
+
+    private fun Element.toRelatedResult(): SearchResponse? =
+        toVideoResult(typeFromCategory(selectFirst("div.video-category a")?.attr("href")))
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         ensureSession()
+        val hint = typeFromCategory(request.data)
         val document = app.get("${request.data}?page_id=$page", headers = authedHeaders).document
-        val home = document.select("div.video-wrapper").mapNotNull { it.toCategoryResult() }
+        val home = document.select(cardSelector)
+            .mapNotNull { it.toVideoResult(hint) }
+            .distinctBy { it.url }
+        val hasNext = home.isNotEmpty() &&
+            document.select("ul.pagination a[href]").any { a ->
+                Regex("""page_id=(\d+)""").find(a.attr("href"))
+                    ?.groupValues?.get(1)?.toIntOrNull()
+                    ?.let { it > page } == true
+            }
         return newHomePageResponse(
             list = HomePageList(name = request.name, list = home, isHorizontalImages = true),
-            hasNext = home.isNotEmpty()
+            hasNext = hasNext
         )
-    }
-
-    private fun Element.toCategoryResult(): TvSeriesSearchResponse? {
-        val title = selectFirst("div.video-title h4")?.text()?.trim() ?: return null
-        if (title.isEmpty()) return null
-        val href = selectFirst("div.video-thumb a")?.attr("href")
-            ?: selectFirst("a")?.attr("href") ?: return null
-        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            posterUrl     = fixUrlNull(selectFirst("div.video-thumb img")?.attr("src"))
-            posterHeaders = mapOf("Referer" to mainUrl)
-        }
-    }
-
-    private fun Element.toSearchResult(): TvSeriesSearchResponse? {
-        val title = selectFirst("div.video-list-title h4")?.text()?.trim()
-            ?: selectFirst("h4")?.text()?.trim() ?: return null
-        if (title.isEmpty()) return null
-        val href = selectFirst("div.video-list-image a")?.attr("href")
-            ?: selectFirst("a")?.attr("href") ?: return null
-        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            posterUrl     = fixUrlNull(selectFirst("img")?.attr("src"))
-            posterHeaders = mapOf("Referer" to mainUrl)
-        }
-    }
-
-    private fun Element.toRelatedResult(): TvSeriesSearchResponse? {
-        val title = selectFirst("div.video-title a")?.text()?.trim()
-            ?: selectFirst("a")?.text()?.trim() ?: return null
-        val href = selectFirst("div.ra-thumb a")?.attr("href")
-            ?: selectFirst("a")?.attr("href") ?: return null
-        return newTvSeriesSearchResponse(title, href, TvType.TvSeries) {
-            posterUrl     = fixUrlNull(selectFirst("img")?.attr("src"))
-            posterHeaders = mapOf("Referer" to mainUrl)
-        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         ensureSession()
+        val keyword = URLEncoder.encode(query, "UTF-8")
         val results = mutableListOf<SearchResponse>()
+        val seen = mutableSetOf<String>()
         for (i in 1..10) {
-            val page = app.get(
-                "$mainUrl/search?keyword=$query&page_id=$i",
+            val items = app.get(
+                "$mainUrl/search?keyword=$keyword&page_id=$i",
                 headers = authedHeaders
-            ).document.select("div.video-list").mapNotNull { it.toSearchResult() }
-            results.addAll(page)
-            if (page.isEmpty()) break
+            ).document.select(cardSelector).mapNotNull { it.toVideoResult() }
+            val fresh = items.filter { seen.add(it.url) }
+            if (fresh.isEmpty()) break
+            results.addAll(fresh)
         }
         return results
+    }
+
+    private val qualityInNameRegex = Regex("""(?i)(?<![0-9])(2160|1440|1080|720|576|480|360|240)p""")
+
+    private fun resolveRes(src: String, el: Element): String {
+        qualityInNameRegex.find(src)?.groupValues?.get(1)?.let { return it }
+
+        val label = listOf(el.attr("data-quality"), el.attr("label"), el.attr("title"))
+            .firstOrNull { it.isNotBlank() }.orEmpty().trim()
+        Regex("""(\d{3,4})""").find(label)?.groupValues?.get(1)?.let { return it }
+        when (label.lowercase()) {
+            "4k", "uhd"        -> return "2160"
+            "fhd", "full hd"   -> return "1080"
+            "hd"               -> return "720"
+            "sd"               -> return "480"
+        }
+        return el.attr("res").replace(Regex("[^0-9]"), "")
     }
 
     private fun parseVideoSources(doc: Document): List<Video> =
@@ -225,16 +306,16 @@ class DubbindoProvider : MainAPI() {
             val src = el.attr("src").trim().ifEmpty { return@mapNotNull null }
             Video(
                 src  = src,
-                res  = el.attr("res").ifBlank { el.attr("data-quality").replace(Regex("[^0-9]"), "") },
+                res  = resolveRes(src, el),
                 type = el.attr("type").ifBlank { "video/mp4" }
             )
-        }
+        }.distinctBy { it.src }
 
-    private suspend fun fetchVideoSources(url: String): Pair<Document, List<Video>> {
-        var doc    = app.get(url, headers = authedHeaders).document
+    private suspend fun fetchVideoSources(url: String, initialDoc: Document? = null): List<Video> {
+        var doc    = initialDoc ?: app.get(url, headers = authedHeaders).document
         var videos = parseVideoSources(doc)
 
-        if (videos.isNotEmpty()) return doc to videos
+        if (videos.isNotEmpty()) return videos
 
         if (isSubscribeWall(doc)) {
             subscribeChannel(doc, url)
@@ -242,7 +323,7 @@ class DubbindoProvider : MainAPI() {
             videos = parseVideoSources(doc)
         }
 
-        if (videos.isNotEmpty()) return doc to videos
+        if (videos.isNotEmpty()) return videos
 
         sessionCookie = ""
         if (doLogin()) {
@@ -256,7 +337,30 @@ class DubbindoProvider : MainAPI() {
             }
         }
 
-        return doc to videos
+        return videos
+    }
+
+    private fun parseTags(doc: Document, title: String): List<String> {
+        fun key(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+        val ignore = setOf("bahasa indonesia", "indonesia", "dubbing indonesia", "dub indonesia", "dubbing")
+        val keywords = doc.selectFirst("meta[name=keywords]")?.attr("content").orEmpty()
+            .split(",")
+            .map { it.clean() }
+            .filter { it.isNotBlank() && it.lowercase() !in ignore }
+        val titleKey = key(title)
+        val first = keywords.firstOrNull()?.let { key(it) }
+        val dropFirst = first != null && first.isNotEmpty() &&
+            (titleKey.contains(first) || first.contains(titleKey))
+        return (if (dropFirst) keywords.drop(1) else keywords).distinct()
+    }
+
+    private fun parsePlot(doc: Document, selector: String): String? {
+        val el = doc.selectFirst(selector)?.clone() ?: return null
+        el.select("a").remove()
+        return el.text().clean()
+            .replace(Regex("""(?i)\s*download\s*:?\s*$"""), "")
+            .trim()
+            .ifBlank { null }
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -264,43 +368,61 @@ class DubbindoProvider : MainAPI() {
 
         val document = app.get(url, headers = authedHeaders).document
 
-        val title = (document.selectFirst("meta[name=title]")?.attr("content")
-            ?: document.title()).replace(" | UVideo", "").trim()
+        val title = (document.selectFirst("h1[itemprop=title]")?.text()
+            ?: document.selectFirst("meta[name=title]")?.attr("content")
+            ?: document.selectFirst("meta[property=og:title]")?.attr("content")
+            ?: document.title()).cleanTitle()
         if (title.isEmpty()) return null
 
         val poster = document.selectFirst("meta[property=og:image]")?.attr("content")
-        val tags   = document.select("div.pt_categories li a").map { it.text() }
+            ?: document.selectFirst("video#my-video")?.attr("poster")
+        val tags   = parseTags(document, title)
+        val year   = yearRegex.find(title)?.groupValues?.get(1)?.toIntOrNull()
+        val recommendations = document.select("div.related-video-wrapper")
+            .mapNotNull { it.toRelatedResult() }
+            .distinctBy { it.url }
 
-        return if (url.contains("/articles/read/")) {
-            val description    = document.selectFirst("div.read-article-description article")?.text()
-            val videoLinks     = document.select("div.read-article-text a")
+        if (url.contains("/articles/read/")) {
+            val description = parsePlot(document, "div.read-article-description article")
+            val videoLinks  = document.select("div.read-article-text a")
                 .map { it.attr("href") }.filter { it.isNotBlank() }
-            val recommendations = document.select("div.related-video-wrapper")
-                .mapNotNull { it.toRelatedResult() }
-            newMovieLoadResponse(title, url, TvType.Movie, videoLinks.toJson()) {
+            return newMovieLoadResponse(title, url, TvType.Movie, videoLinks.toJson()) {
                 posterUrl = poster; plot = description
                 this.tags = tags; this.recommendations = recommendations
             }
-        } else {
-            val description = document.select("div.watch-video-description p")
-                .text().replace("\u2063", "").trim()
-            val recommendations = document.select("div.related-video-wrapper")
-                .mapNotNull { it.toRelatedResult() }
-                
-            if (isVideoInQueue(document)) {
-                return newMovieLoadResponse(title, url, TvType.Movie, "[]") {
-                    posterUrl = poster
-                    plot = "⏳ Video ini sedang dalam antrian pemrosesan.\nHarap buka kembali dalam beberapa menit atau jam."
-                    this.tags = tags
-                }
+        }
+
+        val description = parsePlot(document, "div.watch-video-description p")
+
+        if (isVideoInQueue(document)) {
+            return newMovieLoadResponse(title, url, TvType.Movie, "[]") {
+                posterUrl = poster
+                plot = "⏳ Video ini sedang dalam antrian pemrosesan.\nHarap buka kembali dalam beberapa menit atau jam."
+                this.tags = tags
             }
+        }
 
-            subscribeChannel(document, url)
+        val videosJson = fetchVideoSources(url, document).toJson()
 
-            val (_, videos) = fetchVideoSources(url)
-
-            newMovieLoadResponse(title, url, TvType.Movie, videos.toJson()) {
-                posterUrl = poster; plot = description
+        val episodeInfo = parseEpisodeInfo(title)
+        return if (episodeInfo != null) {
+            val (season, episode) = episodeInfo
+            newTvSeriesLoadResponse(
+                title, url, TvType.TvSeries,
+                listOf(
+                    newEpisode(videosJson) {
+                        this.name    = title
+                        this.season  = season
+                        this.episode = episode
+                    }
+                )
+            ) {
+                this.posterUrl = poster; this.year = year; this.plot = description
+                this.tags = tags; this.recommendations = recommendations
+            }
+        } else {
+            newMovieLoadResponse(title, url, TvType.Movie, videosJson) {
+                this.posterUrl = poster; this.year = year; this.plot = description
                 this.tags = tags; this.recommendations = recommendations
             }
         }
