@@ -2,6 +2,7 @@ package com.donghub
 
 import org.jsoup.nodes.Element
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 
@@ -9,12 +10,28 @@ class DonghubProvider : MainAPI() {
     companion object {
         var context: android.content.Context? = null
     }
-    override var mainUrl = "https://donghub.vip"
+    override var mainUrl = "https://donghive.vip"
     override var name = "Donghub"
     override val hasMainPage = true
     override var lang = "id"
     override val hasDownloadSupport = true
     override val supportedTypes = setOf(TvType.Movie, TvType.Anime)
+
+    private val cloudflareKiller by lazy { CloudflareKiller() }
+
+    private val posterHeaders: Map<String, String>
+        get() {
+            val base = mutableMapOf(
+                "Referer" to "$mainUrl/",
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+                "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            )
+            runCatching { cloudflareKiller.getCookieHeaders(mainUrl).toMap() }
+                .getOrNull()
+                ?.forEach { (k, v) -> base[k] = v }
+            return base
+        }
 
     override val mainPage = mainPageOf(
         "anime/?order=update" to "Latest Releases",
@@ -24,7 +41,7 @@ class DonghubProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get("$mainUrl/${request.data}&page=$page").document
+        val document = app.get("$mainUrl/${request.data}&page=$page", referer = "$mainUrl/", interceptor = cloudflareKiller).document
         val items = document.select("div.listupd > article").mapNotNull { it.toSearchResult() }
         return newHomePageResponse(
             HomePageList(request.name, items, isHorizontalImages = false),
@@ -32,19 +49,22 @@ class DonghubProvider : MainAPI() {
         )
     }
 
-    private fun Element.toSearchResult(): SearchResponse {
-        val title = select("div.bsx > a").attr("title").trim()
-        val href = fixUrl(select("div.bsx > a").attr("href"))
-        val poster = fixUrlNull(selectFirst("div.bsx > a img")?.getsrcAttribute())
+    private fun Element.toSearchResult(): SearchResponse? {
+        val a = selectFirst("div.bsx > a") ?: return null
+        val title = a.attr("title").trim().ifEmpty { selectFirst("div.tt h2")?.text()?.trim().orEmpty() }
+        val href = fixUrl(a.attr("href"))
+        if (title.isEmpty() || href.isEmpty()) return null
+        val poster = a.selectFirst("img").getImageAttr()
         return newAnimeSearchResponse(title, href, TvType.Anime) {
             this.posterUrl = poster
+            this.posterHeaders = this@DonghubProvider.posterHeaders
         }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val list = mutableListOf<SearchResponse>()
         for (i in 1..3) {
-            val document = app.get("$mainUrl/page/$i/?s=$query").document
+            val document = app.get("$mainUrl/page/$i/?s=$query", referer = "$mainUrl/", interceptor = cloudflareKiller).document
             val result = document.select("div.listupd > article").mapNotNull { it.toSearchResult() }
             if (result.isEmpty()) break
             list.addAll(result)
@@ -53,14 +73,16 @@ class DonghubProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).document
+        val document = app.get(url, referer = "$mainUrl/", interceptor = cloudflareKiller).document
         val title = document.selectFirst("h1.entry-title")?.text().orEmpty()
         val description = document.selectFirst("div.entry-content")?.text()?.trim()
         val typeText = document.selectFirst(".spe")?.text().orEmpty()
         val isMovie = typeText.contains("Movie", true)
 
-        var poster = document.select("div.ime > img").first()?.getsrcAttribute()
-            ?: document.select("meta[property=og:image]").attr("content")
+        val poster = document.selectFirst("div.bigcontent div.thumb img").getImageAttr()
+            ?: document.selectFirst("div.thumb img").getImageAttr()
+            ?: document.selectFirst("div.ime > img").getImageAttr()
+            ?: document.selectFirst("meta[property=og:image]")?.attr("content")?.trim()?.takeIf { it.isNotEmpty() }
 
         val epBlocks =
             document.select(".eplister li").ifEmpty {
@@ -81,6 +103,7 @@ class DonghubProvider : MainAPI() {
 
             newTvSeriesLoadResponse(title, url, TvType.Anime, episodes) {
                 this.posterUrl = fixUrlNull(poster)
+                this.posterHeaders = this@DonghubProvider.posterHeaders
                 this.plot = description
             }
         } else {
@@ -90,6 +113,7 @@ class DonghubProvider : MainAPI() {
 
             newMovieLoadResponse(title, movieLink, TvType.Movie, movieLink) {
                 this.posterUrl = fixUrlNull(poster)
+                this.posterHeaders = this@DonghubProvider.posterHeaders
                 this.plot = description
             }
         }
@@ -101,7 +125,7 @@ class DonghubProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
+        val document = app.get(data, referer = "$mainUrl/", interceptor = cloudflareKiller).document
         document.select(".mobius option").forEach { item ->
             val base64 = item.attr("value")
             if (base64.isNotBlank()) {
@@ -114,13 +138,18 @@ class DonghubProvider : MainAPI() {
         return true
     }
 
-    private fun Element.getsrcAttribute(): String {
-        val src = this.attr("src")
-        val dataSrc = this.attr("data-src")
-        return when {
-            dataSrc.startsWith("http") -> dataSrc
-            src.startsWith("http") -> src
-            else -> ""
+    private fun Element?.getImageAttr(): String? {
+        if (this == null) return null
+        val attrs = listOf("data-src", "data-lazy-src", "data-original", "data-cfsrc", "data-lazy", "src")
+        for (a in attrs) {
+            val v = this.attr(a).trim()
+            if (v.isNotEmpty() && !v.startsWith("data:")) return fixUrlNull(v)
         }
+        val srcset = this.attr("data-srcset").ifBlank { this.attr("srcset") }.trim()
+        if (srcset.isNotEmpty()) {
+            val first = srcset.split(",").firstOrNull()?.trim()?.substringBefore(" ")
+            if (!first.isNullOrBlank() && !first.startsWith("data:")) return fixUrlNull(first)
+        }
+        return null
     }
 }
