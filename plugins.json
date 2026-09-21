@@ -338,7 +338,7 @@
             "Miku"
         ],
         "description": "Winbu \u2014 Streaming Anime & Series with Indonesian Subtitles",
-        "fileSize": 49883,
+        "fileSize": 50645,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -349,6 +349,6 @@
         ],
         "iconUrl": "https://winbu.org/wp-content/uploads/2025/04/file-0000000068a051f6aed60f781c75581b-conversation-id-67ef899f-e0f8-8011-8643-02848517c045-message-i-1-e1744432620825.png",
         "apiVersion": 1,
-        "fileHash": "sha256-baa71642490b86308e0c4f2923955c17a8c86b681e8d44e5203705516f0a64d0"
+        "fileHash": "sha256-b75bbd9166c46693e9f7cd15e7651fdc881f3b4160b011ca7b27d16bcbe1f4f2"
     }
 ]
