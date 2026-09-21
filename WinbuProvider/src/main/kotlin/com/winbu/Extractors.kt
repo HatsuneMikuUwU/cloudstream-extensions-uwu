@@ -11,10 +11,6 @@ import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONObject
 
-/**
- * Filedon (filedon.co / filedon.*)
- * Embed page carries Inertia data-page JSON that includes a signed R2/S3 mp4 URL.
- */
 class FiledonExtractor : ExtractorApi() {
     override val name = "Filedon"
     override val mainUrl = "https://filedon.co"
@@ -36,7 +32,6 @@ class FiledonExtractor : ExtractorApi() {
             referer = referer
         ).text
 
-        // Inertia data-page attribute
         val dataPage = Regex("""data-page=["']([^"']+)["']""")
             .find(doc)
             ?.groupValues
@@ -51,13 +46,11 @@ class FiledonExtractor : ExtractorApi() {
         val streamUrls = mutableListOf<String>()
 
         if (!dataPage.isNullOrBlank()) {
-            // Prefer explicit mp4 / m3u8 inside JSON
             Regex("""https?://[^"\\\s]+\.(?:mp4|m3u8)[^"\\\s]*""", RegexOption.IGNORE_CASE)
                 .findAll(dataPage)
                 .map { it.value.replace("\\u0026", "&").replace("\\/", "/") }
                 .forEach { streamUrls.add(it) }
 
-            // Also try common keys
             listOf("download_url", "stream_url", "url", "file_url", "direct_url").forEach { key ->
                 Regex(""""$key"\s*:\s*"([^"]+)"""")
                     .findAll(dataPage)
@@ -67,7 +60,6 @@ class FiledonExtractor : ExtractorApi() {
             }
         }
 
-        // Fallback: any direct media link on the page
         if (streamUrls.isEmpty()) {
             Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                 .findAll(doc)
@@ -97,7 +89,6 @@ class FiledonExtractor : ExtractorApi() {
 
     private fun normalize(url: String): String {
         var u = if (url.startsWith("//")) "https:$url" else url
-        // /view/ID -> /embed/ID works better for player JSON
         u = u.replace("/view/", "/embed/")
         return u
     }
@@ -114,10 +105,6 @@ class FiledonExtractor : ExtractorApi() {
     }
 }
 
-/**
- * Pixeldrain (pixeldrain.com / pixeldrain.lu)
- * Direct download: https://pixeldrain.com/api/file/{id}?download
- */
 class PixeldrainExtractor : ExtractorApi() {
     override val name = "Pixeldrain"
     override val mainUrl = "https://pixeldrain.com"
@@ -136,7 +123,6 @@ class PixeldrainExtractor : ExtractorApi() {
             ?: Regex("""/([A-Za-z0-9]{6,})/?$""").find(url)?.groupValues?.getOrNull(1)
             ?: return
 
-        // Info for name / size (optional)
         var quality = Qualities.Unknown.value
         var label = name
         try {
@@ -167,16 +153,11 @@ class PixeldrainExtractor : ExtractorApi() {
     }
 }
 
-/**
- * Gofile (gofile.io)
- * Best-effort: public content API. Token may be required for some files.
- */
 class GofileExtractor : ExtractorApi() {
     override val name = "Gofile"
     override val mainUrl = "https://gofile.io"
     override val requiresReferer = false
 
-    // Common public website tokens (rotated by Gofile; try a few)
     private val websiteTokens = listOf(
         "4fd6sg89d7s6",
         "1234567890abcdef"
@@ -194,7 +175,6 @@ class GofileExtractor : ExtractorApi() {
             ?.getOrNull(1)
             ?: return
 
-        // Resolve best server
         val server = try {
             val servers = app.get("https://api.gofile.io/servers").text
             JSONObject(servers)
@@ -254,7 +234,6 @@ class GofileExtractor : ExtractorApi() {
             }
         }
 
-        // Fallback: try store direct pattern (sometimes works for public files)
         try {
             val fallback = "https://$server.gofile.io/download/web/$contentId"
             callback.invoke(
@@ -268,10 +247,6 @@ class GofileExtractor : ExtractorApi() {
     }
 }
 
-/**
- * Buzzheavier (buzzheavier.com)
- * Best-effort: look for direct download / hx endpoints. May be blocked by Cloudflare.
- */
 class BuzzheavierExtractor : ExtractorApi() {
     override val name = "Buzzheavier"
     override val mainUrl = "https://buzzheavier.com"
@@ -299,13 +274,11 @@ class BuzzheavierExtractor : ExtractorApi() {
             return
         }
 
-        // Direct media links on page
         val streams = Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8|mkv)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
             .findAll(page)
             .map { it.value }
             .toMutableList()
 
-        // hx-get / data-url style download endpoints
         Regex("""(?:hx-get|data-url|href)=["']([^"']*(?:download|/dl/|/f/)[^"']*)["']""", RegexOption.IGNORE_CASE)
             .findAll(page)
             .map { it.groupValues[1] }
@@ -318,7 +291,6 @@ class BuzzheavierExtractor : ExtractorApi() {
                 streams.add(abs)
             }
 
-        // Common API pattern
         if (id != null) {
             listOf(
                 "$mainUrl/download/$id",
@@ -343,10 +315,6 @@ class BuzzheavierExtractor : ExtractorApi() {
     }
 }
 
-/**
- * Abyss / Hydrax family (abyssplayer.com, abyss.to, hydrax.*)
- * Tries known source API patterns used by Hydrax-style players.
- */
 class AbyssExtractor : ExtractorApi() {
     override val name = "Abyss"
     override val mainUrl = "https://abyssplayer.com"
@@ -372,7 +340,6 @@ class AbyssExtractor : ExtractorApi() {
             ?: Regex("""/([A-Za-z0-9]{6,})/?$""").find(fixed)?.groupValues?.getOrNull(1)
             ?: return
 
-        // 1) Try POST source APIs
         for (base in sourceEndpoints) {
             try {
                 val res = app.post(
@@ -402,7 +369,6 @@ class AbyssExtractor : ExtractorApi() {
             }
         }
 
-        // 2) Fallback: scrape player page for media URLs
         try {
             val page = app.get(
                 fixed,
@@ -440,7 +406,6 @@ class AbyssExtractor : ExtractorApi() {
                 }
             }
         } catch (_: Exception) {
-            // raw URL fallback
             Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
                 .findAll(jsonText)
                 .forEach { out.add(it.value to Qualities.Unknown.value) }
@@ -449,9 +414,6 @@ class AbyssExtractor : ExtractorApi() {
     }
 }
 
-/**
- * Blogger / video.googleusercontent (often used by anime mirrors on Winbu)
- */
 class BloggerExtractor : ExtractorApi() {
     override val name = "Blogger"
     override val mainUrl = "https://www.blogger.com"
@@ -569,14 +531,6 @@ class BloggerExtractor : ExtractorApi() {
     }
 }
 
-/**
- * Mega.nz embed – TIDAK didukung.
- * URL embed (`mega.nz/embed/...`) adalah halaman HTML, bukan stream media.
- * Mengirimnya ke ExoPlayer menyebabkan:
- *   ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED (3003)
- * Mega memakai enkripsi client-side; butuh SDK resmi, tidak bisa di-extract
- * sebagai direct mp4/m3u8 seperti host biasa.
- */
 class MegaEmbedExtractor : ExtractorApi() {
     override val name = "Mega"
     override val mainUrl = "https://mega.nz"
@@ -588,16 +542,11 @@ class MegaEmbedExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        // No-op: jangan emit link HTML ke player
         return
     }
 }
 
 
-/**
- * strp2p / P2P player (winbu.strp2p.com and similar)
- * Best-effort: try /api/v1/video and /api/v1/download. Stream may be encrypted/P2P-only.
- */
 class StrP2PExtractor : ExtractorApi() {
     override val name = "P2P"
     override val mainUrl = "https://winbu.strp2p.com"
@@ -636,7 +585,6 @@ class StrP2PExtractor : ExtractorApi() {
                 ).text
                 if (res.contains("not available", true)) continue
 
-                // JSON with url / stream / file
                 val streams = mutableListOf<String>()
                 try {
                     val json = JSONObject(res)
