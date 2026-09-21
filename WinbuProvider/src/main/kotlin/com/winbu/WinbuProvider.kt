@@ -4,10 +4,14 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.runBlocking
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
 
 class WinbuProvider : MainAPI() {
     override var mainUrl = "https://winbu.org"
@@ -85,25 +89,22 @@ class WinbuProvider : MainAPI() {
             ?: this.selectFirst("i.info-hidden")?.attr("data-episode")
         val epNum = Regex("(?i)(?:Episode\\s*)?(\\d+)").find(epText.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
 
-        val typeText = this.selectFirst(".mli-mvi")?.text().orEmpty()
-        val type = getType(typeText)
-
-        // Prefer anime detail page if possible
-        val detailHref = if (href.contains("/anime/") || href.contains("/series/")) {
-            href
-        } else {
-            // episode url -> try to find series from title or keep episode
-            href
+        // .mli-mvi pertama = rating (ikon bintang/mata), label tipe ("TV Show") tidak punya ikon
+        val typeText = this.select(".mli-mvi").firstOrNull { it.selectFirst("i.fa") == null }?.text()
+        val type = when {
+            href.contains("/film/") -> TvType.AnimeMovie
+            href.contains("/series/") -> TvType.TvSeries
+            else -> getType(typeText)
         }
 
-        return newAnimeSearchResponse(title, detailHref, type) {
+        return newAnimeSearchResponse(title, href, type) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val document = request("$mainUrl/?s=$query").document
+        val document = request("$mainUrl/?s=${URLEncoder.encode(query, "UTF-8")}").document
         return document.select("div.ml-item, div.ml-item-anime").mapNotNull {
             it.toSearchResult()
         }
@@ -139,7 +140,7 @@ class WinbuProvider : MainAPI() {
                 ?.take(4)?.toIntOrNull()
 
         // Episodes
-        val episodes = document.select("div.les-content a, div.tvseason a, .movies-list-wrap a[href*=episode]")
+        val episodes = document.select("div.les-content a, div.tvseason a")
             .mapNotNull { a ->
                 val epHref = fixUrl(a.attr("href"))
                 if (!epHref.contains("episode", ignoreCase = true)) return@mapNotNull null
@@ -154,8 +155,7 @@ class WinbuProvider : MainAPI() {
             .distinctBy { it.data }
             .sortedBy { it.episode }
 
-        // If no episodes found and url looks like episode, treat as single
-        val finalEpisodes = if (episodes.isEmpty() && url.contains("episode", ignoreCase = true)) {
+        val finalEpisodes = if (episodes.isEmpty()) {
             listOf(newEpisode(url) {
                 this.name = title
                 this.episode = 1
@@ -167,7 +167,6 @@ class WinbuProvider : MainAPI() {
         val type = when {
             url.contains("/film/") || title.contains("Movie", true) -> TvType.AnimeMovie
             url.contains("/tvshow/") || url.contains("/series/") -> TvType.TvSeries
-            finalEpisodes.size <= 1 && !url.contains("season", true) -> TvType.AnimeMovie
             else -> TvType.Anime
         }
 
@@ -181,6 +180,67 @@ class WinbuProvider : MainAPI() {
         }
     }
 
+    private data class PlayerOption(
+        val post: String,
+        val nume: String,
+        val type: String,
+        val serverName: String,
+        val quality: Int,
+    )
+
+    private suspend fun loadFixedExtractor(
+        url: String,
+        serverName: String?,
+        quality: Int,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        loadExtractor(url, referer, subtitleCallback) { link ->
+            runBlocking {
+                callback.invoke(
+                    newExtractorLink(
+                        source = serverName?.let { "${this@WinbuProvider.name} - $it" } ?: this@WinbuProvider.name,
+                        name = serverName?.let { "$it (${link.name})" } ?: "${link.name} (DL)",
+                        url = link.url,
+                        type = link.type
+                    ) {
+                        this.referer = link.referer
+                        this.quality = if (link.quality == Qualities.Unknown.value) quality else link.quality
+                        this.headers = link.headers
+                        this.extractorData = link.extractorData
+                    }
+                )
+            }
+        }
+    }
+
+    private suspend fun loadDownloadLinks(
+        document: Document,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        document.select("div.download-eps li a[href]")
+            .distinctBy { it.attr("href") }
+            .amap { a ->
+                val href = a.attr("href")
+                if (href.isBlank() || href.startsWith("javascript", true)) return@amap
+                val quality = getQualityFromName(a.parent()?.parent()?.selectFirst("strong")?.text())
+                try {
+                    loadFixedExtractor(
+                        fixUrl(href),
+                        null,
+                        quality,
+                        referer,
+                        subtitleCallback,
+                        callback
+                    )
+                } catch (_: Exception) {
+                }
+            }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -189,45 +249,43 @@ class WinbuProvider : MainAPI() {
     ): Boolean {
         val document = request(data).document
 
-        // Collect player options
         val options = document.select("div.east_player_option").mapNotNull { el ->
             val post = el.attr("data-post")
             val nume = el.attr("data-nume")
-            val type = el.attr("data-type").ifBlank { "schtml" }
-            val name = el.selectFirst("span")?.text()?.trim() ?: "Server $nume"
             if (post.isBlank() || nume.isBlank()) return@mapNotNull null
-            Triple(post, nume, name) to type
+            val quality = getQualityFromName(
+                el.parents().firstOrNull { it.hasClass("dropdown") }
+                    ?.selectFirst("button.dropdown-toggle")?.text()
+            )
+            PlayerOption(
+                post = post,
+                nume = nume,
+                type = el.attr("data-type").ifBlank { "schtml" },
+                serverName = el.selectFirst("span")?.text()?.trim()?.ifBlank { null } ?: "Server $nume",
+                quality = quality
+            )
         }
 
         if (options.isEmpty()) {
-            // Fallback: direct iframe
             document.select("div.pframe iframe, .movieplay iframe").forEach { iframe ->
                 val src = iframe.attr("src").ifBlank { iframe.attr("data-src") }
                 if (src.isNotBlank()) {
                     loadExtractor(fixUrl(src), data, subtitleCallback, callback)
                 }
             }
-            // Also check download links
-            document.select("a[href*=mp4upload], a[href*=vidhide], a[href*=mega], a[href*=gofile], a[href*=filedon]")
-                .forEach { a ->
-                    val href = a.attr("href")
-                    if (href.isNotBlank()) {
-                        loadExtractor(href, data, subtitleCallback, callback)
-                    }
-                }
+            loadDownloadLinks(document, data, subtitleCallback, callback)
             return true
         }
 
-        options.amap { (ids, type) ->
-            val (post, nume, serverName) = ids
+        options.amap { option ->
             try {
                 val res = app.post(
                     "$mainUrl/wp-admin/admin-ajax.php",
                     data = mapOf(
                         "action" to "player_ajax",
-                        "post" to post,
-                        "nume" to nume,
-                        "type" to type
+                        "post" to option.post,
+                        "nume" to option.nume,
+                        "type" to option.type
                     ),
                     headers = mapOf(
                         "X-Requested-With" to "XMLHttpRequest",
@@ -236,39 +294,30 @@ class WinbuProvider : MainAPI() {
                     )
                 ).text
 
-                // Response is usually an iframe or embed html
                 val iframeSrc = Regex("""src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
                     .find(res)?.groupValues?.getOrNull(1)
                     ?: Regex("""https?://[^\s"'<>]+""", RegexOption.IGNORE_CASE).find(res)?.value
 
                 if (!iframeSrc.isNullOrBlank()) {
                     val fixed = fixUrl(iframeSrc)
-                    // Prefer loadExtractor for known hosts
-                    loadExtractor(fixed, data, subtitleCallback) { link ->
-                        callback.invoke(
-                            newExtractorLink(
-                                source = "$name - $serverName",
-                                name = "$serverName (${link.name})",
-                                url = link.url,
-                                type = link.type
-                            ) {
-                                this.referer = link.referer
-                                this.quality = link.quality
-                                this.headers = link.headers
-                            }
-                        )
-                    }
-                    // Also try direct if blogger or unknown
+                    loadFixedExtractor(
+                        fixed,
+                        option.serverName,
+                        option.quality,
+                        data,
+                        subtitleCallback,
+                        callback
+                    )
                     if (fixed.contains("blogger.com") || fixed.contains("video.g")) {
                         callback.invoke(
                             newExtractorLink(
                                 source = name,
-                                name = serverName,
+                                name = option.serverName,
                                 url = fixed,
                                 type = INFER_TYPE
                             ) {
                                 this.referer = data
-                                this.quality = Qualities.Unknown.value
+                                this.quality = option.quality
                             }
                         )
                     }
@@ -276,30 +325,7 @@ class WinbuProvider : MainAPI() {
             } catch (_: Exception) {
             }
         }
-
-        // Extra: download section links
-        document.select("a[href*=mp4upload.com], a[href*=vidhide], a[href*=mega.nz], a[href*=megaup], a[href*=filedon], a[href*=gofile]")
-            .amap { a ->
-                val href = a.attr("href")
-                val qualityHint = a.parent()?.text() ?: a.text()
-                try {
-                    loadExtractor(href, data, subtitleCallback) { link ->
-                        callback.invoke(
-                            newExtractorLink(
-                                source = name,
-                                name = "${link.name} (DL)",
-                                url = link.url,
-                                type = link.type
-                            ) {
-                                this.referer = link.referer
-                                this.quality = link.quality
-                                this.headers = link.headers
-                            }
-                        )
-                    }
-                } catch (_: Exception) {
-                }
-            }
+        loadDownloadLinks(document, data, subtitleCallback, callback)
 
         return true
     }
