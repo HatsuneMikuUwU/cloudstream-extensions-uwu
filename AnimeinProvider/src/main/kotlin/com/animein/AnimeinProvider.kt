@@ -1,15 +1,14 @@
 package com.animein
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.JsonNode
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.nicehttp.NiceResponse
 
 class AnimeinProvider : MainAPI() {
     override var mainUrl = "https://xyz-api.animein.net"
@@ -32,6 +31,8 @@ class AnimeinProvider : MainAPI() {
     private var idUser: String = ""
 
     companion object {
+        private const val MAX_SAFE_TEXT_BYTES = 4_500_000L
+
         fun getType(t: String?): TvType {
             return when {
                 t.isNullOrBlank() -> TvType.Anime
@@ -69,6 +70,41 @@ class AnimeinProvider : MainAPI() {
         "Referer" to "https://animein.net/"
     )
 
+    private fun NiceResponse.safeText(): String {
+        val contentLength = headers["Content-Length"]?.toLongOrNull()
+        val contentType = headers["Content-Type"].orEmpty().lowercase()
+
+        if (contentLength != null && contentLength > MAX_SAFE_TEXT_BYTES) {
+            throw Exception("Response too large (${contentLength} bytes)")
+        }
+        if (contentType.startsWith("video/") ||
+            contentType.startsWith("audio/") ||
+            contentType.contains("octet-stream")
+        ) {
+            throw Exception("Non-text content-type: $contentType")
+        }
+
+        val body = try {
+            textLarge
+        } catch (_: Throwable) {
+            try {
+                text
+            } catch (e: Throwable) {
+                throw Exception("Failed to read response body: ${e.message}")
+            }
+        }
+
+        if (body.contains("Just a moment", ignoreCase = true) ||
+            body.contains("cf-browser-verification", ignoreCase = true) ||
+            body.contains("cf-challenge", ignoreCase = true) ||
+            (body.contains("<html", ignoreCase = true) && !body.trimStart().startsWith("{"))
+        ) {
+            throw Exception("Cloudflare challenge or HTML response received")
+        }
+
+        return body
+    }
+
     private suspend fun apiGet(path: String, params: Map<String, String> = emptyMap()): String {
         val base = if (path.startsWith("http")) path else {
             val clean = path.trimStart('/')
@@ -79,16 +115,18 @@ class AnimeinProvider : MainAPI() {
             "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
         }
         val fullUrl = if (query.isNotEmpty()) "$base?$query" else base
-        return app.get(fullUrl, headers = headers()).text
+        val response = app.get(fullUrl, headers = headers())
+        return response.safeText()
     }
 
     private suspend fun ensureDomain() {
         try {
-            val resp = app.get(
+            val response = app.get(
                 "$bootUrl/data/setup/data",
                 headers = headers(),
                 params = mapOf("apk_ver" to apkVer)
-            ).text
+            )
+            val resp = response.safeText()
             val node = parseJson<JsonNode>(resp)
             val domain = node.path("data").path("domain_api").path("value").asText(null)
             if (!domain.isNullOrBlank()) {
@@ -117,25 +155,37 @@ class AnimeinProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         ensureDomain()
-        val raw = apiGet("data/movie/find", mapOf(
-            "q" to query,
-            "query" to query,
-            "search" to query,
-            "keyword" to query,
-            "page" to "1"
-        ))
+        val raw = try {
+            apiGet("data/movie/find", mapOf(
+                "q" to query,
+                "query" to query,
+                "search" to query,
+                "keyword" to query,
+                "page" to "1"
+            ))
+        } catch (_: Exception) {
+            ""
+        }
         val list = parseMovieList(raw)
         if (list.isNotEmpty()) return list
 
-        val raw2 = apiGet("3/2/explore/movie", mapOf("q" to query, "search" to query))
-        return parseMovieList(raw2)
+        return try {
+            val raw2 = apiGet("3/2/explore/movie", mapOf("q" to query, "search" to query))
+            parseMovieList(raw2)
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         ensureDomain()
         val id = url.substringAfterLast("/").substringBefore("?").ifBlank { return null }
 
-        val detailRaw = apiGet("3/2/movie/detail/$id")
+        val detailRaw = try {
+            apiGet("3/2/movie/detail/$id")
+        } catch (_: Exception) {
+            return null
+        }
         val detailNode = try {
             parseJson<JsonNode>(detailRaw).path("data")
         } catch (_: Exception) {
@@ -164,8 +214,12 @@ class AnimeinProvider : MainAPI() {
         val studio = detailNode.path("studio").asText(null)
         if (!studio.isNullOrBlank()) tags.add(studio)
 
-        val epRaw = apiGet("3/2/movie/episode/$id")
-        val episodes = parseEpisodes(epRaw)
+        val episodes = try {
+            val epRaw = apiGet("3/2/movie/episode/$id")
+            parseEpisodes(epRaw)
+        } catch (_: Exception) {
+            emptyList()
+        }
 
         return newAnimeLoadResponse(title, url, type) {
             this.posterUrl = fixUrlNull(poster)
@@ -190,72 +244,78 @@ class AnimeinProvider : MainAPI() {
         val streamRaw = try {
             apiGet("3/2/episode/streamnew/$epId")
         } catch (_: Exception) {
-            apiGet("data/movie/stream/use_server_user", mapOf(
-                "idEpisode" to epId,
-                "id_episode" to epId,
-                "id" to epId
-            ))
+            try {
+                apiGet("data/movie/stream/use_server_user", mapOf(
+                    "idEpisode" to epId,
+                    "id_episode" to epId,
+                    "id" to epId
+                ))
+            } catch (_: Exception) {
+                ""
+            }
         }
 
         var found = false
 
-        try {
-            val root = parseJson<JsonNode>(streamRaw)
-            val dataNode = if (root.has("data")) root.path("data") else root
+        if (streamRaw.isNotBlank()) {
+            try {
+                val root = parseJson<JsonNode>(streamRaw)
+                val dataNode = if (root.has("data")) root.path("data") else root
 
-            val servers = mutableListOf<Pair<String, String>>() // name to link
+                val servers = mutableListOf<Pair<String, String>>() // name to link
 
-            fun collect(node: JsonNode) {
-                when {
-                    node.isArray -> node.forEach { collect(it) }
-                    node.isObject -> {
-                        val link = node.path("link").asText(null)
-                            ?: node.path("url").asText(null)
-                            ?: node.path("file").asText(null)
-                            ?: node.path("src").asText(null)
-                        val name = node.path("name").asText(null)
-                            ?: node.path("quality").asText(null)
-                            ?: node.path("server").asText(null)
-                            ?: node.path("label").asText(null)
-                            ?: "Server"
-                        if (!link.isNullOrBlank()) {
-                            servers.add(name to link)
-                        }
-                        listOf("list", "servers", "sources", "data", "stream", "videos").forEach { key ->
-                            if (node.has(key)) collect(node.path(key))
-                        }
-                    }
-                }
-            }
-            collect(dataNode)
-
-            for ((name, link) in servers.distinctBy { it.second }) {
-                when {
-                    link.contains("naniplay", true) || link.contains("/api/source/") -> {
-                        if (loadNaniplay(link, name, callback)) found = true
-                    }
-                    link.contains(".m3u8") || link.contains(".mp4") ||
-                    link.startsWith("http") && !link.contains("naniplay") -> {
-                        callback.invoke(
-                            newExtractorLink(
-                                source = this.name,
-                                name = name,
-                                url = link,
-                                type = INFER_TYPE
-                            ) {
-                                this.referer = mainUrl
-                                this.quality = qualityFromName(name)
+                fun collect(node: JsonNode) {
+                    when {
+                        node.isArray -> node.forEach { collect(it) }
+                        node.isObject -> {
+                            val link = node.path("link").asText(null)
+                                ?: node.path("url").asText(null)
+                                ?: node.path("file").asText(null)
+                                ?: node.path("src").asText(null)
+                            val name = node.path("name").asText(null)
+                                ?: node.path("quality").asText(null)
+                                ?: node.path("server").asText(null)
+                                ?: node.path("label").asText(null)
+                                ?: "Server"
+                            if (!link.isNullOrBlank()) {
+                                servers.add(name to link)
                             }
-                        )
-                        found = true
-                    }
-                    else -> {
-                        loadExtractor(link, mainUrl, subtitleCallback, callback)
-                        found = true
+                            listOf("list", "servers", "sources", "data", "stream", "videos").forEach { key ->
+                                if (node.has(key)) collect(node.path(key))
+                            }
+                        }
                     }
                 }
+                collect(dataNode)
+
+                for ((name, link) in servers.distinctBy { it.second }) {
+                    when {
+                        link.contains("naniplay", true) || link.contains("/api/source/") -> {
+                            if (loadNaniplay(link, name, callback)) found = true
+                        }
+                        link.contains(".m3u8") || link.contains(".mp4") ||
+                        (link.startsWith("http") && !link.contains("naniplay")) -> {
+                            callback.invoke(
+                                newExtractorLink(
+                                    source = this.name,
+                                    name = name,
+                                    url = link,
+                                    type = INFER_TYPE
+                                ) {
+                                    this.referer = mainUrl
+                                    this.quality = qualityFromName(name)
+                                }
+                            )
+                            found = true
+                        }
+                        else -> {
+                            loadExtractor(link, mainUrl, subtitleCallback, callback)
+                            found = true
+                        }
+                    }
+                }
+            } catch (_: Exception) {
             }
-        } catch (_: Exception) {
         }
 
         if (!found) {
@@ -270,6 +330,7 @@ class AnimeinProvider : MainAPI() {
     }
 
     private fun parseMovieList(raw: String): List<SearchResponse> {
+        if (raw.isBlank()) return emptyList()
         return try {
             val root = parseJson<JsonNode>(raw)
             val dataNode = if (root.has("data")) root.path("data") else root
@@ -309,6 +370,7 @@ class AnimeinProvider : MainAPI() {
     }
 
     private fun parseEpisodes(raw: String): List<Episode> {
+        if (raw.isBlank()) return emptyList()
         return try {
             val root = parseJson<JsonNode>(raw)
             val dataNode = if (root.has("data")) root.path("data") else root
@@ -353,7 +415,7 @@ class AnimeinProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         return try {
-            val resp = app.post(
+            val response = app.post(
                 url,
                 headers = mapOf(
                     "User-Agent" to "okhttp/4.12.0",
@@ -365,7 +427,8 @@ class AnimeinProvider : MainAPI() {
                     "r" to "",
                     "d" to "www.naniplay.com"
                 )
-            ).text
+            )
+            val resp = response.safeText()
 
             val root = parseJson<JsonNode>(resp)
             val dataList = root.path("data")
