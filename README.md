@@ -1,16 +1,16 @@
 <div align="center">
 
-# 🩵 Hatsune Repo for CloudStream
+# 🩵 Hatsune Repo for CloudStream 🩵
 
 **A curated collection of CloudStream extensions for anime and donghua, with Indonesian subtitles 🇮🇩**
 
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
-[![Commits](https://img.shields.io/github/commit-activity/m/HatsuneMikuUwU/cloudstream-extensions-uwu?style=for-the-badge&logo=github)](https://github.com/HatsuneMikuUwU/cloudstream-extensions-uwu/commits/master)
+[![Commits](https://img.shields.io/github/commit-activity/m/HatsuneMikuUwU/AnimeX?style=for-the-badge&logo=github)](https://github.com/HatsuneMikuUwU/AnimeX/commits/master)
 [![Telegram](https://img.shields.io/badge/Telegram-Group-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+qNcWx0po4a0wNjE1)
 
 <br>
-<img src="https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/banner.png" alt="Hatsune Repo Banner" width="100%">
+<img src="https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/refs/heads/master/banner.png" alt="Hatsune Repo Banner" width="100%">
 
 </div>
 
@@ -53,7 +53,7 @@
 ### Option 1: 1-Click Install (Mobile)
 If you are viewing this page on an Android device with CloudStream installed, simply click the button below to add the repository automatically:
 
-<a href="cloudstreamrepo://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/repo.json">
+<a href="cloudstreamrepo://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/refs/heads/master/repo.json">
   <img src="https://img.shields.io/badge/⚡_Direct_Install_Repo-CloudStream-005FFF?style=for-the-badge" alt="Direct Install">
 </a>
 
@@ -62,7 +62,7 @@ If you are viewing this page on an Android device with CloudStream installed, si
 2. **Open Settings** Navigate to `Settings` > `Extensions` within the app.
 3. **Add Repository** Tap on **Add Repository** and paste the following URL:
 ```text
-https://raw.githubusercontent.com/HatsuneMikuUwU/cloudstream-extensions-uwu/refs/heads/master/repo.json
+https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/refs/heads/master/repo.json
 ```
 4. ​**Install Extensions** Tap **Add**. The available extensions will now appear in your list. Select the ones you want and tap **Install** ✅.
 
