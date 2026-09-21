@@ -82,16 +82,23 @@ class WinbuProvider : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page == 1) {
-            request.data.replace("/page/", "/")
-        } else {
-            request.data + page
-        }
+        val base = request.data.trimEnd('/').removeSuffix("/page")
+        val url = if (page <= 1) "$base/" else "$base/page/$page/"
+
         val document = request(url).document
-        val home = document.select("div.ml-item, div.ml-item-anime").mapNotNull {
-            it.toSearchResult()
-        }
-        return newHomePageResponse(request.name, home)
+        val home = document.select("div.ml-item, div.ml-item-anime")
+            .mapNotNull { it.toSearchResult() }
+            .distinctBy { it.url }
+
+        val hasNext = home.isNotEmpty() && (
+            document.select("ul.pagination a[href]").any { a ->
+                Regex("""/page/(\d+)""").find(a.attr("href"))
+                    ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    ?.let { it > page } == true
+            } || document.selectFirst("link[rel=next]") != null
+        )
+
+        return newHomePageResponse(request.name, home, hasNext)
     }
 
     private fun Element.toSearchResult(): SearchResponse? {
