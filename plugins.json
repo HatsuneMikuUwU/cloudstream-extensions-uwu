@@ -75,7 +75,7 @@
             "Miku"
         ],
         "description": "AnimeIndo \u2014 Streaming Anime Subtitle Indonesia",
-        "fileSize": 52947,
+        "fileSize": 54723,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -85,7 +85,7 @@
         ],
         "iconUrl": "https://anime-indo.lol/favicon.png",
         "apiVersion": 1,
-        "fileHash": "sha256-145e89d29653536ebf6950df8672c7034882212d7cca95a7dded12632270dd76"
+        "fileHash": "sha256-05b89751d566848eeb85e2eef9d5c50973bfc67610e1f469339e10958d606568"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
