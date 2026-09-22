@@ -39,10 +39,21 @@ class AnimasuProvider : MainAPI() {
         }
 
         fun getQuality(str: String?): Int {
-            return Regex("(\\d{3,4})[pP]").find(str ?: "")?.groupValues?.getOrNull(1)?.toIntOrNull()
+            return Regex("(\\d{3,4})[pP]").findAll(str ?: "")
+                .mapNotNull { it.groupValues.getOrNull(1)?.toIntOrNull() }
+                .maxOrNull()
                 ?: Qualities.Unknown.value
         }
     }
+
+    private suspend fun request(url: String, ref: String? = null) = app.get(
+        url,
+        headers = mapOf(
+            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+        ),
+        referer = ref ?: "$mainUrl/"
+    )
 
     override val mainPage = mainPageOf(
         "$mainUrl/anime-sedang-tayang-terbaru/" to "Ongoing",
@@ -56,7 +67,7 @@ class AnimasuProvider : MainAPI() {
         request: MainPageRequest
     ): HomePageResponse {
         val url = if (page <= 1) request.data else "${request.data}?halaman=$page"
-        val document = app.get(url).document
+        val document = request(url).document
         val home = document.select("div.listupd div.bsx").mapNotNull {
             it.toSearchResult()
         }.distinctBy { it.url }
@@ -91,13 +102,13 @@ class AnimasuProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        return app.get("$mainUrl/?s=$query").document
+        return request("$mainUrl/?s=$query").document
             .select("div.listupd div.bsx")
             .mapNotNull { it.toSearchResult() }
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val document = app.get(url).document
+        val document = request(url).document
 
         val rawTitle = document.selectFirst("div.infox h1")?.text()?.trim().orEmpty()
         val title = document.selectFirst("div.infox span.alter")?.text()?.trim()?.ifBlank { null }
@@ -226,7 +237,7 @@ class AnimasuProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val document = app.get(data).document
+        val document = request(data).document
 
         var found = false
 
@@ -304,13 +315,19 @@ class AnimasuProvider : MainAPI() {
     ): Boolean {
         val fixed = fixUrl(url)
         val page = try {
-            app.get(fixed, referer = referer).text
+            request(fixed, referer).text
         } catch (_: Exception) {
             return false
         }
 
+        val unpacked = try {
+            if (!getPacked(page).isNullOrEmpty()) getAndUnpack(page) else null
+        } catch (_: Exception) {
+            null
+        }
+
         val streams = Regex("""https?://[^\s"'<>]+\.(?:m3u8|mp4)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
-            .findAll(page)
+            .findAll(page + (unpacked ?: ""))
             .map { it.value.replace("\\/", "/").replace("\\u0026", "&") }
             .distinct()
             .toList()
@@ -327,7 +344,10 @@ class AnimasuProvider : MainAPI() {
                 ) {
                     this.referer = fixed
                     this.quality = quality
-                    this.headers = mapOf("Referer" to fixed)
+                    this.headers = mapOf(
+                        "Referer" to fixed,
+                        "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+                    )
                 }
             )
         }
