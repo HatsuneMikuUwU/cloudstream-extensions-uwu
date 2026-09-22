@@ -15,7 +15,7 @@ class AnimasuProvider : MainAPI() {
     override var name = "Animasu"
     override val hasMainPage = true
     override var lang = "id"
-    override val hasDownloadSupport = false
+    override val hasDownloadSupport = true
 
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -73,10 +73,18 @@ class AnimasuProvider : MainAPI() {
         if (title.isBlank()) return null
 
         val posterUrl = fixUrlNull(this.selectFirst("img")?.attr("src"))
-        val epNum = this.selectFirst("span.epx")?.text()?.replace(Regex("\\D"), "")?.trim()?.toIntOrNull()
-        val typeStr = this.selectFirst("div.typez")?.text()?.trim()
 
-        return newAnimeSearchResponse(title, href, getType(typeStr)) {
+        val typezEl = this.selectFirst("div.typez")
+        val typeStr = typezEl?.classNames()?.firstOrNull { it != "typez" }
+            ?: typezEl?.text()?.trim()
+        val type = getType(typeStr)
+
+        val epxText = this.selectFirst("span.epx")?.text()?.trim()
+        val epNum = if (type != TvType.AnimeMovie && epxText != null && !epxText.contains(",")) {
+            epxText.replace(Regex("\\D"), "").toIntOrNull()
+        } else null
+
+        return newAnimeSearchResponse(title, href, type) {
             this.posterUrl = posterUrl
             addSub(epNum)
         }
@@ -242,7 +250,6 @@ class AnimasuProvider : MainAPI() {
             }
         }
 
-        // Fallback to the default embedded iframe if no mirror options were usable.
         if (!found) {
             val fallbackSrc = document.selectFirst("div#pembed iframe")?.attr("src")
             if (!fallbackSrc.isNullOrBlank()) {
@@ -273,7 +280,7 @@ class AnimasuProvider : MainAPI() {
                         link.type
                     ) {
                         this.referer = link.referer
-                        this.quality = if (link.quality == Qualities.Unknown.value) quality else link.quality
+                        this.quality = if (quality != Qualities.Unknown.value) quality else link.quality
                         this.headers = link.headers
                         this.extractorData = link.extractorData
                     }
