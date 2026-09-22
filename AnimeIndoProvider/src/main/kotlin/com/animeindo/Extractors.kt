@@ -41,7 +41,7 @@ class Gdplayer : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         val emitted = mutableSetOf<String>()
-        fun emit(file: String?, quality: String? = null) {
+        suspend fun emit(file: String?, quality: String? = null) {
             val clean = file?.trim().orEmpty()
             if (!clean.startsWith("http") || !emitted.add(clean)) return
             callback.invoke(
@@ -151,7 +151,7 @@ class Xtwap : ExtractorApi() {
         ).document
 
         val emitted = mutableSetOf<String>()
-        fun emit(file: String?) {
+        suspend fun emit(file: String?) {
             val clean = file?.trim().orEmpty()
             if (!clean.startsWith("http") || !emitted.add(clean)) return
             callback.invoke(
