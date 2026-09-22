@@ -55,11 +55,13 @@ class AnimasuProvider : MainAPI() {
         page: Int,
         request: MainPageRequest
     ): HomePageResponse {
-        val document = app.get(request.data + page).document
+        val url = if (page <= 1) request.data else "${request.data}?halaman=$page"
+        val document = app.get(url).document
         val home = document.select("div.listupd div.bsx").mapNotNull {
             it.toSearchResult()
-        }
-        return newHomePageResponse(request.name, home)
+        }.distinctBy { it.url }
+
+        return newHomePageResponse(request.name, home, hasNext = home.isNotEmpty())
     }
 
     private fun Element.toSearchResult(): AnimeSearchResponse? {
@@ -239,6 +241,7 @@ class AnimasuProvider : MainAPI() {
             }
         }
 
+        // Fallback to the default embedded iframe if no mirror options were usable.
         if (!found) {
             val fallbackSrc = document.selectFirst("div#pembed iframe")?.attr("src")
             if (!fallbackSrc.isNullOrBlank()) {
