@@ -75,17 +75,36 @@ class WinbuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/animedonghua/page/" to "Latest Donghua Anime",
-        "$mainUrl/film/page/" to "Latest Movies",
-        "$mainUrl/tvshow/page/" to "TV Show",
-        "$mainUrl/others/page/" to "Other"
+        "$mainUrl/daftar-anime-2/?status=Currently+Airing&order=update" to "Ongoing",
+        "$mainUrl/daftar-anime-2/?status=Finished+Airing&order=update" to "Completed",
+        "$mainUrl/daftar-anime-2/?title=&status=&type=Film&order=update" to "Movie Series"
     )
 
     private val pageHistory = java.util.concurrent.ConcurrentHashMap<String, MutableMap<Int, Set<String>>>()
 
+    private fun buildPageUrl(data: String, page: Int): String {
+        val raw = data.trim()
+        val (pathPart, queryPart) = if ('?' in raw) {
+            val idx = raw.indexOf('?')
+            raw.substring(0, idx).trimEnd('/') to raw.substring(idx)
+        } else {
+            raw.trimEnd('/') to ""
+        }
+
+        val cleanPath = pathPart
+            .replace(Regex("""/page/\d+$"""), "")
+            .replace(Regex("""/page$"""), "")
+            .trimEnd('/')
+
+        return if (page <= 1) {
+            "$cleanPath/$queryPart"
+        } else {
+            "$cleanPath/page/$page/$queryPart"
+        }
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val base = request.data.trimEnd('/').removeSuffix("/page")
-        val url = if (page <= 1) "$base/" else "$base/page/$page/"
+        val url = buildPageUrl(request.data, page)
 
         val document = request(url).document
         val home = document.select("div.ml-item, div.ml-item-anime")
@@ -108,7 +127,8 @@ class WinbuProvider : MainAPI() {
 
         val hasNext = home.isNotEmpty() && (
             document.select("ul.pagination a[href]").any { a ->
-                Regex("""/page/(\d+)""").find(a.attr("href"))
+                val href = a.attr("href")
+                Regex("""/page/(\d+)""").find(href)
                     ?.groupValues?.getOrNull(1)?.toIntOrNull()
                     ?.let { it > page } == true
             } || document.selectFirst("link[rel=next]") != null
