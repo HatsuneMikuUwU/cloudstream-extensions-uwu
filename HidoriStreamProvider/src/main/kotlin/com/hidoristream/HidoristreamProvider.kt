@@ -12,7 +12,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class HidoristreamProvider : MainAPI() {
-    override var mainUrl = "https://v3.hidoristream.online"
+    override var mainUrl = "https://v10.hidoristream.online"
     override var name = "HidoriStream"
     override val hasMainPage = true
     override var lang = "id"
@@ -294,28 +294,68 @@ class HidoristreamProvider : MainAPI() {
         for (opt in mirrorOptions) {
             val base64 = opt.attr("value")
             if (base64.isBlank()) continue
+            val label = opt.text().trim().ifBlank { "Mirror" }
             try {
                 val cleaned = base64.replace("\\s".toRegex(), "")
                 val decodedHtml = base64Decode(cleaned)
-                val iframeTag = Jsoup.parse(decodedHtml).selectFirst("iframe")
-                val mirrorUrl = when {
+                val decodedDoc = Jsoup.parse(decodedHtml)
+
+                val iframeTag = decodedDoc.selectFirst("iframe")
+                val iframeUrl = when {
                     iframeTag?.attr("src")?.isNotBlank() == true -> iframeTag.attr("src")
                     iframeTag?.attr("data-src")?.isNotBlank() == true -> iframeTag.attr("data-src")
                     else -> null
                 }
-                if (!mirrorUrl.isNullOrBlank()) {
-                    loadExtractor(httpsify(mirrorUrl), data, subtitleCallback, callback)
+                if (!iframeUrl.isNullOrBlank()) {
+                    loadExtractor(httpsify(iframeUrl), data, subtitleCallback, callback)
+                    continue
+                }
+
+                val sourceTag = decodedDoc.selectFirst("video source[src]")
+                val directUrl = sourceTag?.attr("src")
+                if (!directUrl.isNullOrBlank()) {
+                    callback(
+                        newExtractorLink(
+                            source = this.name,
+                            name = "${this.name} - $label",
+                            url = httpsify(directUrl),
+                            type = ExtractorLinkType.VIDEO
+                        ) {
+                            this.referer = mainUrl
+                            this.quality = Qualities.Unknown.value
+                        }
+                    )
                 }
             } catch (_: Exception) {
-                // ignore broken mirrors
             }
         }
 
-        val downloadLinks = document.select("div.dlbox li span.e a[href]")
-        for (a in downloadLinks) {
-            val url = a.attr("href").trim()
-            if (url.isNotBlank()) {
-                loadExtractor(httpsify(url), data, subtitleCallback, callback)
+        document.select("div.mctnx div.soraddlx div.soraurlx").forEach { qualityBlock ->
+            val quality = qualityBlock.selectFirst("strong")?.text()?.trim()
+            qualityBlock.select("a[href]").forEach { a ->
+                val url = a.attr("href").trim()
+                val hostName = a.text().trim()
+                if (url.isBlank() || url.contains("t.me", ignoreCase = true)) return@forEach
+                try {
+                    loadExtractor(httpsify(url), data, subtitleCallback) { link ->
+                        callback(
+                            newExtractorLink(
+                                source = link.source,
+                                name = listOfNotNull(hostName.ifBlank { null }, quality)
+                                    .joinToString(" ")
+                                    .ifBlank { link.name },
+                                url = link.url,
+                                type = link.type
+                            ) {
+                                this.referer = link.referer
+                                this.quality = link.quality
+                                this.headers = link.headers
+                                this.extractorData = link.extractorData
+                            }
+                        )
+                    }
+                } catch (_: Exception) {
+                }
             }
         }
 
