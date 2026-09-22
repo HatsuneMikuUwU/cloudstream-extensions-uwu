@@ -65,6 +65,10 @@ data class AnimeIds(val malId: Int?, val aniId: Int?)
 
 private val animeIdCache = ConcurrentHashMap<String, AnimeIds>()
 
+private class CacheBox<T>(val value: T?)
+private val aniZipMetaCache = ConcurrentHashMap<String, CacheBox<MetaAnimeData>>()
+private val aniListPlotCache = ConcurrentHashMap<String, CacheBox<String>>()
+
 private const val ANILIST_SEARCH_QUERY =
     "query (\$search: String) { Page(perPage: 8) { media(search: \$search, type: ANIME, sort: SEARCH_MATCH) " +
         "{ id idMal format seasonYear startDate { year } title { romaji english native } synonyms } } }"
@@ -175,6 +179,15 @@ suspend fun resolveAnimeIds(
 
 // AniList synopsis (English): used when ani.zip has no synopsis for the title
 suspend fun fetchAniListPlot(malId: Int?, aniId: Int?): String? {
+    if (malId == null && aniId == null) return null
+    val cacheKey = "$malId|$aniId"
+    aniListPlotCache[cacheKey]?.let { return it.value }
+    val result = fetchAniListPlotUncached(malId, aniId)
+    aniListPlotCache[cacheKey] = CacheBox(result)
+    return result
+}
+
+private suspend fun fetchAniListPlotUncached(malId: Int?, aniId: Int?): String? {
     val filters = listOfNotNull(aniId?.let { "id: $it" }, malId?.let { "idMal: $it" })
     for (filter in filters) {
         try {
@@ -198,6 +211,15 @@ suspend fun fetchAniListPlot(malId: Int?, aniId: Int?): String? {
 
 // api.ani.zip lookup: mal_id first, anilist_id as fallback
 suspend fun fetchAniZipMeta(malId: Int?, aniId: Int?): MetaAnimeData? {
+    if (malId == null && aniId == null) return null
+    val cacheKey = "$malId|$aniId"
+    aniZipMetaCache[cacheKey]?.let { return it.value }
+    val result = fetchAniZipMetaUncached(malId, aniId)
+    aniZipMetaCache[cacheKey] = CacheBox(result)
+    return result
+}
+
+private suspend fun fetchAniZipMetaUncached(malId: Int?, aniId: Int?): MetaAnimeData? {
     suspend fun query(param: String, id: Int): MetaAnimeData? {
         return try {
             parseAnimeData(app.get("https://api.ani.zip/mappings?$param=$id").text)
