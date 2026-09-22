@@ -326,12 +326,11 @@ class AnimeIndoProvider : MainAPI() {
             addUrl(iframe.attr("src"))
         }
 
-        seen.amap { videoUrl ->
+        seen.toList().amap { videoUrl ->
             try {
                 loadExtractor(videoUrl, data, subtitleCallback, callback)
             } catch (_: Exception) {
             }
-            // Direct fallback for known mp4 hosts already resolved by extractors
             if (videoUrl.contains(".mp4") || videoUrl.contains(".m3u8") || videoUrl.contains("googlevideo.com")) {
                 callback.invoke(
                     newExtractorLink(
