@@ -294,7 +294,7 @@
             "Miku"
         ],
         "description": "NontonAnimeID \u2014 Streaming Anime Subtitle Indonesia",
-        "fileSize": 52854,
+        "fileSize": 52792,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -304,7 +304,7 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://s11.nontonanimeid.boats&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-73a663f27d20033b1c8cbf75d1ca2116cb22810cbebb0c33a8c11e4c9844cb7d"
+        "fileHash": "sha256-dbb62bd4fe17662edb220a897687099d5b7ba5bf1623aceae78b99f780804072"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/OtakudesuProvider.cs3",
