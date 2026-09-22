@@ -2,7 +2,7 @@
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AlqanimeProvider.cs3",
         "status": 1,
-        "version": 5,
+        "version": 6,
         "name": "AlqanimeProvider",
         "internalName": "AlqanimeProvider",
         "authors": [
@@ -19,12 +19,12 @@
         ],
         "iconUrl": "https://cloudstream.zvlz.my.id/icon/alqanime.png",
         "apiVersion": 1,
-        "fileHash": "sha256-deabba636fce2f539e593dff9fb2ac5cfc6478c3380040a32d2bde7cf7c76790"
+        "fileHash": "sha256-80cb741d9bfbba8b1e08078eb16d6a1a3292a7296acc2672f62aae8741bbd13d"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnichinProvider.cs3",
         "status": 1,
-        "version": 3,
+        "version": 4,
         "name": "AnichinProvider",
         "internalName": "AnichinProvider",
         "authors": [
@@ -41,12 +41,12 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anichin.club&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-193a7bdd988ab32cf6af1b86a2924e079dab27082c456dd5f5116480e71f26d9"
+        "fileHash": "sha256-89becc626d7ad2bcdcbd03fec164cd5389e28da08931a5faa7172bfaf725eaf9"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimasuProvider.cs3",
         "status": 1,
-        "version": 1,
+        "version": 2,
         "name": "AnimasuProvider",
         "internalName": "AnimasuProvider",
         "authors": [
@@ -63,19 +63,19 @@
         ],
         "iconUrl": "https://1.bp.blogspot.com/-713bWoqV1B8/XcKqwjGjsZI/AAAAAAAAFiM/3nA8P_d50FcCWEnw6uhSeVEtPzKDH6_eQCLcBGAsYHQ/s1600/animasu.ico",
         "apiVersion": 1,
-        "fileHash": "sha256-2e34b45a08ca48f417092d1b692cf8a053d35f3ad2583e8e9bfeaa6454ecd4cd"
+        "fileHash": "sha256-5c6d23e02093e47c7262e5daaf9a32d7ee639e6a51923d4133fdc59511904305"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
         "status": 1,
-        "version": 10,
+        "version": 11,
         "name": "AnimeSailProvider",
         "internalName": "AnimeSailProvider",
         "authors": [
             "Miku"
         ],
         "description": "AnimeSail \u2014 Streaming Anime, Donghua Subtitle Indonesia",
-        "fileSize": 42910,
+        "fileSize": 42906,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -85,12 +85,12 @@
         ],
         "iconUrl": "https://aghanim.xyz/wp-content/themes/animesail/assets/images/ico.png",
         "apiVersion": 1,
-        "fileHash": "sha256-af68c09e0efa3495ca5ec0327c7ddf39a36ef41e5efa22f15c40ee91482e546a"
+        "fileHash": "sha256-a1b79a126e3a39b357c76b5391b3387ddadb0b239c337b2ad6c31d2603771d6b"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimexinProvider.cs3",
         "status": 1,
-        "version": 2,
+        "version": 3,
         "name": "AnimexinProvider",
         "internalName": "AnimexinProvider",
         "authors": [
@@ -107,12 +107,12 @@
         ],
         "iconUrl": "https://animexin.dev/wp-content/uploads/2020/06/animexinv1.png",
         "apiVersion": 1,
-        "fileHash": "sha256-4ccd585eeac9987759a0ff7cff70adb0f65ff355873a165c5ec5a64cea6fb2e3"
+        "fileHash": "sha256-b729781fad2b7f809266a937c7dbbfa4369b3742ec2c4e13eb84c04daaf996bd"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnoboyProvider.cs3",
         "status": 1,
-        "version": 4,
+        "version": 5,
         "name": "AnoboyProvider",
         "internalName": "AnoboyProvider",
         "authors": [
@@ -129,12 +129,12 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://anoboy.be&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-a2576ef08dfb640486ea101c8fd912cdab637bd8af7cd1bb44f4064ca941c88c"
+        "fileHash": "sha256-66ce783fd9fc2ef0405eb96e66fe2d941be913171fb0f5731129a2f93c77a579"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DonghubProvider.cs3",
         "status": 1,
-        "version": 2,
+        "version": 3,
         "name": "DonghubProvider",
         "internalName": "DonghubProvider",
         "authors": [
@@ -151,12 +151,12 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://donghub.vip&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-1a683c23f94e03a797ec1be801c7aba9e865ef3ea0e11013b074a331f733cf2a"
+        "fileHash": "sha256-dd049032bf837b0f6b31401cc5044b32d9aedecec4b379f4d7d404e69d92c33a"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DubbindoProvider.cs3",
         "status": 1,
-        "version": 2,
+        "version": 3,
         "name": "DubbindoProvider",
         "internalName": "DubbindoProvider",
         "authors": [
@@ -174,12 +174,12 @@
         ],
         "iconUrl": "https://www.google.com/s2/favicons?domain=www.dubbindo.site&sz=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-bdadd880118c212f4b2e972bbb4d30923a66999fa9e66d3add5fb1310da323a4"
+        "fileHash": "sha256-365f09022ff0d97ad17166c9167d29323d4449c9eb7cccff5bc33aadd0c3cd9d"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/HidoriStreamProvider.cs3",
         "status": 1,
-        "version": 6,
+        "version": 7,
         "name": "HidoriStreamProvider",
         "internalName": "HidoriStreamProvider",
         "authors": [
@@ -196,12 +196,12 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://v2.hidoristream.online&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-0348e58e5d86cc4098c52fa6ad4e52ef75a74c87303f4fc31413355635c5dffe"
+        "fileHash": "sha256-9a7449e5a16cc027ca6308ff174c86d5fc0fdea72d2de5382ace44a413bd5997"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/KuramanimeProvider.cs3",
         "status": 1,
-        "version": 5,
+        "version": 6,
         "name": "KuramanimeProvider",
         "internalName": "KuramanimeProvider",
         "authors": [
@@ -218,12 +218,12 @@
         ],
         "iconUrl": "https://www.google.com/s2/favicons?domain=kuramanime.com&sz=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-fd4202fb9e8157c718e84507825ea4d6aaa8314e54f111a0fcd632813bbee640"
+        "fileHash": "sha256-aad2a4caf0571ce61e07e02ed30fec4ad19d8f554abc84329040c741bee73e76"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/KuronimeProvider.cs3",
         "status": 1,
-        "version": 6,
+        "version": 7,
         "name": "KuronimeProvider",
         "internalName": "KuronimeProvider",
         "authors": [
@@ -240,12 +240,12 @@
         ],
         "iconUrl": "https://play-lh.googleusercontent.com/EFMkS1T-8txjLFIl9QxjcTRLa7a7Muv08C04b7ongYgodoY_b2T3GpxzGAQEx-eitfQ=w256",
         "apiVersion": 1,
-        "fileHash": "sha256-0bd0f3d4d5a3da149891f41ecfb4249551b1ebf359eac44442ac9559028ec71e"
+        "fileHash": "sha256-c0cacc9e25e9c073d6edd4d6c1bff4c6e523e03053426a7de6d26779cc8b06ea"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/NekopoiProvider.cs3",
         "status": 1,
-        "version": 3,
+        "version": 4,
         "name": "NekopoiProvider",
         "internalName": "NekopoiProvider",
         "authors": [
@@ -260,12 +260,12 @@
         ],
         "iconUrl": "https://www.google.com/s2/favicons?domain=nekopoi.care&sz=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-c357f928423a1cbc8515f7c908240411a5b6cf97f0f78697b18c398e0a7588db"
+        "fileHash": "sha256-953734b5f45d609520f25a8a6f462ab8bb2902d44c8398dc0e3d3a88d8c44ecc"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/NimegamiProvider.cs3",
         "status": 1,
-        "version": 6,
+        "version": 7,
         "name": "NimegamiProvider",
         "internalName": "NimegamiProvider",
         "authors": [
@@ -282,12 +282,12 @@
         ],
         "iconUrl": "https://www.google.com/s2/favicons?domain=nimegami.id&sz=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-d43090aab1739c0376076d6d9224c2d472156e01053ad54bafb841c3c2dc5232"
+        "fileHash": "sha256-94fc6e3590324fcfb66ab84b6635132bea15067789d4bc617f23a5da47c3905d"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/NontonAnimeIDProvider.cs3",
         "status": 1,
-        "version": 6,
+        "version": 7,
         "name": "NontonAnimeIDProvider",
         "internalName": "NontonAnimeIDProvider",
         "authors": [
@@ -304,12 +304,12 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://s11.nontonanimeid.boats&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-dbb62bd4fe17662edb220a897687099d5b7ba5bf1623aceae78b99f780804072"
+        "fileHash": "sha256-83cac3f4f0b6425af6ea26eb56506a48c7d009537d234b1055ea064e7f7893c8"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/OtakudesuProvider.cs3",
         "status": 1,
-        "version": 7,
+        "version": 8,
         "name": "OtakudesuProvider",
         "internalName": "OtakudesuProvider",
         "authors": [
@@ -326,12 +326,12 @@
         ],
         "iconUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRr-sfek8gXmLpcAppEpaYbUDVtndQbCm_boh1-E91QrmSvsw-2l3-s2JOP&s=10",
         "apiVersion": 1,
-        "fileHash": "sha256-04964af2414494b5b2f9bac4ac7208d2fa224b17a52bc1c3fa33993bb9262853"
+        "fileHash": "sha256-7af1f286703519f5ba9455e95203a6da8d1e935ebe73e2af644c0c915b13e775"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/SamehadakuProvider.cs3",
         "status": 1,
-        "version": 6,
+        "version": 7,
         "name": "SamehadakuProvider",
         "internalName": "SamehadakuProvider",
         "authors": [
@@ -348,12 +348,12 @@
         ],
         "iconUrl": "https://lh3.googleusercontent.com/zwKn_6sdYOdIiWg6Gtnx-Ar2DrVamlADnPN8BE4f84-a9aRo2Zc7mxbW5Qd26Z8cPFc",
         "apiVersion": 1,
-        "fileHash": "sha256-ddd2f9a053da74dad7dff703636c475c3e0fb0e8a7187b7f641b6be68fa893ab"
+        "fileHash": "sha256-f7a04eaed66dc20fac5048e9e62f5dccadad15983f6aaacdc83fabca73636858"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/WinbuProvider.cs3",
         "status": 1,
-        "version": 2,
+        "version": 3,
         "name": "WinbuProvider",
         "internalName": "WinbuProvider",
         "authors": [
@@ -371,6 +371,6 @@
         ],
         "iconUrl": "https://winbu.org/wp-content/uploads/2025/04/file-0000000068a051f6aed60f781c75581b-conversation-id-67ef899f-e0f8-8011-8643-02848517c045-message-i-1-e1744432620825.png",
         "apiVersion": 1,
-        "fileHash": "sha256-b7e58016c4ffd524ca0f066ea082275c8b201f398f49fd3cc9e8535865daf976"
+        "fileHash": "sha256-a732328a039b25d64f07e0bddbfc49206e92688e2f7fae91afd601bba9d2de3c"
     }
 ]
