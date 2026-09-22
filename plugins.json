@@ -53,7 +53,7 @@
             "Miku"
         ],
         "description": "Animasu \u2014 Streaming Anime Subtitle Indonesia",
-        "fileSize": 52303,
+        "fileSize": 58465,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -63,7 +63,7 @@
         ],
         "iconUrl": "https://1.bp.blogspot.com/-713bWoqV1B8/XcKqwjGjsZI/AAAAAAAAFiM/3nA8P_d50FcCWEnw6uhSeVEtPzKDH6_eQCLcBGAsYHQ/s1600/animasu.ico",
         "apiVersion": 1,
-        "fileHash": "sha256-f88db51b64bbaa8e98ffa40e375e81c8d7f4b3a9cb1b6aae7ff9c95db9d33afa"
+        "fileHash": "sha256-ca2a00b1ee1997e9eb7011a82a9cc23ca5622c8b11c305cd1f84a89c1330dcbf"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
