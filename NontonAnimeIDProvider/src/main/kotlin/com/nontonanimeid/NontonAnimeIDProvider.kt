@@ -18,7 +18,6 @@ import java.net.URLEncoder
 class NontonAnimeIDProvider : MainAPI() {
     override var mainUrl = "https://s13.nontonanimeid.boats"
     override var name = "NontonAnimeID"
-    override val hasQuickSearch = false
     override val hasMainPage = true
     override var lang = "id"
     override val hasDownloadSupport = true
