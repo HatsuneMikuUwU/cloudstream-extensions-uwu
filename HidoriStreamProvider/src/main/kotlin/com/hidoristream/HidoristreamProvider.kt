@@ -205,7 +205,7 @@ class HidoristreamProvider : MainAPI() {
 
         val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
 
-        val episodeElements = document.select("div.eplister ul li a").reversed()
+        val episodeElements = document.select("div.episodelist ul li a").reversed()
         val isMovie = episodeElements.isEmpty() || type == TvType.AnimeMovie
 
         val episodes = if (isMovie && episodeElements.isEmpty()) {
@@ -336,14 +336,24 @@ class HidoristreamProvider : MainAPI() {
                 val url = a.attr("href").trim()
                 val hostName = a.text().trim()
                 if (url.isBlank() || url.contains("t.me", ignoreCase = true)) continue
+                val linkName = listOfNotNull(hostName.ifBlank { null }, quality).joinToString(" ")
                 try {
-                    loadExtractor(httpsify(url), data, subtitleCallback) { link ->
+                    val extracted = loadExtractor(httpsify(url), data, subtitleCallback) { link ->
                         callback(
-                            link.copy(
-                                name = listOfNotNull(hostName.ifBlank { null }, quality)
-                                    .joinToString(" ")
-                                    .ifBlank { link.name }
-                            )
+                            link.copy(name = linkName.ifBlank { link.name })
+                        )
+                    }
+                    if (!extracted && url.contains("/stream/", ignoreCase = true)) {
+                        callback(
+                            newExtractorLink(
+                                source = this.name,
+                                name = linkName.ifBlank { this.name },
+                                url = httpsify(url),
+                                type = ExtractorLinkType.VIDEO
+                            ) {
+                                this.referer = mainUrl
+                                this.quality = Qualities.Unknown.value
+                            }
                         )
                     }
                 } catch (_: Exception) {
