@@ -44,6 +44,28 @@
         "fileHash": "sha256-193a7bdd988ab32cf6af1b86a2924e079dab27082c456dd5f5116480e71f26d9"
     },
     {
+        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimasuProvider.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "AnimasuProvider",
+        "internalName": "AnimasuProvider",
+        "authors": [
+            "Miku"
+        ],
+        "description": "Animasu \u2014 Streaming Anime Subtitle Indonesia",
+        "fileSize": 47038,
+        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
+        "language": "id",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://1.bp.blogspot.com/-713bWoqV1B8/XcKqwjGjsZI/AAAAAAAAFiM/3nA8P_d50FcCWEnw6uhSeVEtPzKDH6_eQCLcBGAsYHQ/s1600/animasu.ico",
+        "apiVersion": 1,
+        "fileHash": "sha256-6afac51ea9207244240b74ce1195364519d73fdc2d8181ef20ce42c53afe4117"
+    },
+    {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
         "status": 1,
         "version": 10,
