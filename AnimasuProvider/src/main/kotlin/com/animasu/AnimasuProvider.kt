@@ -15,7 +15,7 @@ class AnimasuProvider : MainAPI() {
     override var name = "Animasu"
     override val hasMainPage = true
     override var lang = "id"
-    override val hasDownloadSupport = true
+    override val hasDownloadSupport = false
 
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -45,10 +45,10 @@ class AnimasuProvider : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "$mainUrl/anime-sedang-tayang-terbaru/page/" to "Ongoing",
-        "$mainUrl/selesai-tayang/page/" to "Completed",
-        "$mainUrl/populer/page/" to "Popular",
-        "$mainUrl/anime-movie/page/" to "Anime Movie"
+        "$mainUrl/anime-sedang-tayang-terbaru/" to "Ongoing",
+        "$mainUrl/selesai-tayang/" to "Completed",
+        "$mainUrl/populer/" to "Popular",
+        "$mainUrl/anime-movie/" to "Anime Movie"
     )
 
     override suspend fun getMainPage(
