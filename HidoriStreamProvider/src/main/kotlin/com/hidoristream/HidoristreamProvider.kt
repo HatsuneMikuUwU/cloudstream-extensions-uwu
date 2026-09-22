@@ -338,9 +338,23 @@ class HidoristreamProvider : MainAPI() {
                 if (url.isBlank() || url.contains("t.me", ignoreCase = true)) continue
                 val linkName = listOfNotNull(hostName.ifBlank { null }, quality).joinToString(" ")
                 try {
+                    val extractedLinks = mutableListOf<ExtractorLink>()
                     val extracted = loadExtractor(httpsify(url), data, subtitleCallback) { link ->
+                        extractedLinks.add(link)
+                    }
+                    extractedLinks.forEach { link ->
                         callback(
-                            link.copy(name = linkName.ifBlank { link.name })
+                            newExtractorLink(
+                                source = link.source,
+                                name = linkName.ifBlank { link.name },
+                                url = link.url,
+                                type = link.type
+                            ) {
+                                this.referer = link.referer
+                                this.quality = link.quality
+                                this.headers = link.headers
+                                this.extractorData = link.extractorData
+                            }
                         )
                     }
                     if (!extracted && url.contains("/stream/", ignoreCase = true)) {
