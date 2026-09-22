@@ -9,12 +9,8 @@ import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.json.JSONObject
 
-/**
- * Handles the Blogger (blogger.com / blogspot video.g) embeds used as the
- * default Animasu mirror, as well as raw blogger.googleusercontent.com /
- * googlevideo.com links that sometimes show up directly.
- */
 class BloggerExtractor : ExtractorApi() {
     override val name = "Blogger"
     override val mainUrl = "https://www.blogger.com"
@@ -35,6 +31,30 @@ class BloggerExtractor : ExtractorApi() {
         ) {
             emit(fixed, fixed, callback)
             return
+        }
+
+        val redirectLocation = try {
+            app.get(
+                fixed,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to (referer ?: mainUrl)
+                ),
+                referer = referer,
+                allowRedirects = false
+            ).headers["location"]
+        } catch (_: Exception) {
+            null
+        }
+
+        if (!redirectLocation.isNullOrBlank()) {
+            val normalized = normalizeVideoUrl(redirectLocation)
+            if (normalized.contains("googlevideo.com/videoplayback", true) ||
+                normalized.contains("blogger.googleusercontent.com", true)
+            ) {
+                emit(normalized, fixed, callback)
+                return
+            }
         }
 
         val page = try {
@@ -136,7 +156,6 @@ class BloggerExtractor : ExtractorApi() {
     }
 }
 
-/** Handles the yourupload.com mirror occasionally used by Animasu. */
 class YourUploadExtractor : ExtractorApi() {
     override val name = "YourUpload"
     override val mainUrl = "https://www.yourupload.com"
@@ -190,7 +209,6 @@ class YourUploadExtractor : ExtractorApi() {
     }
 }
 
-/** Handles the filedon.co mirror occasionally used by Animasu. */
 class FiledonExtractor : ExtractorApi() {
     override val name = "Filedon"
     override val mainUrl = "https://filedon.co"
@@ -281,5 +299,109 @@ class FiledonExtractor : ExtractorApi() {
             .replace("&gt;", ">")
             .replace("\\u0026", "&")
             .replace("\\/", "/")
+    }
+}
+
+class AbyssExtractor : ExtractorApi() {
+    override val name = "Abyss"
+    override val mainUrl = "https://abyssplayer.com"
+    override val requiresReferer = true
+
+    private val sourceEndpoints = listOf(
+        "https://abyss.to/api/source/",
+        "https://abyssplayer.com/api/source/",
+        "https://short.icu/"
+    )
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val fixed = if (url.startsWith("//")) "https:$url" else url
+        val id = Regex("""(?:abyssplayer\.com|abyss\.to|hydrax\.[a-z]+|short\.icu)/(?:[a-z]+/)?([A-Za-z0-9]+)""")
+            .find(fixed)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: Regex("""/([A-Za-z0-9]{6,})/?$""").find(fixed)?.groupValues?.getOrNull(1)
+            ?: return
+
+        var found = false
+
+        for (base in sourceEndpoints) {
+            try {
+                val res = app.post(
+                    "$base$id",
+                    headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to fixed,
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "Accept" to "application/json, text/plain, */*"
+                    ),
+                    data = mapOf("r" to (referer ?: ""), "d" to mainUrl.removePrefix("https://"))
+                ).text
+
+                parseSources(res).forEach { (stream, quality) ->
+                    found = true
+                    callback.invoke(
+                        newExtractorLink(name, name, stream, INFER_TYPE) {
+                            this.referer = fixed
+                            this.quality = quality
+                            this.headers = mapOf(
+                                "User-Agent" to USER_AGENT,
+                                "Referer" to fixed
+                            )
+                        }
+                    )
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        if (!found) {
+            try {
+                val page = app.get(
+                    fixed,
+                    headers = mapOf("User-Agent" to USER_AGENT),
+                    referer = referer
+                ).text
+                Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                    .findAll(page)
+                    .map { it.value }
+                    .distinct()
+                    .forEach { stream ->
+                        callback.invoke(
+                            newExtractorLink(name, name, stream, INFER_TYPE) {
+                                this.referer = fixed
+                                this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to fixed)
+                            }
+                        )
+                    }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun parseSources(jsonText: String): List<Pair<String, Int>> {
+        val out = mutableListOf<Pair<String, Int>>()
+        try {
+            val root = JSONObject(jsonText)
+            val data = root.optJSONArray("data") ?: root.optJSONArray("sources")
+            if (data != null) {
+                for (i in 0 until data.length()) {
+                    val item = data.optJSONObject(i) ?: continue
+                    val file = item.optString("file").ifBlank { item.optString("src") }
+                    if (file.isBlank()) continue
+                    val label = item.optString("label").ifBlank { item.optString("type") }
+                    out.add(file to getQualityFromName(label))
+                }
+            }
+        } catch (_: Exception) {
+            Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+                .findAll(jsonText)
+                .forEach { out.add(it.value to Qualities.Unknown.value) }
+        }
+        return out.distinctBy { it.first }
     }
 }
