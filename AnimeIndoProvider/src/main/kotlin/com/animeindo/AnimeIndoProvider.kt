@@ -242,7 +242,6 @@ class AnimeIndoProvider : MainAPI() {
         return if (type == TvType.AnimeMovie && episodes.size <= 1) {
             val movieData = episodes.firstOrNull()?.data ?: url
             newMovieLoadResponse(title, url, type, movieData) {
-                this.engName = animeMetaData?.titles?.get("en") ?: title
                 this.posterUrl = tracker?.image ?: poster
                 this.backgroundPosterUrl = backgroundposter
                 try {
@@ -294,27 +293,18 @@ class AnimeIndoProvider : MainAPI() {
         document.select("a.server[data-video], a#allmiror[data-video]").amap { server ->
             val videoUrl = server.attr("data-video").trim()
             if (videoUrl.isBlank()) return@amap
-            val name = server.text().trim().ifBlank { "Server" }
+            val serverName = server.text().trim().ifBlank { "Server" }
             try {
-                loadExtractor(videoUrl, data, subtitleCallback) { link ->
-                    callback.invoke(
-                        newExtractorLink(
-                            source = name,
-                            name = "$name - ${link.name}",
-                            url = link.url,
-                            type = link.type
-                        ) {
-                            this.quality = link.quality
-                            this.referer = link.referer
-                            this.headers = link.headers
-                        }
-                    )
-                }
+                loadExtractor(videoUrl, data, subtitleCallback, callback)
             } catch (_: Exception) {
-                // fallback: try direct if it's already a media url
                 if (videoUrl.contains(".mp4") || videoUrl.contains(".m3u8")) {
                     callback.invoke(
-                        newExtractorLink(name, name, videoUrl, INFER_TYPE) {
+                        newExtractorLink(
+                            source = serverName,
+                            name = serverName,
+                            url = videoUrl,
+                            type = INFER_TYPE
+                        ) {
                             this.referer = mainUrl
                         }
                     )
@@ -322,8 +312,7 @@ class AnimeIndoProvider : MainAPI() {
             }
         }
 
-        // also try the iframe src
-        document.select("iframe#tontonin, .nonton iframe").forEach { iframe ->
+        document.select("iframe#tontonin, .nonton iframe").amap { iframe ->
             val src = iframe.attr("src").trim()
             if (src.isNotBlank()) {
                 loadExtractor(src, data, subtitleCallback, callback)
