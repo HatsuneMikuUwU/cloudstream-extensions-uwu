@@ -177,28 +177,6 @@
         "fileHash": "sha256-365f09022ff0d97ad17166c9167d29323d4449c9eb7cccff5bc33aadd0c3cd9d"
     },
     {
-        "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/HidoriStreamProvider.cs3",
-        "status": 1,
-        "version": 7,
-        "name": "HidoriStreamProvider",
-        "internalName": "HidoriStreamProvider",
-        "authors": [
-            "Miku"
-        ],
-        "description": "HidoriStream \u2014 Streaming Anime Subtitle Indonesia",
-        "fileSize": 64759,
-        "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
-        "language": "id",
-        "tvTypes": [
-            "AnimeMovie",
-            "OVA",
-            "Anime"
-        ],
-        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://v2.hidoristream.online&size=%size%",
-        "apiVersion": 1,
-        "fileHash": "sha256-326dc82ba0e1df438d4caf5c42e4183a90aff0e5aa5c4dd2485a15ae6959f432"
-    },
-    {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/KuramanimeProvider.cs3",
         "status": 1,
         "version": 6,
