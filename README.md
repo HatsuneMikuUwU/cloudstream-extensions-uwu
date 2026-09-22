@@ -7,7 +7,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
 [![Commits](https://img.shields.io/github/commit-activity/m/HatsuneMikuUwU/AnimeX?style=for-the-badge&logo=github)](https://github.com/HatsuneMikuUwU/AnimeX/commits/master)
-[![Telegram](https://img.shields.io/badge/Telegram-Group-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+qNcWx0po4a0wNjE1)
+[![Telegram](https://img.shields.io/badge/Telegram-Group-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+MEVNxO_1OjM0Mjll)
 
 <br>
 <img src="https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/refs/heads/master/banner.png" alt="Hatsune Repo Banner" width="100%">
