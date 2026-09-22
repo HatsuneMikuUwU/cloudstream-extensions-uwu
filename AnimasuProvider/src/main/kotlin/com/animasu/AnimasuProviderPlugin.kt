@@ -13,6 +13,7 @@ class AnimasuProviderPlugin : Plugin() {
         // Custom extractors for hosts commonly used by Animasu mirrors.
         registerExtractorAPI(BloggerExtractor())
         registerExtractorAPI(FiledonExtractor())
+        registerExtractorAPI(YourUploadExtractor())
 
         // Extractors already shipped with Cloudstream core for the other
         // mirror hosts seen on the player page (VidHidePro, YourUpload, ...).

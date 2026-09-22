@@ -15,7 +15,7 @@ class AnimasuProvider : MainAPI() {
     override var name = "Animasu"
     override val hasMainPage = true
     override var lang = "id"
-    override val hasDownloadSupport = false
+    override val hasDownloadSupport = true
 
     override val supportedTypes = setOf(
         TvType.Anime,
@@ -235,8 +235,9 @@ class AnimasuProvider : MainAPI() {
             val iframeSrc = Jsoup.parse(decodedHtml).selectFirst("iframe")?.attr("src")
             if (iframeSrc.isNullOrBlank()) return@forEach
 
-            val quality = getQuality(option.text())
-            if (loadCustomExtractor(iframeSrc, "$mainUrl/", subtitleCallback, callback, quality)) {
+            val label = option.text().trim()
+            val quality = getQuality(label)
+            if (loadCustomExtractor(iframeSrc, "$mainUrl/", subtitleCallback, callback, quality, label)) {
                 found = true
             }
         }
@@ -258,6 +259,7 @@ class AnimasuProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
         quality: Int = Qualities.Unknown.value,
+        label: String? = null,
     ): Boolean {
         var success = false
         loadExtractor(fixUrl(url), referer, subtitleCallback) { link ->
@@ -266,7 +268,7 @@ class AnimasuProvider : MainAPI() {
                 callback.invoke(
                     newExtractorLink(
                         link.name,
-                        link.name,
+                        if (!label.isNullOrBlank()) "${link.name} ($label)" else link.name,
                         link.url,
                         link.type
                     ) {
@@ -278,6 +280,50 @@ class AnimasuProvider : MainAPI() {
                 )
             }
         }
+
+        if (!success) {
+            success = loadDirectFallback(url, referer, quality, label, callback)
+        }
+
         return success
+    }
+
+    private suspend fun loadDirectFallback(
+        url: String,
+        referer: String?,
+        quality: Int,
+        label: String?,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        val fixed = fixUrl(url)
+        val page = try {
+            app.get(fixed, referer = referer).text
+        } catch (_: Exception) {
+            return false
+        }
+
+        val streams = Regex("""https?://[^\s"'<>]+\.(?:m3u8|mp4)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+            .findAll(page)
+            .map { it.value.replace("\\/", "/").replace("\\u0026", "&") }
+            .distinct()
+            .toList()
+
+        if (streams.isEmpty()) return false
+
+        streams.forEach { stream ->
+            callback.invoke(
+                newExtractorLink(
+                    name,
+                    if (!label.isNullOrBlank()) "$name ($label)" else name,
+                    stream,
+                    INFER_TYPE
+                ) {
+                    this.referer = fixed
+                    this.quality = quality
+                    this.headers = mapOf("Referer" to fixed)
+                }
+            )
+        }
+        return true
     }
 }

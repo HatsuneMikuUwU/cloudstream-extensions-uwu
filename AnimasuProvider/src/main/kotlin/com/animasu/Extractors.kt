@@ -136,6 +136,60 @@ class BloggerExtractor : ExtractorApi() {
     }
 }
 
+/** Handles the yourupload.com mirror occasionally used by Animasu. */
+class YourUploadExtractor : ExtractorApi() {
+    override val name = "YourUpload"
+    override val mainUrl = "https://www.yourupload.com"
+    override val requiresReferer = false
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val fixed = if (url.startsWith("//")) "https:$url" else url
+        val doc = try {
+            app.get(
+                fixed,
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                ),
+                referer = referer
+            ).text
+        } catch (_: Exception) {
+            return
+        }
+
+        val streamUrls = mutableListOf<String>()
+
+        Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8)[^\s"'<>]*""", RegexOption.IGNORE_CASE)
+            .findAll(doc)
+            .map { it.value.replace("\\/", "/").replace("\\u0026", "&") }
+            .forEach { streamUrls.add(it) }
+
+        Regex(""""file"\s*:\s*"([^"]+)"""")
+            .findAll(doc)
+            .map { it.groupValues[1].replace("\\/", "/").replace("\\u0026", "&") }
+            .forEach { streamUrls.add(it) }
+
+        streamUrls.distinct().forEach { stream ->
+            callback.invoke(
+                newExtractorLink(name, name, stream, INFER_TYPE) {
+                    this.referer = fixed
+                    this.quality = getQualityFromName(doc)
+                    this.headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to fixed,
+                        "Accept" to "*/*"
+                    )
+                }
+            )
+        }
+    }
+}
+
 /** Handles the filedon.co mirror occasionally used by Animasu. */
 class FiledonExtractor : ExtractorApi() {
     override val name = "Filedon"
