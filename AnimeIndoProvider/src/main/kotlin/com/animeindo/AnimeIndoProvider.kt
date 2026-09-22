@@ -59,7 +59,13 @@ class AnimeIndoProvider : MainAPI() {
         val items = if (request.name == "Movies") {
             document.select("table.otable").mapNotNull { it.toSearchResult() }
         } else {
-            document.select("div.list-anime").mapNotNull { it.toLatestResult() }
+            // Prefer anchors that wrap list-anime cards
+            val cards = document.select("a:has(div.list-anime)")
+            if (cards.isNotEmpty()) {
+                cards.mapNotNull { it.toLatestResultFromAnchor() }
+            } else {
+                document.select("div.list-anime").mapNotNull { it.toLatestResult() }
+            }
         }
 
         val home = mutableListOf(
@@ -76,37 +82,54 @@ class AnimeIndoProvider : MainAPI() {
         return newHomePageResponse(home, hasNext = items.isNotEmpty())
     }
 
-    private fun Element.toLatestResult(): SearchResponse? {
-        val a = selectFirst("a") ?: return null
-        val href = fixUrl(a.attr("href"))
-        // Episode links look like /slug-episode-12/ → convert to anime page
-        val animeHref = href
-            .replace(Regex("-episode-\\d+/?$"), "/")
-            .let {
-                if (it.contains("/anime/")) it
-                else {
-                    val slug = it.removePrefix(mainUrl).trim('/')
-                        .replace(Regex("-episode-\\d+$"), "")
-                        .removeSuffix("/")
-                    "$mainUrl/anime/$slug/"
-                }
-            }
+    /** Parse from <a href="..."><div class="list-anime">...</div></a> */
+    private fun Element.toLatestResultFromAnchor(): SearchResponse? {
+        val rawHref = attr("href").orEmpty()
+        if (rawHref.isBlank()) return null
+        val href = fixUrl(rawHref)
+        val animeHref = episodeUrlToAnimeUrl(href)
 
         val title = selectFirst("p")?.text()?.trim()
-            ?: a.selectFirst("img")?.attr("alt")?.trim()
+            ?: selectFirst("img")?.attr("alt")?.trim()
             ?: return null
 
-        val poster = selectFirst("img")?.let { img ->
-            img.attr("data-original").ifBlank { img.attr("src") }
-        }?.let { fixUrlNull(it) }
-
-        val epText = selectFirst("span.eps")?.text()?.trim()
+        val poster = selectFirst("img").getImageAttr()
         val isMovie = title.contains("Movie", true) || href.contains("/movie/", true)
 
         return newAnimeSearchResponse(title, animeHref, if (isMovie) TvType.AnimeMovie else TvType.Anime) {
             this.posterUrl = poster
             addDubStatus(dubExist = false, subExist = true)
         }
+    }
+
+    private fun Element.toLatestResult(): SearchResponse? {
+        // Fallback when only div.list-anime is selected (parent is <a>)
+        val parentHref = parent()?.takeIf { it.tagName() == "a" }?.attr("href")
+        val rawHref = selectFirst("a")?.attr("href")
+            ?: parentHref
+            ?: return null
+        val href = fixUrl(rawHref)
+        val animeHref = episodeUrlToAnimeUrl(href)
+
+        val title = selectFirst("p")?.text()?.trim()
+            ?: selectFirst("img")?.attr("alt")?.trim()
+            ?: return null
+
+        val poster = selectFirst("img").getImageAttr()
+        val isMovie = title.contains("Movie", true) || href.contains("/movie/", true)
+
+        return newAnimeSearchResponse(title, animeHref, if (isMovie) TvType.AnimeMovie else TvType.Anime) {
+            this.posterUrl = poster
+            addDubStatus(dubExist = false, subExist = true)
+        }
+    }
+
+    private fun episodeUrlToAnimeUrl(href: String): String {
+        if (href.contains("/anime/")) return href
+        val path = href.removePrefix(mainUrl).trim('/')
+            .replace(Regex("-episode-\\d+/?$"), "")
+            .removeSuffix("/")
+        return if (path.isBlank()) href else "$mainUrl/anime/$path/"
     }
 
     private fun Element.toPopularResult(): SearchResponse? {
@@ -289,33 +312,37 @@ class AnimeIndoProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val document = request(data).document
+        val seen = mutableSetOf<String>()
 
-        document.select("a.server[data-video], a#allmiror[data-video]").amap { server ->
-            val videoUrl = server.attr("data-video").trim()
-            if (videoUrl.isBlank()) return@amap
-            val serverName = server.text().trim().ifBlank { "Server" }
+        fun addUrl(u: String) {
+            val clean = u.trim()
+            if (clean.isNotBlank()) seen.add(clean)
+        }
+
+        document.select("a.server[data-video], a#allmiror[data-video]").forEach { server ->
+            addUrl(server.attr("data-video"))
+        }
+        document.select("iframe#tontonin, .nonton iframe").forEach { iframe ->
+            addUrl(iframe.attr("src"))
+        }
+
+        seen.amap { videoUrl ->
             try {
                 loadExtractor(videoUrl, data, subtitleCallback, callback)
             } catch (_: Exception) {
-                if (videoUrl.contains(".mp4") || videoUrl.contains(".m3u8")) {
-                    callback.invoke(
-                        newExtractorLink(
-                            source = serverName,
-                            name = serverName,
-                            url = videoUrl,
-                            type = INFER_TYPE
-                        ) {
-                            this.referer = mainUrl
-                        }
-                    )
-                }
             }
-        }
-
-        document.select("iframe#tontonin, .nonton iframe").amap { iframe ->
-            val src = iframe.attr("src").trim()
-            if (src.isNotBlank()) {
-                loadExtractor(src, data, subtitleCallback, callback)
+            // Direct fallback for known mp4 hosts already resolved by extractors
+            if (videoUrl.contains(".mp4") || videoUrl.contains(".m3u8") || videoUrl.contains("googlevideo.com")) {
+                callback.invoke(
+                    newExtractorLink(
+                        source = name,
+                        name = name,
+                        url = videoUrl,
+                        type = INFER_TYPE
+                    ) {
+                        this.referer = mainUrl
+                    }
+                )
             }
         }
 
@@ -324,10 +351,17 @@ class AnimeIndoProvider : MainAPI() {
 
     private fun Element?.getImageAttr(): String? {
         if (this == null) return null
-        val attrs = listOf("data-original", "data-src", "data-lazy-src", "src")
+        val attrs = listOf("data-original", "data-src", "data-lazy-src", "data-lazy", "src")
         for (a in attrs) {
             val v = this.attr(a).trim()
-            if (v.isNotEmpty() && !v.startsWith("data:") && !v.contains("loading.gif")) return fixUrlNull(v)
+            if (v.isNotEmpty()
+                && !v.startsWith("data:")
+                && !v.contains("loading.gif", true)
+                && !v.contains("ajax-loader", true)
+                && !v.contains("placeholder", true)
+            ) {
+                return fixUrlNull(v)
+            }
         }
         return null
     }

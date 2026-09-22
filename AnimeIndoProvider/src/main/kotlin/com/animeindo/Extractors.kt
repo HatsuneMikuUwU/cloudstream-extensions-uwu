@@ -10,12 +10,11 @@ import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import org.jsoup.Jsoup
 
 /**
- * Gdplayer (gdplayer.to) – used by GDRIVE server buttons
+ * Gdplayer (gdplayer.to) – GDRIVE server buttons
  */
-open class Gdplayer : ExtractorApi() {
+class Gdplayer : ExtractorApi() {
     override val name = "Gdplayer"
     override val mainUrl = "https://gdplayer.to"
     override val requiresReferer = true
@@ -26,36 +25,65 @@ open class Gdplayer : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val res = app.get(url, referer = referer ?: mainUrl).document
-        val script = res.selectFirst("script:containsData(kaken)")?.data()
-            ?: res.selectFirst("script:containsData(player)")?.data()
-        val kaken = script
-            ?.substringAfter("kaken = \"")
-            ?.substringBefore("\"")
-            ?.takeIf { it.isNotBlank() }
-            ?: return
+        // Try embed path and fallback /f/ download path
+        val candidates = listOf(url, url.replace("/x/?", "/f/?"))
+        for (candidate in candidates) {
+            val res = runCatching {
+                app.get(
+                    candidate,
+                    referer = referer ?: "https://anime-indo.lol/",
+                    headers = mapOf(
+                        "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    )
+                )
+            }.getOrNull() ?: continue
 
-        val json = app.get(
-            "$mainUrl/api/?$kaken=&_=${APIHolder.unixTimeMS}",
-            headers = mapOf(
-                "X-Requested-With" to "XMLHttpRequest",
-                "Referer" to url
-            )
-        ).parsedSafe<Response>() ?: return
+            if (res.code == 404) continue
+            val doc = res.document
+            val script = doc.select("script").mapNotNull { it.data() }.joinToString("\n")
+            val kaken = Regex("""kaken\s*=\s*["']([^"']+)["']""")
+                .find(script)?.groupValues?.getOrNull(1)
+                ?.takeIf { it.isNotBlank() }
 
-        json.sources?.forEach { src ->
-            val file = src.file ?: return@forEach
-            callback.invoke(
-                newExtractorLink(
-                    this.name,
-                    this.name,
-                    file,
-                    INFER_TYPE
-                ) {
-                    this.quality = getQuality(json.title)
-                    this.referer = mainUrl
+            if (kaken != null) {
+                val json = app.get(
+                    "$mainUrl/api/?$kaken=&_=${APIHolder.unixTimeMS}",
+                    headers = mapOf(
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "Referer" to candidate
+                    )
+                ).parsedSafe<Response>()
+
+                json?.sources?.forEach { src ->
+                    val file = src.file ?: return@forEach
+                    callback.invoke(
+                        newExtractorLink(name, name, file, INFER_TYPE) {
+                            this.quality = getQuality(json.title)
+                            this.referer = mainUrl
+                        }
+                    )
                 }
-            )
+                if (!json?.sources.isNullOrEmpty()) return
+            }
+
+            // Direct source / iframe fallback
+            doc.select("source[src], video source").forEach { el ->
+                val file = el.attr("src").trim()
+                if (file.startsWith("http")) {
+                    callback.invoke(
+                        newExtractorLink(name, name, file, INFER_TYPE) {
+                            this.referer = mainUrl
+                        }
+                    )
+                }
+            }
+            doc.select("iframe[src]").forEach { iframe ->
+                val src = iframe.attr("src").trim()
+                if (src.startsWith("http")) {
+                    loadExtractor(src, candidate, subtitleCallback, callback)
+                }
+            }
         }
     }
 
@@ -76,11 +104,11 @@ open class Gdplayer : ExtractorApi() {
 }
 
 /**
- * play.xtwap.top / btube3.php – B-TUBE server
- * Tries to extract JWPlayer sources or nested iframes / blogger embeds.
+ * Unified extractor for play.xtwap.top (B-TUBE / CEPAT / etc.)
+ * B-TUBE returns a direct googlevideo / blogger mp4 in <source src="...">.
  */
-class XtwapBtube : ExtractorApi() {
-    override val name = "B-TUBE"
+class Xtwap : ExtractorApi() {
+    override val name = "Xtwap"
     override val mainUrl = "https://play.xtwap.top"
     override val requiresReferer = true
 
@@ -90,105 +118,65 @@ class XtwapBtube : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        val label = when {
+            url.contains("btube", true) -> "B-TUBE"
+            url.contains("cepat", true) -> "CEPAT"
+            else -> name
+        }
+
         val doc = app.get(
             url,
             referer = referer ?: "https://anime-indo.lol/",
             headers = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
             )
         ).document
 
-        // 1) JWPlayer sources
-        val script = doc.select("script").mapNotNull { it.data() }.joinToString("\n")
-        val sources = Regex("""["']file["']\s*:\s*["']([^"']+)["']""").findAll(script)
-            .map { it.groupValues[1] }
-            .filter { it.startsWith("http") }
-            .toList()
-
-        sources.forEach { file ->
-            callback.invoke(
-                newExtractorLink(name, name, file, INFER_TYPE) {
-                    this.referer = mainUrl
-                }
-            )
-        }
-
-        // 2) Nested iframe
-        doc.select("iframe").forEach { iframe ->
-            val src = iframe.attr("src").trim()
-            if (src.isNotBlank() && src.startsWith("http")) {
-                loadExtractor(src, url, subtitleCallback, callback)
-            }
-        }
-
-        // 3) Blogger / video embeds via data or source tags
-        doc.select("source[src], video source").forEach { src ->
-            val file = src.attr("src").trim()
+        // 1) <source src="..."> (B-TUBE video.js style)
+        doc.select("source[src], video source, video[src]").forEach { el ->
+            val file = el.attr("src").ifBlank { el.attr("data-src") }.trim()
             if (file.startsWith("http")) {
                 callback.invoke(
-                    newExtractorLink(name, name, file, INFER_TYPE) {
+                    newExtractorLink(label, label, file, INFER_TYPE) {
                         this.referer = mainUrl
+                        this.headers = mapOf("Referer" to mainUrl)
                     }
                 )
             }
         }
-    }
-}
 
-/**
- * play.xtwap.top / cepat.php – CEPAT server
- */
-class XtwapCepat : ExtractorApi() {
-    override val name = "CEPAT"
-    override val mainUrl = "https://play.xtwap.top"
-    override val requiresReferer = true
-
-    override suspend fun getUrl(
-        url: String,
-        referer: String?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val doc = app.get(
-            url,
-            referer = referer ?: "https://anime-indo.lol/",
-            headers = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
-            )
-        ).document
-
+        // 2) JWPlayer / file: "..."
         val script = doc.select("script").mapNotNull { it.data() }.joinToString("\n")
-
-        // JWPlayer file
-        Regex("""["']file["']\s*:\s*["']([^"']+)["']""").findAll(script)
+        Regex("""["']file["']\s*:\s*["'](https?://[^"']+)["']""")
+            .findAll(script)
             .map { it.groupValues[1] }
-            .filter { it.startsWith("http") }
+            .distinct()
             .forEach { file ->
                 callback.invoke(
-                    newExtractorLink(name, name, file, INFER_TYPE) {
+                    newExtractorLink(label, label, file, INFER_TYPE) {
                         this.referer = mainUrl
                     }
                 )
             }
 
-        // sources array
-        Regex("""sources\s*:\s*\[(.*?)\]""", RegexOption.DOT_MATCHES_ALL)
-            .find(script)?.groupValues?.getOrNull(1)?.let { arr ->
-                Regex("""["']file["']\s*:\s*["']([^"']+)["']""").findAll(arr)
-                    .map { it.groupValues[1] }
-                    .filter { it.startsWith("http") }
-                    .forEach { file ->
-                        callback.invoke(
-                            newExtractorLink(name, name, file, INFER_TYPE) {
-                                this.referer = mainUrl
-                            }
-                        )
+        // 3) sources:[{file:"..."}]
+        Regex("""["']?file["']?\s*:\s*["'](https?://[^"']+)["']""")
+            .findAll(script)
+            .map { it.groupValues[1] }
+            .distinct()
+            .forEach { file ->
+                callback.invoke(
+                    newExtractorLink(label, label, file, INFER_TYPE) {
+                        this.referer = mainUrl
                     }
+                )
             }
 
-        doc.select("iframe").forEach { iframe ->
+        // 4) Nested iframe
+        doc.select("iframe[src]").forEach { iframe ->
             val src = iframe.attr("src").trim()
-            if (src.isNotBlank() && src.startsWith("http")) {
+            if (src.startsWith("http") && !src.contains("xtwap.top")) {
                 loadExtractor(src, url, subtitleCallback, callback)
             }
         }

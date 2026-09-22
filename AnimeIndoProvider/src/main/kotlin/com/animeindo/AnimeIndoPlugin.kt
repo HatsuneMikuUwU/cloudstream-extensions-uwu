@@ -9,7 +9,6 @@ class AnimeIndoPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(AnimeIndoProvider())
         registerExtractorAPI(Gdplayer())
-        registerExtractorAPI(XtwapBtube())
-        registerExtractorAPI(XtwapCepat())
+        registerExtractorAPI(Xtwap())
     }
 }
