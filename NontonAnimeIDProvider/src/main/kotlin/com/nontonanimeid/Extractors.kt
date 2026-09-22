@@ -90,6 +90,18 @@ class KotakAnimeidCom : Hxfile() {
     override val requiresReferer = true
 }
 
+class KotakAnimeidLinkS1 : Hxfile() {
+    override val name = "KotakAnimeidLink"
+    override val mainUrl = "https://s1.kotakanimeid.link"
+    override val requiresReferer = true
+}
+
+class KotakAnimeidLinkS2 : Hxfile() {
+    override val name = "KotakAnimeidLink"
+    override val mainUrl = "https://s2.kotakanimeid.link"
+    override val requiresReferer = true
+}
+
 class Vidhidepre : Filesim() {
     override val name = "Vidhidepre"
     override var mainUrl = "https://vidhidepre.com"
