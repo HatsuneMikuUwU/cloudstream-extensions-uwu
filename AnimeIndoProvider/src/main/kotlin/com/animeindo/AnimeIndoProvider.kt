@@ -316,7 +316,9 @@ class AnimeIndoProvider : MainAPI() {
 
         fun addUrl(u: String) {
             val clean = u.trim()
-            if (clean.isNotBlank()) seen.add(clean)
+            if (clean.isBlank()) return
+            if (clean.contains("gdplayer.to", true)) return
+            seen.add(clean)
         }
 
         document.select("a.server[data-video], a#allmiror[data-video]").forEach { server ->

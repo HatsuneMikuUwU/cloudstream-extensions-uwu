@@ -7,9 +7,24 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
+import com.lagradost.cloudstream3.utils.JsUnpacker
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+
+private val FILE_REGEX = Regex("""["']?file["']?\s*:\s*["'](https?://[^"'\\]+)["']""")
+private const val UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36"
+
+/** Unpacks eval(function(p,a,c,k,e,d)) JWPlayer scripts if present, else returns the raw script joined. */
+private fun org.jsoup.nodes.Document.extractScripts(): Pair<String, String?> {
+    val rawScript = select("script").mapNotNull { it.data() }.joinToString("\n")
+    val packedScript = select("script:containsData(function(p,a,c,k,e,d))")
+        .mapNotNull { it.data() }
+        .joinToString("\n")
+        .takeIf { it.isNotBlank() }
+    val unpacked = packedScript?.let { runCatching { JsUnpacker(it).unpack() }.getOrNull() }
+    return rawScript to unpacked
+}
 
 /**
  * Gdplayer (gdplayer.to) – GDRIVE server buttons
@@ -25,6 +40,18 @@ class Gdplayer : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        val emitted = mutableSetOf<String>()
+        fun emit(file: String?, quality: String? = null) {
+            val clean = file?.trim().orEmpty()
+            if (!clean.startsWith("http") || !emitted.add(clean)) return
+            callback.invoke(
+                newExtractorLink(name, name, clean, INFER_TYPE) {
+                    this.quality = getQuality(quality)
+                    this.referer = mainUrl
+                }
+            )
+        }
+
         // Try embed path and fallback /f/ download path
         val candidates = listOf(url, url.replace("/x/?", "/f/?"))
         for (candidate in candidates) {
@@ -33,7 +60,7 @@ class Gdplayer : ExtractorApi() {
                     candidate,
                     referer = referer ?: "https://anime-indo.lol/",
                     headers = mapOf(
-                        "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+                        "User-Agent" to UA,
                         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
                     )
                 )
@@ -41,9 +68,10 @@ class Gdplayer : ExtractorApi() {
 
             if (res.code == 404) continue
             val doc = res.document
-            val script = doc.select("script").mapNotNull { it.data() }.joinToString("\n")
+            val (rawScript, unpacked) = doc.extractScripts()
+
             val kaken = Regex("""kaken\s*=\s*["']([^"']+)["']""")
-                .find(script)?.groupValues?.getOrNull(1)
+                .find(rawScript)?.groupValues?.getOrNull(1)
                 ?.takeIf { it.isNotBlank() }
 
             if (kaken != null) {
@@ -55,29 +83,18 @@ class Gdplayer : ExtractorApi() {
                     )
                 ).parsedSafe<Response>()
 
-                json?.sources?.forEach { src ->
-                    val file = src.file ?: return@forEach
-                    callback.invoke(
-                        newExtractorLink(name, name, file, INFER_TYPE) {
-                            this.quality = getQuality(json.title)
-                            this.referer = mainUrl
-                        }
-                    )
-                }
-                if (!json?.sources.isNullOrEmpty()) return
+                json?.sources?.forEach { src -> emit(src.file, json.title) }
+                if (emitted.isNotEmpty()) return
             }
 
+            // Packed JWPlayer fallback (eval(function(p,a,c,k,e,d)...))
+            unpacked?.let { u -> FILE_REGEX.findAll(u).forEach { emit(it.groupValues[1]) } }
+            if (emitted.isNotEmpty()) return
+
             // Direct source / iframe fallback
-            doc.select("source[src], video source").forEach { el ->
-                val file = el.attr("src").trim()
-                if (file.startsWith("http")) {
-                    callback.invoke(
-                        newExtractorLink(name, name, file, INFER_TYPE) {
-                            this.referer = mainUrl
-                        }
-                    )
-                }
-            }
+            doc.select("source[src], video source").forEach { el -> emit(el.attr("src")) }
+            if (emitted.isNotEmpty()) return
+
             doc.select("iframe[src]").forEach { iframe ->
                 val src = iframe.attr("src").trim()
                 if (src.startsWith("http")) {
@@ -105,7 +122,7 @@ class Gdplayer : ExtractorApi() {
 
 /**
  * Unified extractor for play.xtwap.top (B-TUBE / CEPAT / etc.)
- * B-TUBE returns a direct googlevideo / blogger mp4 in <source src="...">.
+ * Handles both plain <source>/JWPlayer "file": links and eval-packed JWPlayer scripts.
  */
 class Xtwap : ExtractorApi() {
     override val name = "Xtwap"
@@ -128,52 +145,35 @@ class Xtwap : ExtractorApi() {
             url,
             referer = referer ?: "https://anime-indo.lol/",
             headers = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36",
+                "User-Agent" to UA,
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
             )
         ).document
 
-        // 1) <source src="..."> (B-TUBE video.js style)
-        doc.select("source[src], video source, video[src]").forEach { el ->
-            val file = el.attr("src").ifBlank { el.attr("data-src") }.trim()
-            if (file.startsWith("http")) {
-                callback.invoke(
-                    newExtractorLink(label, label, file, INFER_TYPE) {
-                        this.referer = mainUrl
-                        this.headers = mapOf("Referer" to mainUrl)
-                    }
-                )
-            }
+        val emitted = mutableSetOf<String>()
+        fun emit(file: String?) {
+            val clean = file?.trim().orEmpty()
+            if (!clean.startsWith("http") || !emitted.add(clean)) return
+            callback.invoke(
+                newExtractorLink(label, label, clean, INFER_TYPE) {
+                    this.referer = mainUrl
+                    this.headers = mapOf("Referer" to mainUrl)
+                }
+            )
         }
 
-        // 2) JWPlayer / file: "..."
-        val script = doc.select("script").mapNotNull { it.data() }.joinToString("\n")
-        Regex("""["']file["']\s*:\s*["'](https?://[^"']+)["']""")
-            .findAll(script)
-            .map { it.groupValues[1] }
-            .distinct()
-            .forEach { file ->
-                callback.invoke(
-                    newExtractorLink(label, label, file, INFER_TYPE) {
-                        this.referer = mainUrl
-                    }
-                )
-            }
+        // 1) <source src="..."> (B-TUBE video.js style)
+        doc.select("source[src], video source, video[src]").forEach { el ->
+            emit(el.attr("src").ifBlank { el.attr("data-src") })
+        }
 
-        // 3) sources:[{file:"..."}]
-        Regex("""["']?file["']?\s*:\s*["'](https?://[^"']+)["']""")
-            .findAll(script)
-            .map { it.groupValues[1] }
-            .distinct()
-            .forEach { file ->
-                callback.invoke(
-                    newExtractorLink(label, label, file, INFER_TYPE) {
-                        this.referer = mainUrl
-                    }
-                )
-            }
+        // 2) "file":"..." from either the raw scripts or an eval-packed JWPlayer script
+        val (rawScript, unpacked) = doc.extractScripts()
+        listOfNotNull(unpacked, rawScript).forEach { script ->
+            FILE_REGEX.findAll(script).forEach { emit(it.groupValues[1]) }
+        }
 
-        // 4) Nested iframe
+        // 3) Nested iframe (avoid looping back into xtwap itself)
         doc.select("iframe[src]").forEach { iframe ->
             val src = iframe.attr("src").trim()
             if (src.startsWith("http") && !src.contains("xtwap.top")) {
