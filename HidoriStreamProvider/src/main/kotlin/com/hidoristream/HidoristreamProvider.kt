@@ -330,12 +330,12 @@ class HidoristreamProvider : MainAPI() {
             }
         }
 
-        document.select("div.mctnx div.soraddlx div.soraurlx").forEach { qualityBlock ->
+        for (qualityBlock in document.select("div.mctnx div.soraddlx div.soraurlx")) {
             val quality = qualityBlock.selectFirst("strong")?.text()?.trim()
-            qualityBlock.select("a[href]").forEach { a ->
+            for (a in qualityBlock.select("a[href]")) {
                 val url = a.attr("href").trim()
                 val hostName = a.text().trim()
-                if (url.isBlank() || url.contains("t.me", ignoreCase = true)) return@forEach
+                if (url.isBlank() || url.contains("t.me", ignoreCase = true)) continue
                 try {
                     loadExtractor(httpsify(url), data, subtitleCallback) { link ->
                         callback(
