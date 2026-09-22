@@ -339,19 +339,11 @@ class HidoristreamProvider : MainAPI() {
                 try {
                     loadExtractor(httpsify(url), data, subtitleCallback) { link ->
                         callback(
-                            newExtractorLink(
-                                source = link.source,
+                            link.copy(
                                 name = listOfNotNull(hostName.ifBlank { null }, quality)
                                     .joinToString(" ")
-                                    .ifBlank { link.name },
-                                url = link.url,
-                                type = link.type
-                            ) {
-                                this.referer = link.referer
-                                this.quality = link.quality
-                                this.headers = link.headers
-                                this.extractorData = link.extractorData
-                            }
+                                    .ifBlank { link.name }
+                            )
                         )
                     }
                 } catch (_: Exception) {
