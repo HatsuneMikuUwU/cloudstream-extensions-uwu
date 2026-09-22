@@ -13,9 +13,10 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.net.URLEncoder
 
 class NontonAnimeIDProvider : MainAPI() {
-    override var mainUrl = "https://s12.nontonanimeid.boats"
+    override var mainUrl = "https://s13.nontonanimeid.boats"
     override var name = "NontonAnimeID"
     override val hasQuickSearch = false
     override val hasMainPage = true
@@ -61,7 +62,9 @@ class NontonAnimeIDProvider : MainAPI() {
             request.data.replaceFirst("?", "page/$page/?")
         }
 
-        val document = app.get(pageUrl).document
+        val req = app.get(pageUrl)
+        mainUrl = getBaseUrl(req.url)
+        val document = req.document
         
         val home = document.select("article.animeseries, .animeseries, a.as-anime-card").mapNotNull {
             it.toSearchResult()
@@ -91,8 +94,10 @@ class NontonAnimeIDProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val link = "$mainUrl/?s=$query"
-        val document = app.get(link).document
+        val link = "$mainUrl/?s=${URLEncoder.encode(query, "UTF-8")}"
+        val req = app.get(link)
+        mainUrl = getBaseUrl(req.url)
+        val document = req.document
 
         return document.select("article.animeseries, .animeseries, .result > ul > li").mapNotNull {
             it.toSearchResult()
