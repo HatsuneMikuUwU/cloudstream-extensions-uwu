@@ -119,7 +119,7 @@
             "Miku"
         ],
         "description": "AnoBoy \u2014 Streaming Anime Subtitle Indonesia",
-        "fileSize": 73897,
+        "fileSize": 76281,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -129,7 +129,7 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anoboy.quest&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-4daa8eea1bc8f487e05ae64381b5994960a1ac457ce2c305b3c570ededaa1ded"
+        "fileHash": "sha256-748f82bfca31e8f0e82676725141778e0680bc0215bdb99ac0cb56d6c463dfb5"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DonghubProvider.cs3",
