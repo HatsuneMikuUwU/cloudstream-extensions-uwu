@@ -27,6 +27,13 @@ class Animein : MainAPI() {
         "Accept-Language" to "id-ID,id;q=0.9"
     )
 
+    /** Coil/Glide loads images with browser UA; animein CDN requires Referer or returns 403. */
+    private val posterHeaders = mapOf(
+        "Referer" to "$API_BASE/",
+        "User-Agent" to APP_UA,
+        "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+    )
+
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         val qs = if (params.isEmpty()) "" else "?" + params.entries.joinToString("&") {
             "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
@@ -131,6 +138,7 @@ class Animein : MainAPI() {
         return if (episodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
                 this.posterUrl = poster
+                this.posterHeaders = posterHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -141,6 +149,7 @@ class Animein : MainAPI() {
         } else {
             newMovieLoadResponse(title, url, type, "animein://episode/$id") {
                 this.posterUrl = poster
+                this.posterHeaders = posterHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -215,6 +224,7 @@ class Animein : MainAPI() {
                 add(
                     newAnimeSearchResponse(title, "$API_BASE/movie/$id", tvType) {
                         this.posterUrl = poster
+                        this.posterHeaders = posterHeaders
                     }
                 )
             }
