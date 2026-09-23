@@ -182,14 +182,13 @@ class Animein : MainAPI() {
             found = true
             val serverName = jStr(s, "name") ?: "Animein"
             val qualityLabel = jStr(s, "quality")
-            val displayName = if (!qualityLabel.isNullOrBlank()) "$serverName $qualityLabel" else serverName
             val fixed = normalizeUrl(link)
 
             if (fixed.contains(".mp4", true) || fixed.contains(".m3u8", true) ||
                 fixed.contains("googlevideo", true) || fixed.contains("storages.animein", true)
             ) {
                 callback(
-                    newExtractorLink(serverName, displayName, fixed, INFER_TYPE) {
+                    newExtractorLink(serverName, serverName, fixed, INFER_TYPE) {
                         this.referer = API_BASE
                         this.quality = qualityFromLabel(qualityLabel)
                     }
