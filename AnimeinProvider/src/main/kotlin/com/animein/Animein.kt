@@ -18,6 +18,7 @@ class Animein : MainAPI() {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
         private const val APP_UA = "okhttp/4.12.0"
+        private const val PAGE_SIZE = "24"
     }
 
     private val apiHeaders = mapOf(
@@ -40,7 +41,9 @@ class Animein : MainAPI() {
                 return null
             }
         }
-        if (text.isBlank() || text.startsWith("<!DOCTYPE", true) || text.startsWith("403")) return null
+        if (text.isBlank() || text.startsWith("<!DOCTYPE", true) || text.startsWith("403") || text.startsWith("Just a moment")) {
+            return null
+        }
         return try {
             JSONObject(text)
         } catch (_: Exception) {
@@ -57,16 +60,29 @@ class Animein : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val root = api(request.data, mapOf("page" to page.toString()))
+        // API returns ALL ~4800 items unless limit is set
+        val root = api(
+            request.data,
+            mapOf(
+                "page" to page.toString(),
+                "limit" to PAGE_SIZE
+            )
+        )
         val items = parseMovies(root)
         return newHomePageResponse(
             listOf(HomePageList(request.name, items, isHorizontalImages = true)),
-            hasNext = items.isNotEmpty()
+            hasNext = items.size >= PAGE_SIZE.toInt()
         )
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val params = mapOf("page" to "1", "query" to query, "search" to query, "keyword" to query)
+        val params = mapOf(
+            "page" to "1",
+            "limit" to "30",
+            "query" to query,
+            "search" to query,
+            "keyword" to query
+        )
         var items = parseMovies(api("3/2/explore/movie", params))
         if (items.isEmpty()) {
             items = parseMovies(api("data/movie/find", params))
@@ -79,13 +95,13 @@ class Animein : MainAPI() {
         if (id.isBlank()) return null
 
         val detailRoot = api("3/2/movie/detail/$id")
-        val movieObj = detailRoot
-            ?.optJSONObject("data")
-            ?.optJSONObject("movie")
-            ?: detailRoot?.optJSONObject("data")
+        val dataObj = detailRoot?.optJSONObject("data")
+        val movieObj = dataObj?.optJSONObject("movie") ?: dataObj
 
         val title = jStr(movieObj, "title") ?: "Anime $id"
-        val poster = resolveImage(jStr(movieObj, "image_poster", "image_cover", "poster", "image"))
+        val poster = resolveImage(
+            jStr(movieObj, "image_poster", "image_cover", "poster", "image")
+        )
         val plot = jStr(movieObj, "synopsis", "description")
         val year = jStr(movieObj, "year")?.toIntOrNull()
         val statusStr = jStr(movieObj, "status")
@@ -123,7 +139,6 @@ class Animein : MainAPI() {
                 addEpisodes(DubStatus.Subbed, episodes)
             }
         } else {
-            // movie without episode list — try stream via movie id as fallback data
             newMovieLoadResponse(title, url, type, "animein://episode/$id") {
                 this.posterUrl = poster
                 this.year = year
@@ -160,7 +175,7 @@ class Animein : MainAPI() {
             val serverName = jStr(s, "name") ?: "Animein"
             val qualityLabel = jStr(s, "quality")
             val displayName = if (!qualityLabel.isNullOrBlank()) "$serverName $qualityLabel" else serverName
-            val fixed = if (link.startsWith("//")) "https:$link" else link
+            val fixed = normalizeUrl(link)
 
             if (fixed.contains(".mp4", true) || fixed.contains(".m3u8", true) ||
                 fixed.contains("googlevideo", true) || fixed.contains("storages.animein", true)
@@ -188,7 +203,9 @@ class Animein : MainAPI() {
                 val obj = arr.optJSONObject(i) ?: continue
                 val id = jStr(obj, "id") ?: continue
                 val title = jStr(obj, "title") ?: continue
-                val poster = resolveImage(jStr(obj, "image_poster", "image_cover", "poster", "image"))
+                val poster = resolveImage(
+                    jStr(obj, "image_poster", "image_cover", "poster", "image")
+                )
                 val typeStr = jStr(obj, "type")
                 val tvType = when {
                     typeStr?.contains("movie", true) == true -> TvType.AnimeMovie
@@ -251,15 +268,25 @@ class Animein : MainAPI() {
         return null
     }
 
+    /** Fix // after host and resolve relative paths. */
+    private fun normalizeUrl(raw: String): String {
+        var url = raw.trim()
+        if (url.startsWith("//")) url = "https:$url"
+        // collapse https://host//path -> https://host/path
+        url = url.replace(Regex("(https?://[^/]+)//+"), "$1/")
+        return url
+    }
+
     private fun resolveImage(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
-        val url = raw.trim()
-        return when {
-            url.startsWith("http://") || url.startsWith("https://") -> url
-            url.startsWith("//") -> "https:$url"
-            url.startsWith("/") -> API_BASE + url
-            else -> "$API_BASE/$url"
+        var url = raw.trim()
+        when {
+            url.startsWith("http://") || url.startsWith("https://") -> { /* ok */ }
+            url.startsWith("//") -> url = "https:$url"
+            url.startsWith("/") -> url = API_BASE + url
+            else -> url = "$API_BASE/$url"
         }
+        return normalizeUrl(url)
     }
 
     private fun qualityFromLabel(q: String?): Int {
