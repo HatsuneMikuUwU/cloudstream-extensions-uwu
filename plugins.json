@@ -112,14 +112,14 @@
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnoboyProvider.cs3",
         "status": 1,
-        "version": 5,
+        "version": 6,
         "name": "AnoboyProvider",
         "internalName": "AnoboyProvider",
         "authors": [
             "Miku"
         ],
         "description": "AnoBoy \u2014 Streaming Anime Subtitle Indonesia",
-        "fileSize": 73712,
+        "fileSize": 73897,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -127,9 +127,9 @@
             "OVA",
             "Anime"
         ],
-        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://anoboy.be&size=%size%",
+        "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://anoboy.quest&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-66ce783fd9fc2ef0405eb96e66fe2d941be913171fb0f5731129a2f93c77a579"
+        "fileHash": "sha256-4daa8eea1bc8f487e05ae64381b5994960a1ac457ce2c305b3c570ededaa1ded"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/DonghubProvider.cs3",
