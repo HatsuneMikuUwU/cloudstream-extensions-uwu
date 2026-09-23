@@ -12,7 +12,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 class Anoboy : MainAPI() {
-    override var mainUrl = "https://ww1.anoboy.boo"
+    override var mainUrl = "https://anoboy.quest"
     override var name = "AnoBoy"
     override val hasMainPage = true
     override var lang = "id"
@@ -162,9 +162,9 @@ class Anoboy : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        val title = document.selectFirst("h1.entry-title, h2.entry-title")?.text()?.trim().orEmpty()
+        val title = document.selectFirst("div.pagetitle h1, h1.entry-title, h2.entry-title")?.text()?.trim().orEmpty()
         val poster = document
-            .selectFirst("div.column-three-fourth > img, div.column-content > img, div.bigcontent img, div.entry-content img")
+            .selectFirst("div.sisi.entry-content img, div.column-three-fourth > img, div.column-content > img, div.bigcontent img, div.entry-content img, div.sisi img")
             ?.getImageAttr()
             ?.let { fixUrlNull(it) }
 
@@ -173,11 +173,15 @@ class Anoboy : MainAPI() {
                 ?.text()
                 ?.trim()
                 ?.ifBlank { null }
-                ?: document.select("div.entry-content p").joinToString("\n") { it.text() }
+                ?: document.selectFirst("div.contentdeks, span.entry-content[itemprop=description]")
+                    ?.text()
+                    ?.trim()
+                    ?.ifBlank { null }
+                ?: document.select("div.entry-content p, div.sisi.entry-content p").joinToString("\n") { it.text() }
             )
             .trim()
 
-        val tableRows = document.select("div.unduhan table tr")
+        val tableRows = document.select("div.unduhan table tr, div.contenttable table tr, div.contentdeks + div table tr")
         fun getTableValue(label: String): String? {
             return tableRows.firstOrNull {
                 it.selectFirst("th")?.text()?.contains(label, true) == true
@@ -696,6 +700,7 @@ class Anoboy : MainAPI() {
                 lower.contains("/uploads/adsbatch") ||
                 lower.contains("/uploads/acbatch") ||
                 lower.contains("/uploads/yupbatch") ||
+                lower.contains("/uploads/yup/") ||
                 lower.contains("/uploads/stream/embed.php") ||
                 lower.contains("yourupload.com/embed/") ||
                 lower.contains("yourupload.com/watch/") ||
@@ -715,6 +720,7 @@ class Anoboy : MainAPI() {
                     "a[href*=\"/uploads/acbatch.php\"], " +
                     "a[href*=\"/uploads/adsbatch\"], " +
                     "a[href*=\"/uploads/yupbatch\"], " +
+                    "a[href*=\"/uploads/yup/\"], " +
                     "a[href*=\"blogger.com/video.g\"], " +
                     "a[href*=\"blogger.googleusercontent.com\"]"
             ).forEach { queueUrl(it.attr("href"), baseUrl) }
@@ -737,7 +743,7 @@ class Anoboy : MainAPI() {
                 .forEach { queueUrl(it.attr("href"), baseUrl) }
 
             val bloggerRegex = Regex("""https?://(?:www\.)?blogger\.com/video\.g\?[^"'<\s]+""", RegexOption.IGNORE_CASE)
-            val batchRegex = Regex("""/uploads/(?:adsbatch[^"'\s]+|yupbatch[^"'\s]+|acbatch[^"'\s]+|stream/embed\.php\?[^"'\s]+)""", RegexOption.IGNORE_CASE)
+            val batchRegex = Regex("""/uploads/(?:adsbatch[^"'\s]+|yupbatch[^"'\s]+|yup/[^"'\s]+|acbatch[^"'\s]+|stream/embed\.php\?[^"'\s]+)""", RegexOption.IGNORE_CASE)
             val yourUploadRegex = Regex("""https?://(?:www\.)?yourupload\.com/(?:embed|watch)/[^"'<\s]+""", RegexOption.IGNORE_CASE)
             doc.select("script").forEach { script ->
                 val scriptData = script.data()
@@ -758,9 +764,11 @@ class Anoboy : MainAPI() {
             if (lower.contains("blogger.com/video.g")) return false
             if (lower.endsWith(".mp4") || lower.endsWith(".m3u8")) return false
             return lower.contains("anoboy.boo") ||
+                lower.contains("anoboy.quest") ||
                 lower.contains("/uploads/") ||
                 lower.contains("adsbatch") ||
-                lower.contains("yupbatch")
+                lower.contains("yupbatch") ||
+                lower.contains("/uploads/yup/")
         }
 
         if (!isMulti && isDirectResolvableUrl(requestData)) {
@@ -981,6 +989,7 @@ class Anoboy : MainAPI() {
             val isLegacyMirrorPage = lower.contains("/uploads/adsbatch") ||
                 lower.contains("/uploads/acbatch") ||
                 lower.contains("/uploads/yupbatch") ||
+                lower.contains("/uploads/yup/") ||
                 lower.contains("/uploads/stream/embed.php")
             if (!isLegacyMirrorPage) return false
 
@@ -1038,6 +1047,7 @@ class Anoboy : MainAPI() {
                 lower.contains("/uploads/adsbatch") ||
                     lower.contains("/uploads/acbatch") ||
                     lower.contains("/uploads/yupbatch") ||
+                    lower.contains("/uploads/yup/") ||
                     lower.contains("/uploads/stream/embed.php")
             }
             .forEach { resolveLegacyMirrorPage(it) }
