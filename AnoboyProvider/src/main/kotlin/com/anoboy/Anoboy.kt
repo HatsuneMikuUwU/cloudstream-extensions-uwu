@@ -232,7 +232,22 @@ class Anoboy : MainAPI() {
 
         val castList = emptyList<ActorData>()
 
-        val episodeElements = document.select("div.singlelink ul.lcp_catlist li a, div.eplister ul li a")
+        // Series pages list episodes as a:has(div.amv); skip this when page is already a player (has mirrors)
+        val isPlayerPage = document.selectFirst("iframe#mediaplayer, #fplay a[data-video], a#allmiror[data-video]") != null
+        val episodeElements = if (isPlayerPage) {
+            document.select("div.singlelink ul.lcp_catlist li a, div.eplister ul li a")
+        } else {
+            document.select(
+                "div.singlelink ul.lcp_catlist li a, div.eplister ul li a, " +
+                    "div.column-three-fourth a[href]:has(div.amv), " +
+                    "a[href]:has(div.amv)"
+            ).filter { el ->
+                val href = el.attr("href").lowercase()
+                !el.parents().hasClass("side_home") &&
+                    (href.contains("episode") || href.contains("/ep-") ||
+                        el.selectFirst("h3.ibox1, h3.ibox")?.text()?.contains("Episode", true) == true)
+            }
+        }
         val seasonHeaders = document.select("div.hq")
 
         fun normalizeTitle(raw: String): String {
@@ -448,10 +463,29 @@ class Anoboy : MainAPI() {
                     .add(resolvedUrl to cleanedTitle)
             }
 
+            // Collect direct host links (mp4upload, gofile, etc.) as extra sources for the collapsed episode
+            val downloadHostUrls = doc.select("div.download a.udl[href], div.download a[href], .ud a.udl[href]")
+                .mapNotNull { a ->
+                    val href = a.attr("href").trim()
+                    if (href.startsWith("http") &&
+                        !href.equals("none", true) &&
+                        (href.contains("mp4upload", true) ||
+                            href.contains("gofile", true) ||
+                            href.contains("yourupload", true) ||
+                            href.contains("streamtape", true) ||
+                            href.contains("filemoon", true) ||
+                            href.contains("dood", true))
+                    ) fixUrl(href) else null
+                }
+                .distinct()
+
             return episodesByNumber
                 .toSortedMap()
                 .mapNotNull { (episodeNumber, entries) ->
-                    val urls = entries.map { it.first }.distinct()
+                    var urls = entries.map { it.first }.distinct()
+                    if (shouldCollapseToSingleEpisode && downloadHostUrls.isNotEmpty()) {
+                        urls = (urls + downloadHostUrls).distinct()
+                    }
                     val title = entries.map { it.second }.firstOrNull { it.isNotBlank() }
                         ?: "Episode $episodeNumber"
                     if (urls.isEmpty()) return@mapNotNull null
@@ -1024,15 +1058,30 @@ class Anoboy : MainAPI() {
             }
 
             var resolvedAny = false
+            // Prefer yourupload quality buttons from YUp picker (240/360/480/720)
+            val handledYourUpload = mutableSetOf<String>()
+            doc.select("a.link[href*=yourupload.com], a[href*=yourupload.com/embed/], a[href*=yourupload.com/watch/]")
+                .forEach { anchor ->
+                    val href = resolveUrl(anchor.attr("href"), pageUrl) ?: return@forEach
+                    if (!handledYourUpload.add(href)) return@forEach
+                    if (loadExtractor(href, pageUrl, subtitleCallback, callbackWrapper)) {
+                        resolvedAny = true
+                    }
+                }
+
             resolvedCandidates.forEach { candidate ->
                 when {
                     candidate.contains("blogger.com/video.g", true) ||
                         candidate.contains("blogger.googleusercontent.com", true) -> {
                         if (emitBloggerDirectLinks(candidate, pageUrl)) resolvedAny = true
                     }
-
+                    candidate.contains("yourupload.com", true) && handledYourUpload.contains(candidate) -> {
+                        // already handled above
+                    }
                     candidate != pageUrl -> {
-                        loadExtractor(candidate, pageUrl, subtitleCallback, callbackWrapper)
+                        if (loadExtractor(candidate, pageUrl, subtitleCallback, callbackWrapper)) {
+                            resolvedAny = true
+                        }
                     }
                 }
             }
