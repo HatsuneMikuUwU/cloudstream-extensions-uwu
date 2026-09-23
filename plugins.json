@@ -68,14 +68,14 @@
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeinProvider.cs3",
         "status": 1,
-        "version": 2,
+        "version": 3,
         "name": "AnimeinProvider",
         "internalName": "AnimeinProvider",
         "authors": [
             "Miku"
         ],
         "description": "Animein \u2014 Streaming Anime Subtitle Indonesia (API)",
-        "fileSize": 19181,
+        "fileSize": 19535,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -85,7 +85,7 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://animein.net&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-2be266c9326400d4d92c089fd17ac665e30ad264f15dfad1dcd6ed18844d50bd"
+        "fileHash": "sha256-8dc91407968d0ca6d662bf2d8fa582c634cbf27e0608c02598b958d374c93d71"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
