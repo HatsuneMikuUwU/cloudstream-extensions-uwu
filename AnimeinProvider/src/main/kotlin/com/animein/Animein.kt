@@ -18,7 +18,7 @@ class Animein : MainAPI() {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
         private const val APP_UA = "okhttp/4.12.0"
-        private const val PAGE_SIZE = "24"
+        private const val PAGE_SIZE = "100"
     }
 
     private val apiHeaders = mapOf(
@@ -27,7 +27,6 @@ class Animein : MainAPI() {
         "Accept-Language" to "id-ID,id;q=0.9"
     )
 
-    /** Coil/Glide loads images with browser UA; animein CDN requires Referer or returns 403. */
     private val posterHeaders = mapOf(
         "Referer" to "$API_BASE/",
         "User-Agent" to APP_UA,
@@ -59,15 +58,15 @@ class Animein : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "3/2/home/new" to "Terbaru",
+        "data/home/list_new_episode" to "New Episodes",
         "3/2/home/hot" to "Hot",
-        "3/2/home/popular" to "Populer",
+        "3/2/home/new" to "New Title",
+        "3/2/home/popular" to "Popular",
         "3/2/home/random" to "Random",
         "3/2/explore/movie" to "Explore"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        // API returns ALL ~4800 items unless limit is set
         val root = api(
             request.data,
             mapOf(
@@ -202,8 +201,6 @@ class Animein : MainAPI() {
         return found
     }
 
-    // ── parsers ────────────────────────────────────────────────────────────
-
     private fun parseMovies(root: JSONObject?): List<SearchResponse> {
         if (root == null) return emptyList()
         val arr = arrayUnder(root, "movie", "movies", "list", "items", "results")
@@ -278,11 +275,9 @@ class Animein : MainAPI() {
         return null
     }
 
-    /** Fix // after host and resolve relative paths. */
     private fun normalizeUrl(raw: String): String {
         var url = raw.trim()
         if (url.startsWith("//")) url = "https:$url"
-        // collapse https://host//path -> https://host/path
         url = url.replace(Regex("(https?://[^/]+)//+"), "$1/")
         return url
     }
