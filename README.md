@@ -23,19 +23,20 @@
 | 1 | **Alqanime** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
 | 2 | **Anichin** | 🇮🇩 ID | 🐉 Donghua |
 | 3 | **Animasu** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
-| 4 | **AnimeSail** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
-| 5 | **Animexin** | 🇮🇩 ID | 🐉 Donghua |
-| 6 | **AnoBoy** | 🇮🇩 ID | 🌸 Anime |
-| 7 | **Donghub** | 🇮🇩 ID | 🐉 Donghua |
-| 8 | **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series |
-| 9 | **Kuramanime** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
-| 10 | **Kuronime** | 🇮🇩 ID | 🌸 Anime |
-| 11 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai |
-| 12 | **Nimegami** | 🇮🇩 ID | 🌸 Anime |
-| 13 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
-| 14 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
-| 15 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
-| 16 | **Winbu** | 🇮🇩 ID | 🌸 Anime, 🐉 Donghua, 🎬 Movies & Series |
+| 4 | **Animein (API)** | 🇮🇩 ID | 🌸 Anime |
+| 5 | **AnimeSail** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
+| 6 | **Animexin** | 🇮🇩 ID | 🐉 Donghua |
+| 7 | **AnoBoy** | 🇮🇩 ID | 🌸 Anime |
+| 8 | **Donghub** | 🇮🇩 ID | 🐉 Donghua |
+| 9 | **Dubbindo** | 🇮🇩 ID | 🌸 Anime, 🎬 Movies & Series |
+| 10 | **Kuramanime** | 🇮🇩 ID | 🌸 Anime & 🐉 Donghua |
+| 11 | **Kuronime** | 🇮🇩 ID | 🌸 Anime |
+| 12 | **NekoPoi** | 🇮🇩 ID | 🔞 NSFW & 💕 Hentai |
+| 13 | **Nimegami** | 🇮🇩 ID | 🌸 Anime |
+| 14 | **NontonAnimeID** | 🇮🇩 ID | 🌸 Anime |
+| 15 | **OtakuDesu** | 🇮🇩 ID | 🌸 Anime |
+| 16 | **Samehadaku** | 🇮🇩 ID | 🌸 Anime |
+| 17 | **Winbu** | 🇮🇩 ID | 🌸 Anime, 🐉 Donghua, 🎬 Movies & Series |
 
 > [!WARNING]
 > **Disclaimer & Legal Notice**
