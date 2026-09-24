@@ -355,7 +355,6 @@ class Animein : MainAPI() {
                 val epId = jStr(obj, "id") ?: continue
                 val epNum = jStr(obj, "index", "episode", "number")?.toIntOrNull() ?: (i + 1)
                 val epTitle = jStr(obj, "title") ?: "Episode $epNum"
-                val thumb = fixImageUrl(jStr(obj, "image_poster") ?: jStr(obj, "image_cover") ?: findAnyImageUrl(obj))
 
                 val metaEp = meta?.episodes?.get(epNum.toString())
                 add(
@@ -370,7 +369,6 @@ class Animein : MainAPI() {
                         this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() }
                             ?: meta?.images?.firstOrNull()?.url
                             ?: backgroundPoster
-                            ?: thumb
                             ?: trackerImage
                             ?: poster
                         this.description = metaEp?.overview?.takeIf { it.isNotBlank() }
@@ -405,15 +403,5 @@ class Animein : MainAPI() {
             if (s.isNotBlank() && s != "null") return s
         }
         return null
-    }
-
-    private fun findAnyImageUrl(obj: JSONObject?): String? {
-        if (obj == null) return null
-        return jStr(
-            obj,
-            "image_poster", "image_cover", "image", "poster",
-            "thumbnail", "url_thumbnail", "episode_poster",
-            "episode_cover_new", "episode_cover_old", "image_url"
-        )
     }
 }
