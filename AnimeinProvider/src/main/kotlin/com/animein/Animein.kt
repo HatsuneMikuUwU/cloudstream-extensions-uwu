@@ -17,19 +17,64 @@ class Animein : MainAPI() {
     companion object {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
+        private const val SITE_URL = "https://animein.net"
+        private const val APK_VER = "5.1.2"
         private const val PAGE_SIZE = "100"
+
+        private val apiHeaders = mapOf(
+            "User-Agent" to "okhttp/4.12.0",
+            "apk_ver" to APK_VER
+        )
+
+        private val imageHeaders = mapOf(
+            "User-Agent" to "okhttp/4.12.0"
+        )
+
+        fun fixImageUrl(u: String?): String? {
+            if (u.isNullOrBlank()) return null
+            val idx = u.indexOf("://")
+            if (idx < 0) return u
+            val scheme = u.substring(0, idx + 3)
+            val rest = u.substring(idx + 3).replace(Regex("/+"), "/")
+            return scheme + rest
+        }
+
+        private fun authParams(): String =
+            "id_user=0&key_client=guest&apk_ver=$APK_VER"
+
+        fun mapStatus(s: String?): ShowStatus =
+            when (s?.uppercase()) {
+                "ONGOING" -> ShowStatus.Ongoing
+                "FINISHED", "COMPLETED" -> ShowStatus.Completed
+                else -> ShowStatus.Completed
+            }
+
+        fun mapType(t: String?): TvType =
+            when (t?.uppercase()) {
+                "MOVIE" -> TvType.AnimeMovie
+                "OVA" -> TvType.OVA
+                else -> TvType.Anime
+            }
+
+        fun parseQuality(q: String?): Int {
+            if (q.isNullOrBlank()) return Qualities.Unknown.value
+            val m = Regex("(\\d{3,4})").find(q)
+            return m?.groupValues?.getOrNull(1)?.toIntOrNull() ?: Qualities.Unknown.value
+        }
     }
 
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
-        val qs = if (params.isEmpty()) "" else "?" + params.entries.joinToString("&") {
+        val baseQs = authParams()
+        val extra = if (params.isEmpty()) "" else "&" + params.entries.joinToString("&") {
             "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
         }
+        val qs = "?$baseQs$extra"
         val primary = "$API_BASE/${path.trimStart('/')}$qs"
         val text = try {
-            app.get(primary).text
+            app.get(primary, headers = apiHeaders).text
         } catch (_: Exception) {
             try {
-                app.get("$GATE_URL/${path.trimStart('/')}$qs").text
+                app.get("$GATE_URL/${path.trimStart('/')}$qs", headers = apiHeaders).text
             } catch (_: Exception) {
                 return null
             }
@@ -93,9 +138,10 @@ class Animein : MainAPI() {
         val movieObj = dataObj?.optJSONObject("movie") ?: dataObj
 
         val title = jStr(movieObj, "title") ?: "Anime $id"
-        val poster = resolveImage(findAnyImageUrl(movieObj))
+        val poster = fixImageUrl(jStr(movieObj, "image_poster") ?: jStr(movieObj, "image_cover"))
         val plot = jStr(movieObj, "synopsis", "description")
         val year = jStr(movieObj, "year")?.toIntOrNull()
+            ?: jStr(movieObj, "aired_start")?.take(4)?.toIntOrNull()
         val statusStr = jStr(movieObj, "status")
         val typeStr = jStr(movieObj, "type")
         val score = jStr(movieObj, "score", "rating")?.toDoubleOrNull()
@@ -108,21 +154,13 @@ class Animein : MainAPI() {
         val epRoot = api("3/2/movie/episode/$id")
         val episodes = parseEpisodes(epRoot)
 
-        val status = when {
-            statusStr?.contains("ONGOING", true) == true -> ShowStatus.Ongoing
-            statusStr?.contains("COMPLETED", true) == true -> ShowStatus.Completed
-            else -> null
-        }
-        val type = when {
-            typeStr?.contains("movie", true) == true -> TvType.AnimeMovie
-            typeStr?.contains("ova", true) == true -> TvType.OVA
-            typeStr?.contains("ona", true) == true -> TvType.OVA
-            else -> TvType.Anime
-        }
+        val status = mapStatus(statusStr)
+        val type = mapType(typeStr)
 
         return if (episodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
                 this.posterUrl = poster
+                this.posterHeaders = imageHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -133,6 +171,7 @@ class Animein : MainAPI() {
         } else {
             newMovieLoadResponse(title, url, type, "animein://episode/$id") {
                 this.posterUrl = poster
+                this.posterHeaders = imageHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -166,7 +205,7 @@ class Animein : MainAPI() {
             found = true
             val serverName = jStr(s, "name") ?: "Animein"
             val qualityLabel = jStr(s, "quality")
-            val fixed = normalizeUrl(link)
+            val fixed = fixImageUrl(link) ?: link
 
             if (fixed.contains(".mp4", true) || fixed.contains(".m3u8", true) ||
                 fixed.contains("googlevideo", true) || fixed.contains("storages.animein", true) ||
@@ -175,7 +214,7 @@ class Animein : MainAPI() {
                 callback(
                     newExtractorLink(serverName, serverName, fixed, INFER_TYPE) {
                         this.referer = API_BASE
-                        this.quality = qualityFromLabel(qualityLabel)
+                        this.quality = parseQuality(qualityLabel)
                     }
                 )
             } else {
@@ -193,16 +232,15 @@ class Animein : MainAPI() {
                 val obj = arr.optJSONObject(i) ?: continue
                 val id = jStr(obj, "id") ?: continue
                 val title = jStr(obj, "title") ?: continue
-                val poster = resolveImage(findAnyImageUrl(obj))
+                val poster = fixImageUrl(jStr(obj, "image_poster") ?: jStr(obj, "image_cover"))
                 val typeStr = jStr(obj, "type")
-                val tvType = when {
-                    typeStr?.contains("movie", true) == true -> TvType.AnimeMovie
-                    typeStr?.contains("ova", true) == true -> TvType.OVA
-                    else -> TvType.Anime
-                }
+                val year = jStr(obj, "year")?.toIntOrNull()
+                    ?: jStr(obj, "aired_start")?.take(4)?.toIntOrNull()
                 add(
-                    newAnimeSearchResponse(title, "$API_BASE/movie/$id", tvType) {
+                    newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$id", mapType(typeStr)) {
                         this.posterUrl = poster
+                        this.posterHeaders = imageHeaders
+                        this.year = year
                     }
                 )
             }
@@ -218,7 +256,7 @@ class Animein : MainAPI() {
                 val epId = jStr(obj, "id") ?: continue
                 val epNum = jStr(obj, "index", "episode", "number")?.toIntOrNull() ?: (i + 1)
                 val title = jStr(obj, "title") ?: "Episode $epNum"
-                val thumb = resolveImage(findAnyImageUrl(obj))
+                val thumb = fixImageUrl(jStr(obj, "image_poster") ?: jStr(obj, "image_cover") ?: findAnyImageUrl(obj))
                 add(
                     newEpisode("animein://episode/$epId") {
                         this.name = title
@@ -255,13 +293,6 @@ class Animein : MainAPI() {
         return null
     }
 
-    private fun normalizeUrl(raw: String): String {
-        var url = raw.trim()
-        if (url.startsWith("//")) url = "https:$url"
-        url = url.replace(Regex("(https?://[^/]+)/+"), "$1/")
-        return url
-    }
-
     private fun findAnyImageUrl(obj: JSONObject?): String? {
         if (obj == null) return null
         return jStr(
@@ -270,30 +301,5 @@ class Animein : MainAPI() {
             "thumbnail", "url_thumbnail", "episode_poster",
             "episode_cover_new", "episode_cover_old", "image_url"
         )
-    }
-
-    private fun resolveImage(raw: String?): String? {
-        if (raw.isNullOrBlank()) return null
-        var url = raw.trim()
-        when {
-            url.startsWith("http://") || url.startsWith("https://") -> { /* keep */ }
-            url.startsWith("//") -> url = "https:$url"
-            url.startsWith("/") -> url = API_BASE + url
-            else -> url = "$API_BASE/$url"
-        }
-        return normalizeUrl(url)
-    }
-
-    private fun qualityFromLabel(q: String?): Int {
-        if (q.isNullOrBlank()) return Qualities.Unknown.value
-        val lower = q.lowercase()
-        return when {
-            "1080" in lower || "fhd" in lower -> Qualities.P1080.value
-            "720" in lower || lower == "hd" -> Qualities.P720.value
-            "480" in lower -> Qualities.P480.value
-            "360" in lower || lower == "sd" -> Qualities.P360.value
-            "240" in lower -> Qualities.P240.value
-            else -> Qualities.Unknown.value
-        }
     }
 }
