@@ -7,7 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class Animein : MainAPI() {
-    override var mainUrl = "https://animein.net"
+    override var mainUrl = API_BASE
     override var name = "Animein"
     override val hasMainPage = true
     override var lang = "id"
@@ -18,9 +18,6 @@ class Animein : MainAPI() {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
         private const val APP_UA = "okhttp/4.12.0"
-        private const val BROWSER_UA =
-            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
         private const val PAGE_SIZE = "100"
     }
 
@@ -30,13 +27,11 @@ class Animein : MainAPI() {
         "Accept-Language" to "id-ID,id;q=0.9"
     )
 
-    private val posterHeaders: Map<String, String>
-        get() = mapOf(
-            "Referer" to "https://animein.net/",
-            "Origin" to "https://animein.net",
-            "User-Agent" to BROWSER_UA,
-            "Accept" to "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        )
+    private val posterHeaders = mapOf(
+        "Referer" to "$API_BASE/",
+        "User-Agent" to APP_UA,
+        "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+    )
 
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         val qs = if (params.isEmpty()) "" else "?" + params.entries.joinToString("&") {
@@ -110,9 +105,7 @@ class Animein : MainAPI() {
         val movieObj = dataObj?.optJSONObject("movie") ?: dataObj
 
         val title = jStr(movieObj, "title") ?: "Anime $id"
-        val poster = resolveImage(
-            jStr(movieObj, "image_poster", "image_cover", "poster", "image")
-        )
+        val poster = resolveImage(findAnyImageUrl(movieObj))
         val plot = jStr(movieObj, "synopsis", "description")
         val year = jStr(movieObj, "year")?.toIntOrNull()
         val statusStr = jStr(movieObj, "status")
@@ -210,12 +203,12 @@ class Animein : MainAPI() {
         val arr = arrayUnder(root, "movie", "movies", "list", "items", "results")
         return buildList {
             for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val id = jStr(obj, "id") ?: continue
-                val title = jStr(obj, "title") ?: continue
-                val poster = resolveImage(
-                    jStr(obj, "image_poster", "image_cover", "poster", "image")
-                )
+                val raw = arr.optJSONObject(i) ?: continue
+                val nested = raw.optJSONObject("movie") ?: raw.optJSONObject("anime")
+                val obj = nested ?: raw
+                val id = jStr(obj, "id") ?: jStr(raw, "id_movie", "movie_id") ?: continue
+                val title = jStr(obj, "title") ?: jStr(raw, "movie_title") ?: continue
+                val poster = resolveImage(findAnyImageUrl(raw))
                 val typeStr = jStr(obj, "type")
                 val tvType = when {
                     typeStr?.contains("movie", true) == true -> TvType.AnimeMovie
@@ -241,7 +234,7 @@ class Animein : MainAPI() {
                 val epId = jStr(obj, "id") ?: continue
                 val epNum = jStr(obj, "index", "episode", "number")?.toIntOrNull() ?: (i + 1)
                 val title = jStr(obj, "title") ?: "Episode $epNum"
-                val thumb = resolveImage(jStr(obj, "image", "image_poster", "poster"))
+                val thumb = resolveImage(findAnyImageUrl(obj))
                 add(
                     newEpisode("animein://episode/$epId") {
                         this.name = title
@@ -286,6 +279,48 @@ class Animein : MainAPI() {
         return url
     }
 
+    private fun findAnyImageUrl(obj: JSONObject?, depth: Int = 0): String? {
+        if (obj == null || depth > 2) return null
+
+        jStr(
+            obj,
+            "image_poster", "image_cover", "poster", "image",
+            "poster_path", "cover_image", "image_landscape",
+            "image_horizontal", "image_vertical", "thumbnail",
+            "thumb", "cover", "banner", "img", "image_url", "photo"
+        )?.let { return it }
+
+        val priority = listOf("poster", "image", "cover", "thumb", "banner", "img", "photo")
+        val candidates = mutableListOf<Pair<String, String>>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = obj.opt(key)
+            if (value is String) {
+                val v = value.trim()
+                if (v.isBlank() || v == "null") continue
+                val lower = key.lowercase()
+                if (priority.any { lower.contains(it) }) {
+                    candidates.add(key to v)
+                }
+            }
+        }
+        if (candidates.isNotEmpty()) {
+            for (p in priority) {
+                candidates.firstOrNull { it.first.lowercase().contains(p) }?.let { return it.second }
+            }
+            return candidates.first().second
+        }
+
+        for (nestedKey in listOf("movie", "anime", "series", "film", "detail")) {
+            val nested = obj.optJSONObject(nestedKey)
+            if (nested != null) {
+                findAnyImageUrl(nested, depth + 1)?.let { return it }
+            }
+        }
+        return null
+    }
+
     private fun resolveImage(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         var url = raw.trim()
@@ -295,8 +330,7 @@ class Animein : MainAPI() {
             url.startsWith("/") -> url = API_BASE + url
             else -> url = "$API_BASE/$url"
         }
-        url = normalizeUrl(url)
-        return url
+        return normalizeUrl(url)
     }
 
     private fun qualityFromLabel(q: String?): Int {
