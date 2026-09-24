@@ -17,20 +17,8 @@ class Animein : MainAPI() {
     companion object {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
-        private const val APP_UA = "okhttp/4.12.0"
         private const val PAGE_SIZE = "100"
     }
-
-    private val apiHeaders = mapOf(
-        "User-Agent" to APP_UA,
-        "Accept" to "application/json",
-        "Accept-Language" to "id-ID,id;q=0.9"
-    )
-
-    private val posterHeaders = mapOf(
-        "User-Agent" to APP_UA,
-        "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
-    )
 
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         val qs = if (params.isEmpty()) "" else "?" + params.entries.joinToString("&") {
@@ -38,10 +26,10 @@ class Animein : MainAPI() {
         }
         val primary = "$API_BASE/${path.trimStart('/')}$qs"
         val text = try {
-            app.get(primary, headers = apiHeaders).text
+            app.get(primary).text
         } catch (_: Exception) {
             try {
-                app.get("$GATE_URL/${path.trimStart('/')}$qs", headers = apiHeaders).text
+                app.get("$GATE_URL/${path.trimStart('/')}$qs").text
             } catch (_: Exception) {
                 return null
             }
@@ -74,8 +62,9 @@ class Animein : MainAPI() {
             )
         )
         val items = parseMovies(root)
+        val horizontal = request.data.contains("list_new_episode")
         return newHomePageResponse(
-            listOf(HomePageList(request.name, items, isHorizontalImages = true)),
+            listOf(HomePageList(request.name, items, isHorizontalImages = horizontal)),
             hasNext = items.size >= PAGE_SIZE.toInt()
         )
     }
@@ -134,7 +123,6 @@ class Animein : MainAPI() {
         return if (episodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
                 this.posterUrl = poster
-                this.posterHeaders = posterHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -145,7 +133,6 @@ class Animein : MainAPI() {
         } else {
             newMovieLoadResponse(title, url, type, "animein://episode/$id") {
                 this.posterUrl = poster
-                this.posterHeaders = posterHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -182,7 +169,8 @@ class Animein : MainAPI() {
             val fixed = normalizeUrl(link)
 
             if (fixed.contains(".mp4", true) || fixed.contains(".m3u8", true) ||
-                fixed.contains("googlevideo", true) || fixed.contains("storages.animein", true)
+                fixed.contains("googlevideo", true) || fixed.contains("storages.animein", true) ||
+                fixed.contains("assets_xyz", true)
             ) {
                 callback(
                     newExtractorLink(serverName, serverName, fixed, INFER_TYPE) {
@@ -215,7 +203,6 @@ class Animein : MainAPI() {
                 add(
                     newAnimeSearchResponse(title, "$API_BASE/movie/$id", tvType) {
                         this.posterUrl = poster
-                        this.posterHeaders = posterHeaders
                     }
                 )
             }
@@ -262,7 +249,6 @@ class Animein : MainAPI() {
     private fun jStr(obj: JSONObject?, vararg keys: String): String? {
         if (obj == null) return null
         for (key in keys) {
-            if (!obj.has(key) || obj.isNull(key)) continue
             val s = obj.optString(key, "").trim()
             if (s.isNotBlank() && s != "null") return s
         }
@@ -272,47 +258,25 @@ class Animein : MainAPI() {
     private fun normalizeUrl(raw: String): String {
         var url = raw.trim()
         if (url.startsWith("//")) url = "https:$url"
-        url = url.replace(Regex("(https?://[^/]+)//+"), "$1/")
+        url = url.replace(Regex("(https?://[^/]+)/+"), "$1/")
         return url
     }
 
     private fun findAnyImageUrl(obj: JSONObject?): String? {
         if (obj == null) return null
-
-        jStr(
+        return jStr(
             obj,
             "image_poster", "image_cover", "image", "poster",
             "thumbnail", "url_thumbnail", "episode_poster",
             "episode_cover_new", "episode_cover_old", "image_url"
-        )?.let { return it }
-
-        val priority = listOf("poster", "cover", "image", "thumb", "banner", "img")
-        val candidates = mutableListOf<Pair<String, String>>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            val value = obj.opt(key)
-            if (value is String) {
-                val v = value.trim()
-                if (v.isBlank() || v == "null") continue
-                val lower = key.lowercase()
-                if (priority.any { lower.contains(it) }) {
-                    candidates.add(key to v)
-                }
-            }
-        }
-        if (candidates.isEmpty()) return null
-        for (p in priority) {
-            candidates.firstOrNull { it.first.lowercase().contains(p) }?.let { return it.second }
-        }
-        return candidates.first().second
+        )
     }
 
     private fun resolveImage(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         var url = raw.trim()
         when {
-            url.startsWith("http://") || url.startsWith("https://") -> { /* ok */ }
+            url.startsWith("http://") || url.startsWith("https://") -> { /* keep */ }
             url.startsWith("//") -> url = "https:$url"
             url.startsWith("/") -> url = API_BASE + url
             else -> url = "$API_BASE/$url"
