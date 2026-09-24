@@ -28,7 +28,6 @@ class Animein : MainAPI() {
     )
 
     private val posterHeaders = mapOf(
-        "Referer" to "$API_BASE/",
         "User-Agent" to APP_UA,
         "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
     )
