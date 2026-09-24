@@ -23,9 +23,17 @@ class Animein : MainAPI() {
     companion object {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
-        private const val SITE_URL = "https://animein.net"
-        private const val APK_VER = "5.1.2"
-        private const val PAGE_SIZE = "100"
+        private const val APK_VER = "5.2.2"
+        private const val PAGE_SIZE = 100
+        private const val MAX_SEARCH_PAGES = 10
+
+        private val pagedPaths = setOf(
+            "data/home/list_new_episode",
+            "3/2/home/hot",
+            "3/2/home/new",
+            "3/2/home/popular",
+            "3/2/explore/movie"
+        )
 
         private val apiHeaders = mapOf(
             "User-Agent" to "okhttp/4.12.0",
@@ -58,7 +66,7 @@ class Animein : MainAPI() {
         fun mapType(t: String?): TvType =
             when (t?.uppercase()) {
                 "MOVIE" -> TvType.AnimeMovie
-                "OVA" -> TvType.OVA
+                "OVA", "SPECIAL", "ONA" -> TvType.OVA
                 else -> TvType.Anime
             }
 
@@ -69,29 +77,76 @@ class Animein : MainAPI() {
         }
     }
 
-    private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
-        val baseQs = authParams()
-        val extra = if (params.isEmpty()) "" else "&" + params.entries.joinToString("&") {
-            "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
-        }
-        val qs = "?$baseQs$extra"
-        val primary = "$API_BASE/${path.trimStart('/')}$qs"
+    @Volatile
+    private var apiBase: String = API_BASE
+
+    @Volatile
+    private var baseResolved = false
+
+    private fun normalizeBase(raw: String?): String? {
+        val v = raw?.trim()?.trimEnd('/') ?: return null
+        if (v.isBlank() || v.equals("null", true)) return null
+        return if (v.startsWith("http", true)) v else "https://$v"
+    }
+
+    private suspend fun fetchJson(url: String): JSONObject? {
         val text = try {
-            app.get(primary, headers = apiHeaders).text
-        } catch (_: Exception) {
-            try {
-                app.get("$GATE_URL/${path.trimStart('/')}$qs", headers = apiHeaders).text
-            } catch (_: Exception) {
-                return null
-            }
-        }
-        if (text.isBlank() || text.startsWith("<!DOCTYPE", true) || text.startsWith("403") || text.startsWith("Just a moment")) {
+            app.get(url, headers = apiHeaders).text
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             return null
         }
+        if (!text.trimStart().startsWith("{")) return null
         return try {
             JSONObject(text)
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private suspend fun resolveBase(force: Boolean = false) {
+        if (baseResolved && !force) return
+        val hosts = listOf(apiBase, GATE_URL, API_BASE).distinct()
+        for (host in hosts) {
+            val json = fetchJson("$host/data/setup/data?${authParams()}") ?: continue
+            val resolved = normalizeBase(
+                json.optJSONObject("data")?.optJSONObject("domain_api")?.opt("value")?.toString()
+            )
+            if (resolved != null) {
+                apiBase = resolved
+                break
+            }
+        }
+        baseResolved = true
+    }
+
+    private fun buildUrl(base: String, path: String, params: Map<String, String>): String {
+        val extra = if (params.isEmpty()) "" else "&" + params.entries.joinToString("&") {
+            "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
+        }
+        return "$base/${path.trimStart('/')}?${authParams()}$extra"
+    }
+
+    private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
+        resolveBase()
+        var json = fetchJson(buildUrl(apiBase, path, params))
+        if (json == null) {
+            resolveBase(force = true)
+            json = fetchJson(buildUrl(apiBase, path, params))
+                ?: if (apiBase != API_BASE) fetchJson(buildUrl(API_BASE, path, params)) else null
+        }
+        if (json == null) return null
+        if (json.optBoolean("error", false)) return null
+        return json
+    }
+
+    private fun fullUrl(u: String?): String? {
+        val s = u?.trim()
+        if (s.isNullOrBlank() || s.equals("null", true)) return null
+        return when {
+            s.startsWith("//") -> "https:$s"
+            s.contains("://") -> fixImageUrl(s)
+            else -> fixImageUrl("$apiBase/${s.trimStart('/')}")
         }
     }
 
@@ -115,7 +170,7 @@ class Animein : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val params = mutableMapOf(
             "page" to page.toString(),
-            "limit" to PAGE_SIZE
+            "limit" to PAGE_SIZE.toString()
         )
         val path = when (request.data) {
             "schedule/today" -> {
@@ -131,23 +186,72 @@ class Animein : MainAPI() {
         }
         return newHomePageResponse(
             listOf(HomePageList(request.name, items)),
-            hasNext = items.size >= PAGE_SIZE.toInt()
+            hasNext = request.data in pagedPaths && items.size >= PAGE_SIZE
         )
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val params = mapOf(
-            "page" to "1",
-            "limit" to "30",
-            "query" to query,
-            "search" to query,
-            "keyword" to query
-        )
-        var items = parseMovies(api("3/2/explore/movie", params))
-        if (items.isEmpty()) {
-            items = parseMovies(api("data/movie/find", params))
+    private val searchPaths = listOf("data/movie/find", "3/2/explore/movie")
+    private val searchKeys = listOf("query", "q", "search", "keyword", "title", "name")
+
+    @Volatile
+    private var searchHit: Pair<String, String>? = null
+
+    private fun listArray(root: JSONObject?): JSONArray =
+        if (root == null) JSONArray()
+        else arrayUnder(root, "movie", "movies", "list", "items", "results", anyArray = true)
+
+    private fun idsOf(arr: JSONArray): List<String> =
+        (0 until minOf(arr.length(), 10)).mapNotNull { jStr(arr.optJSONObject(it), "id") }
+
+    private suspend fun searchWith(path: String, key: String, query: String, page: Int = 1): JSONArray =
+        listArray(api(path, mapOf("page" to page.toString(), key to query)))
+
+    private suspend fun searchAllPages(
+        path: String,
+        key: String,
+        query: String,
+        first: JSONArray? = null
+    ): List<SearchResponse> {
+        val seen = HashSet<String>()
+        val all = JSONArray()
+        var page = 1
+        var arr = first ?: searchWith(path, key, query, page)
+        while (true) {
+            var added = 0
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = jStr(obj, "id") ?: continue
+                if (seen.add(id)) {
+                    all.put(obj)
+                    added++
+                }
+            }
+            if (added == 0 || page >= MAX_SEARCH_PAGES) break
+            page++
+            arr = searchWith(path, key, query, page)
         }
-        return items
+        return parseMovieArray(all)
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+
+        searchHit?.let { (path, key) ->
+            return searchAllPages(path, key, q)
+        }
+
+        for (path in searchPaths) {
+            val baseline = idsOf(listArray(api(path, mapOf("page" to "1"))))
+            for (key in searchKeys) {
+                val arr = searchWith(path, key, q)
+                if (arr.length() == 0) continue
+                if (baseline.isNotEmpty() && idsOf(arr) == baseline) continue
+                searchHit = path to key
+                return searchAllPages(path, key, q, first = arr)
+            }
+        }
+        return emptyList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -157,10 +261,10 @@ class Animein : MainAPI() {
         val detailRoot = api("3/2/movie/detail/$id")
         val dataObj = detailRoot?.optJSONObject("data")
         val movieObj = dataObj?.optJSONObject("movie") ?: dataObj
+        val title = jStr(movieObj, "title") ?: return null
 
-        val title = jStr(movieObj, "title") ?: "Anime $id"
-        val poster = fixImageUrl(jStr(movieObj, "image_poster") ?: jStr(movieObj, "image_cover"))
-        val coverUrl = fixImageUrl(jStr(movieObj, "image_cover"))
+        val poster = fullUrl(jStr(movieObj, "image_poster") ?: jStr(movieObj, "image_cover"))
+        val coverUrl = fullUrl(jStr(movieObj, "image_cover"))
         val plot = jStr(movieObj, "synopsis", "description")
         val year = jStr(movieObj, "year")?.toIntOrNull()
             ?: jStr(movieObj, "aired_start")?.take(4)?.toIntOrNull()
@@ -175,6 +279,11 @@ class Animein : MainAPI() {
 
         val status = mapStatus(statusStr)
         val type = mapType(typeStr)
+
+        val seasons = dataObj?.optJSONArray("season")
+            ?.let { parseMovieArray(it) }
+            ?.filterNot { it.url.substringAfterLast("/") == id }
+            .orEmpty()
 
         val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
         val ids = resolveAnimeIds(listOf(title), type, year, tracker?.malId, tracker?.aniId?.toIntOrNull())
@@ -212,40 +321,29 @@ class Animein : MainAPI() {
         val finalPlot = rawPlot?.takeIf { it.isNotBlank() } ?: plot
 
         val epRoot = api("3/2/movie/episode/$id")
-        val episodes = parseEpisodes(epRoot, type, title, animeMetaData, backgroundposter, coverUrl, tracker?.image, poster)
+        var epArray = epRoot?.let { arrayUnder(it, "episode", "episodes", "list") } ?: JSONArray()
+        if (epArray.length() == 0 && detailRoot != null) {
+            epArray = arrayUnder(detailRoot, "episode", "episodes")
+        }
+        val episodes = parseEpisodes(epArray, type, title, animeMetaData, coverUrl)
 
-        return if (episodes.isNotEmpty()) {
-            newAnimeLoadResponse(title, url, type) {
-                this.engName = animeMetaData?.titles?.get("en") ?: title
-                this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
-                this.posterUrl = poster ?: tracker?.image
-                this.posterHeaders = imageHeaders
-                this.backgroundPosterUrl = backgroundposter
-                try { this.logoUrl = logoUrl } catch (_: Throwable) {}
-                this.year = year
-                this.plot = finalPlot
-                this.tags = tags
-                showStatus = status
-                score?.let { addScore(it.toString(), 10) }
-                addEpisodes(DubStatus.Subbed, episodes)
-                addMalId(malId)
-                addAniListId(aniId)
-                try { addKitsuId(kitsuid) } catch (_: Throwable) {}
-            }
-        } else {
-            newMovieLoadResponse(title, url, type, "animein://episode/$id") {
-                this.posterUrl = poster ?: tracker?.image
-                this.posterHeaders = imageHeaders
-                this.backgroundPosterUrl = backgroundposter
-                try { this.logoUrl = logoUrl } catch (_: Throwable) {}
-                this.year = year
-                this.plot = finalPlot
-                this.tags = tags
-                score?.let { addScore(it.toString(), 10) }
-                addMalId(malId)
-                addAniListId(aniId)
-                try { addKitsuId(kitsuid) } catch (_: Throwable) {}
-            }
+        return newAnimeLoadResponse(title, url, type) {
+            this.engName = animeMetaData?.titles?.get("en") ?: title
+            this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
+            this.posterUrl = poster ?: tracker?.image
+            this.posterHeaders = imageHeaders
+            this.backgroundPosterUrl = backgroundposter ?: coverUrl
+            try { this.logoUrl = logoUrl } catch (_: Throwable) {}
+            this.year = year
+            this.plot = finalPlot
+            this.tags = tags
+            this.recommendations = seasons
+            showStatus = status
+            score?.let { addScore(it.toString(), 10) }
+            addEpisodes(DubStatus.Subbed, episodes)
+            addMalId(malId)
+            addAniListId(aniId)
+            try { addKitsuId(kitsuid) } catch (_: Throwable) {}
         }
     }
 
@@ -267,27 +365,31 @@ class Animein : MainAPI() {
         val servers = dataObj.optJSONArray("server") ?: return false
 
         var found = false
+        val seen = mutableSetOf<String>()
         for (i in 0 until servers.length()) {
             val s = servers.optJSONObject(i) ?: continue
-            val link = jStr(s, "link", "url") ?: continue
-            if (link.isBlank()) continue
-            found = true
+            val link = fullUrl(jStr(s, "link", "url")) ?: continue
+            if (!seen.add(link)) continue
+
             val serverName = jStr(s, "name") ?: "Animein"
             val qualityLabel = jStr(s, "quality")
-            val fixed = fixImageUrl(link) ?: link
+            val serverType = jStr(s, "type")
 
-            if (fixed.contains(".mp4", true) || fixed.contains(".m3u8", true) ||
-                fixed.contains("googlevideo", true) || fixed.contains("storages.animein", true) ||
-                fixed.contains("assets_xyz", true)
-            ) {
+            val isDirect = serverType.equals("direct", true) ||
+                link.contains(".mp4", true) || link.contains(".m3u8", true) ||
+                link.contains("googlevideo", true) || link.contains("storages.animein", true) ||
+                link.contains("assets_xyz", true)
+
+            if (isDirect) {
+                found = true
                 callback(
-                    newExtractorLink(serverName, serverName, fixed, INFER_TYPE) {
-                        this.referer = API_BASE
+                    newExtractorLink(serverName, serverName, link, INFER_TYPE) {
+                        this.referer = apiBase
                         this.quality = parseQuality(qualityLabel)
                     }
                 )
             } else {
-                loadExtractor(fixed, API_BASE, subtitleCallback, callback)
+                if (loadExtractor(link, apiBase, subtitleCallback, callback)) found = true
             }
         }
         return found
@@ -295,39 +397,40 @@ class Animein : MainAPI() {
 
     private fun parseMovies(root: JSONObject?): List<SearchResponse> {
         if (root == null) return emptyList()
-        val arr = arrayUnder(root, "movie", "movies", "list", "items", "results")
-        return buildList {
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val id = jStr(obj, "id") ?: continue
-                val title = jStr(obj, "title") ?: continue
-                val poster = fixImageUrl(jStr(obj, "image_poster") ?: jStr(obj, "image_cover"))
-                val typeStr = jStr(obj, "type")
-                val year = jStr(obj, "year")?.toIntOrNull()
-                    ?: jStr(obj, "aired_start")?.take(4)?.toIntOrNull()
-                add(
-                    newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$id", mapType(typeStr)) {
-                        this.posterUrl = poster
-                        this.posterHeaders = imageHeaders
-                        this.year = year
-                    }
-                )
-            }
+        return parseMovieArray(arrayUnder(root, "movie", "movies", "list", "items", "results", anyArray = true))
+    }
+
+    private fun parseMovieArray(arr: JSONArray): List<SearchResponse> = buildList {
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val id = jStr(obj, "id", "id_movie") ?: continue
+            val title = jStr(obj, "title", "movie_title") ?: continue
+            val poster = fullUrl(jStr(obj, "image_poster", "image_cover", "poster", "image"))
+            val typeStr = jStr(obj, "type")
+            val year = jStr(obj, "year")?.toIntOrNull()
+                ?: jStr(obj, "aired_start")?.take(4)?.toIntOrNull()
+            add(
+                newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$id", mapType(typeStr)) {
+                    this.posterUrl = poster
+                    this.posterHeaders = imageHeaders
+                    this.year = year
+                }
+            )
         }
     }
 
     private fun parseFyp(root: JSONObject?): List<SearchResponse> {
         if (root == null) return emptyList()
-        val arr = arrayUnder(root, "fyp", "list", "items")
+        val arr = arrayUnder(root, "fyp", "list", "items", anyArray = true)
         return buildList {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val movieId = jStr(obj, "id_movie", "id") ?: continue
-                val anime = jStr(obj, "anime", "movie_title", "title") ?: continue
-                val epLabel = jStr(obj, "episode", "title")
+                val anime = jStr(obj, "movie_title", "anime", "title") ?: continue
+                val epLabel = jStr(obj, "episode_title", "title")
                 val title = if (!epLabel.isNullOrBlank() && epLabel != anime) "$anime — $epLabel" else anime
-                val poster = fixImageUrl(
-                    jStr(obj, "poster", "url_thumbnail", "episode_poster", "image", "image_poster")
+                val poster = fullUrl(
+                    jStr(obj, "episode_poster", "poster", "url_thumbnail", "image", "image_poster")
                 )
                 add(
                     newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$movieId", TvType.Anime) {
@@ -340,23 +443,19 @@ class Animein : MainAPI() {
     }
 
     private fun parseEpisodes(
-        root: JSONObject?,
+        arr: JSONArray,
         type: TvType,
         animeTitle: String,
         meta: MetaAnimeData?,
-        backgroundPoster: String?,
-        coverUrl: String?,
-        trackerImage: String?,
-        poster: String?
+        coverUrl: String?
     ): List<Episode> {
-        if (root == null) return emptyList()
-        val arr = arrayUnder(root, "episode", "episodes", "list")
         return buildList {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val epId = jStr(obj, "id") ?: continue
-                val epNum = jStr(obj, "index", "episode", "number")?.toIntOrNull() ?: (i + 1)
+                val epNum = jStr(obj, "index", "episode", "number")?.toDoubleOrNull()?.toInt() ?: (i + 1)
                 val epTitle = jStr(obj, "title") ?: "Episode $epNum"
+                val epImage = fullUrl(jStr(obj, "image"))
 
                 val metaEp = meta?.episodes?.get(epNum.toString())
                 add(
@@ -369,6 +468,7 @@ class Animein : MainAPI() {
                         this.episode = epNum
                         this.score = Score.from10(metaEp?.rating)
                         this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() }
+                            ?: epImage
                             ?: coverUrl
                         this.description = metaEp?.overview?.takeIf { it.isNotBlank() }
                         this.addDate(metaEp?.airDateUtc)
@@ -379,7 +479,7 @@ class Animein : MainAPI() {
         }.sortedBy { it.episode }
     }
 
-    private fun arrayUnder(root: JSONObject, vararg keys: String): JSONArray {
+    private fun arrayUnder(root: JSONObject, vararg keys: String, anyArray: Boolean = false): JSONArray {
         val data = root.opt("data")
         if (data is JSONArray) return data
         if (data is JSONObject) {
@@ -392,14 +492,23 @@ class Animein : MainAPI() {
             val v = root.optJSONArray(key)
             if (v != null) return v
         }
+        if (anyArray && data is JSONObject) {
+            val names = data.keys()
+            while (names.hasNext()) {
+                val arr = data.optJSONArray(names.next()) ?: continue
+                if (arr.length() > 0 && arr.opt(0) is JSONObject) return arr
+            }
+        }
         return JSONArray()
     }
 
     private fun jStr(obj: JSONObject?, vararg keys: String): String? {
         if (obj == null) return null
         for (key in keys) {
-            val s = obj.optString(key, "").trim()
-            if (s.isNotBlank() && s != "null") return s
+            val v = obj.opt(key)
+            if (v == null || v == JSONObject.NULL || v is Boolean || v is JSONObject || v is JSONArray) continue
+            val s = v.toString().trim()
+            if (s.isNotBlank() && !s.equals("null", true)) return s
         }
         return null
     }
