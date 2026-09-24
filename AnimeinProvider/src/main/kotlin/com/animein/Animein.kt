@@ -160,6 +160,7 @@ class Animein : MainAPI() {
 
         val title = jStr(movieObj, "title") ?: "Anime $id"
         val poster = fixImageUrl(jStr(movieObj, "image_poster") ?: jStr(movieObj, "image_cover"))
+        val coverUrl = fixImageUrl(jStr(movieObj, "image_cover"))
         val plot = jStr(movieObj, "synopsis", "description")
         val year = jStr(movieObj, "year")?.toIntOrNull()
             ?: jStr(movieObj, "aired_start")?.take(4)?.toIntOrNull()
@@ -211,7 +212,7 @@ class Animein : MainAPI() {
         val finalPlot = rawPlot?.takeIf { it.isNotBlank() } ?: plot
 
         val epRoot = api("3/2/movie/episode/$id")
-        val episodes = parseEpisodes(epRoot, type, title, animeMetaData, backgroundposter, tracker?.image, poster)
+        val episodes = parseEpisodes(epRoot, type, title, animeMetaData, backgroundposter, coverUrl, tracker?.image, poster)
 
         return if (episodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
@@ -344,6 +345,7 @@ class Animein : MainAPI() {
         animeTitle: String,
         meta: MetaAnimeData?,
         backgroundPoster: String?,
+        coverUrl: String?,
         trackerImage: String?,
         poster: String?
     ): List<Episode> {
@@ -369,6 +371,7 @@ class Animein : MainAPI() {
                         this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() }
                             ?: meta?.images?.firstOrNull()?.url
                             ?: backgroundPoster
+                            ?: coverUrl
                             ?: trackerImage
                             ?: poster
                         this.description = metaEp?.overview?.takeIf { it.isNotBlank() }
