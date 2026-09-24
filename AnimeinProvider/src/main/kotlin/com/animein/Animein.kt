@@ -23,6 +23,7 @@ class Animein : MainAPI() {
     companion object {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
+        private const val ALT_API_BASE = "https://api.animein.net"
         private const val APK_VER = "5.2.2"
         private const val PAGE_SIZE = 100
         private const val MAX_SEARCH_PAGES = 10
@@ -106,7 +107,7 @@ class Animein : MainAPI() {
 
     private suspend fun resolveBase(force: Boolean = false) {
         if (baseResolved && !force) return
-        val hosts = listOf(apiBase, GATE_URL, API_BASE).distinct()
+        val hosts = listOf(apiBase, API_BASE, ALT_API_BASE, GATE_URL).distinct()
         for (host in hosts) {
             val json = fetchJson("$host/data/setup/data?${authParams()}") ?: continue
             val resolved = normalizeBase(
@@ -129,15 +130,21 @@ class Animein : MainAPI() {
 
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         resolveBase()
-        var json = fetchJson(buildUrl(apiBase, path, params))
-        if (json == null) {
-            resolveBase(force = true)
-            json = fetchJson(buildUrl(apiBase, path, params))
-                ?: if (apiBase != API_BASE) fetchJson(buildUrl(API_BASE, path, params)) else null
+
+        val tried = (listOf(apiBase, API_BASE, ALT_API_BASE)).distinct()
+        for (base in tried) {
+            val json = fetchJson(buildUrl(base, path, params)) ?: continue
+            if (json.optBoolean("error", false)) continue
+            apiBase = base
+            return json
         }
-        if (json == null) return null
-        if (json.optBoolean("error", false)) return null
-        return json
+
+        resolveBase(force = true)
+        if (apiBase !in tried) {
+            val json = fetchJson(buildUrl(apiBase, path, params))
+            if (json != null && !json.optBoolean("error", false)) return json
+        }
+        return null
     }
 
     private fun fullUrl(u: String?): String? {
@@ -265,9 +272,8 @@ class Animein : MainAPI() {
 
         val poster = fullUrl(jStr(movieObj, "image_poster") ?: jStr(movieObj, "image_cover"))
         val coverUrl = fullUrl(jStr(movieObj, "image_cover"))
-        val plot = jStr(movieObj, "synopsis", "description")
-        val year = jStr(movieObj, "year")?.toIntOrNull()
-            ?: jStr(movieObj, "aired_start")?.take(4)?.toIntOrNull()
+        val plot = cleanText(jStr(movieObj, "synopsis", "description"))
+        val year = yearOf(movieObj)
         val statusStr = jStr(movieObj, "status")
         val typeStr = jStr(movieObj, "type")
         val score = jStr(movieObj, "score", "rating")?.toDoubleOrNull()
@@ -407,8 +413,7 @@ class Animein : MainAPI() {
             val title = jStr(obj, "title", "movie_title") ?: continue
             val poster = fullUrl(jStr(obj, "image_poster", "image_cover", "poster", "image"))
             val typeStr = jStr(obj, "type")
-            val year = jStr(obj, "year")?.toIntOrNull()
-                ?: jStr(obj, "aired_start")?.take(4)?.toIntOrNull()
+            val year = yearOf(obj)
             add(
                 newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$id", mapType(typeStr)) {
                     this.posterUrl = poster
@@ -501,6 +506,18 @@ class Animein : MainAPI() {
         }
         return JSONArray()
     }
+
+    private fun yearOf(obj: JSONObject?): Int? =
+        jStr(obj, "aired_start")?.take(4)?.toIntOrNull()?.takeIf { it > 1900 }
+            ?: jStr(obj, "year")?.toIntOrNull()
+            
+    private fun cleanText(s: String?): String? = s
+        ?.replace("\u00e2\u20ac\u0153", "\u201c")
+        ?.replace("\u00e2\u20ac\u009d", "\u201d")
+        ?.replace("\u00e2\u20ac\u2122", "\u2019")
+        ?.replace("\u00e2\u20ac\u201d", "\u2014")
+        ?.replace("\u00e2\u20ac\u00a6", "\u2026")
+        ?.trim()
 
     private fun jStr(obj: JSONObject?, vararg keys: String): String? {
         if (obj == null) return null
