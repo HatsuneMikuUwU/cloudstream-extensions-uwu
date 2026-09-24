@@ -63,10 +63,10 @@ class Animein : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "data/home/list_new_episode" to "Episode Baru",
-        "3/2/home/new" to "Terbaru",
-        "3/2/home/hot" to "Sedang Hangat",
-        "3/2/home/popular" to "Populer",
+        "data/home/list_new_episode" to "New Episodes",
+        "3/2/home/hot" to "Hot",
+        "3/2/home/new" to "New Title",
+        "3/2/home/popular" to "Popular",
         "3/2/home/random" to "Random",
         "3/2/explore/movie" to "Explore"
     )

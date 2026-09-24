@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 cloudstream {
     description = "Animein — Streaming Anime Subtitle Indonesia (API)"
