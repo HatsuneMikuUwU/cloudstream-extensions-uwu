@@ -7,7 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class Animein : MainAPI() {
-    override var mainUrl = API_BASE
+    override var mainUrl = "https://animein.net"
     override var name = "Animein"
     override val hasMainPage = true
     override var lang = "id"
@@ -18,6 +18,9 @@ class Animein : MainAPI() {
         private const val GATE_URL = "https://gate.nextanimelist.com"
         private const val API_BASE = "https://xyz-api.animein.net"
         private const val APP_UA = "okhttp/4.12.0"
+        private const val BROWSER_UA =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
         private const val PAGE_SIZE = "100"
     }
 
@@ -27,11 +30,13 @@ class Animein : MainAPI() {
         "Accept-Language" to "id-ID,id;q=0.9"
     )
 
-    private val posterHeaders = mapOf(
-        "Referer" to "$API_BASE/",
-        "User-Agent" to APP_UA,
-        "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
-    )
+    private val posterHeaders: Map<String, String>
+        get() = mapOf(
+            "Referer" to "https://animein.net/",
+            "Origin" to "https://animein.net",
+            "User-Agent" to BROWSER_UA,
+            "Accept" to "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        )
 
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         val qs = if (params.isEmpty()) "" else "?" + params.entries.joinToString("&") {
@@ -58,10 +63,10 @@ class Animein : MainAPI() {
     }
 
     override val mainPage = mainPageOf(
-        "data/home/list_new_episode" to "New Episodes",
-        "3/2/home/hot" to "Hot",
-        "3/2/home/new" to "New Title",
-        "3/2/home/popular" to "Popular",
+        "data/home/list_new_episode" to "Episode Baru",
+        "3/2/home/new" to "Terbaru",
+        "3/2/home/hot" to "Sedang Hangat",
+        "3/2/home/popular" to "Populer",
         "3/2/home/random" to "Random",
         "3/2/explore/movie" to "Explore"
     )
@@ -290,7 +295,8 @@ class Animein : MainAPI() {
             url.startsWith("/") -> url = API_BASE + url
             else -> url = "$API_BASE/$url"
         }
-        return normalizeUrl(url)
+        url = normalizeUrl(url)
+        return url
     }
 
     private fun qualityFromLabel(q: String?): Int {
