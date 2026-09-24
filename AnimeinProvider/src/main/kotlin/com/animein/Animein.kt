@@ -1,8 +1,12 @@
 package com.animein
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addKitsuId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.utils.*
+import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -107,9 +111,8 @@ class Animein : MainAPI() {
             )
         )
         val items = parseMovies(root)
-        val horizontal = request.data.contains("list_new_episode")
         return newHomePageResponse(
-            listOf(HomePageList(request.name, items, isHorizontalImages = horizontal)),
+            listOf(HomePageList(request.name, items)),
             hasNext = items.size >= PAGE_SIZE.toInt()
         )
     }
@@ -151,31 +154,78 @@ class Animein : MainAPI() {
             ?.filter { it.isNotBlank() }
             .orEmpty()
 
-        val epRoot = api("3/2/movie/episode/$id")
-        val episodes = parseEpisodes(epRoot)
-
         val status = mapStatus(statusStr)
         val type = mapType(typeStr)
 
+        val tracker = APIHolder.getTracker(listOf(title), TrackerType.getTypes(type), year, true)
+        val ids = resolveAnimeIds(listOf(title), type, year, tracker?.malId, tracker?.aniId?.toIntOrNull())
+        val malId = ids.malId
+        val aniId = ids.aniId
+
+        var animeMetaData: MetaAnimeData? = null
+        var tmdbid: Int? = null
+        var kitsuid: String? = null
+
+        if (malId != null || aniId != null) {
+            try {
+                animeMetaData = fetchAniZipMeta(malId, aniId)
+                tmdbid = animeMetaData?.mappings?.themoviedbId
+                kitsuid = animeMetaData?.mappings?.kitsuId
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
+        }
+
+        val logoUrl = fetchTmdbLogoUrl(
+            tmdbAPI = "https://api.themoviedb.org/3",
+            apiKey = "98ae14df2b8d8f8f8136499daf79f0e0",
+            type = type,
+            tmdbId = tmdbid,
+            appLangCode = "en"
+        )
+
+        val backgroundposter = animeMetaData?.images?.find { it.coverType == "Fanart" }?.url ?: tracker?.cover
+
+        val apiDescription = animeMetaData?.description?.replace(Regex("<.*?>"), "")
+        val rawPlot = apiDescription?.takeIf { it.isNotBlank() }
+            ?: animeMetaData?.episodes?.get("1")?.overview?.takeIf { it.isNotBlank() }
+            ?: fetchAniListPlot(malId, aniId)
+        val finalPlot = rawPlot?.takeIf { it.isNotBlank() } ?: plot
+
+        val epRoot = api("3/2/movie/episode/$id")
+        val episodes = parseEpisodes(epRoot, type, title, animeMetaData, backgroundposter, tracker?.image, poster)
+
         return if (episodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
-                this.posterUrl = poster
+                this.engName = animeMetaData?.titles?.get("en") ?: title
+                this.japName = animeMetaData?.titles?.get("ja") ?: animeMetaData?.titles?.get("x-jat")
+                this.posterUrl = poster ?: tracker?.image
                 this.posterHeaders = imageHeaders
+                this.backgroundPosterUrl = backgroundposter
+                try { this.logoUrl = logoUrl } catch (_: Throwable) {}
                 this.year = year
-                this.plot = plot
+                this.plot = finalPlot
                 this.tags = tags
                 showStatus = status
                 score?.let { addScore(it.toString(), 10) }
                 addEpisodes(DubStatus.Subbed, episodes)
+                addMalId(malId)
+                addAniListId(aniId)
+                try { addKitsuId(kitsuid) } catch (_: Throwable) {}
             }
         } else {
             newMovieLoadResponse(title, url, type, "animein://episode/$id") {
-                this.posterUrl = poster
+                this.posterUrl = poster ?: tracker?.image
                 this.posterHeaders = imageHeaders
+                this.backgroundPosterUrl = backgroundposter
+                try { this.logoUrl = logoUrl } catch (_: Throwable) {}
                 this.year = year
-                this.plot = plot
+                this.plot = finalPlot
                 this.tags = tags
                 score?.let { addScore(it.toString(), 10) }
+                addMalId(malId)
+                addAniListId(aniId)
+                try { addKitsuId(kitsuid) } catch (_: Throwable) {}
             }
         }
     }
@@ -247,7 +297,15 @@ class Animein : MainAPI() {
         }
     }
 
-    private fun parseEpisodes(root: JSONObject?): List<Episode> {
+    private fun parseEpisodes(
+        root: JSONObject?,
+        type: TvType,
+        animeTitle: String,
+        meta: MetaAnimeData?,
+        backgroundPoster: String?,
+        trackerImage: String?,
+        poster: String?
+    ): List<Episode> {
         if (root == null) return emptyList()
         val arr = arrayUnder(root, "episode", "episodes", "list")
         return buildList {
@@ -255,13 +313,28 @@ class Animein : MainAPI() {
                 val obj = arr.optJSONObject(i) ?: continue
                 val epId = jStr(obj, "id") ?: continue
                 val epNum = jStr(obj, "index", "episode", "number")?.toIntOrNull() ?: (i + 1)
-                val title = jStr(obj, "title") ?: "Episode $epNum"
+                val epTitle = jStr(obj, "title") ?: "Episode $epNum"
                 val thumb = fixImageUrl(jStr(obj, "image_poster") ?: jStr(obj, "image_cover") ?: findAnyImageUrl(obj))
+
+                val metaEp = meta?.episodes?.get(epNum.toString())
                 add(
                     newEpisode("animein://episode/$epId") {
-                        this.name = title
+                        this.name = if (type == TvType.AnimeMovie) {
+                            meta?.titles?.get("en") ?: meta?.titles?.get("ja") ?: animeTitle
+                        } else {
+                            metaEp?.title?.get("en") ?: metaEp?.title?.get("ja") ?: epTitle
+                        }
                         this.episode = epNum
-                        this.posterUrl = thumb
+                        this.score = Score.from10(metaEp?.rating)
+                        this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() }
+                            ?: meta?.images?.firstOrNull()?.url
+                            ?: backgroundPoster
+                            ?: thumb
+                            ?: trackerImage
+                            ?: poster
+                        this.description = metaEp?.overview?.takeIf { it.isNotBlank() }
+                        this.addDate(metaEp?.airDateUtc)
+                        this.runTime = metaEp?.runtime
                     }
                 )
             }
