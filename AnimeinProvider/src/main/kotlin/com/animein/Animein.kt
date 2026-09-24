@@ -32,8 +32,7 @@ class Animein : MainAPI() {
             "data/home/list_new_episode",
             "3/2/home/hot",
             "3/2/home/new",
-            "3/2/home/popular",
-            "3/2/explore/movie"
+            "3/2/home/popular"
         )
 
         private val apiHeaders = mapOf(
@@ -164,8 +163,7 @@ class Animein : MainAPI() {
         "schedule/today" to "Today's Schedule",
         "data/home/fyp" to "Just For You",
         "3/2/home/popular" to "Popular",
-        "3/2/home/random" to "Random",
-        "3/2/explore/movie" to "Explore"
+        "data/home/list" to "Upcoming"
     )
 
     private fun todayDayName(): String {
@@ -189,10 +187,19 @@ class Animein : MainAPI() {
         val root = api(path, params)
         val items = when (request.data) {
             "data/home/fyp" -> parseFyp(root)
+            "data/home/list" -> parseMovieArray(
+                root?.optJSONObject("data")?.optJSONArray("waiting") ?: JSONArray()
+            )
             else -> parseMovies(root)
         }
         return newHomePageResponse(
-            listOf(HomePageList(request.name, items)),
+            listOf(
+                HomePageList(
+                    request.name,
+                    items,
+                    isHorizontalImages = request.data == "data/home/fyp"
+                )
+            ),
             hasNext = request.data in pagedPaths && items.size >= PAGE_SIZE
         )
     }
@@ -435,7 +442,7 @@ class Animein : MainAPI() {
                 val epLabel = jStr(obj, "episode_title", "title")
                 val title = if (!epLabel.isNullOrBlank() && epLabel != anime) "$anime — $epLabel" else anime
                 val poster = fullUrl(
-                    jStr(obj, "episode_poster", "poster", "url_thumbnail", "image", "image_poster")
+                    jStr(obj, "url_thumbnail", "episode_poster", "image_cover", "poster", "image", "image_poster")
                 )
                 add(
                     newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$movieId", TvType.Anime) {
