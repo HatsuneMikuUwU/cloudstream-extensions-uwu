@@ -9,6 +9,8 @@ import com.lagradost.cloudstream3.utils.*
 import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Calendar
+import java.util.TimeZone
 
 class Animein : MainAPI() {
     override var mainUrl = API_BASE
@@ -97,20 +99,36 @@ class Animein : MainAPI() {
         "data/home/list_new_episode" to "New Episodes",
         "3/2/home/hot" to "Hot",
         "3/2/home/new" to "New Title",
+        "schedule/today" to "Today's Schedule",
+        "data/home/fyp" to "Just For You",
         "3/2/home/popular" to "Popular",
         "3/2/home/random" to "Random",
         "3/2/explore/movie" to "Explore"
     )
 
+    private fun todayDayName(): String {
+        val days = arrayOf("MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU")
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Jakarta"))
+        return days[cal.get(Calendar.DAY_OF_WEEK) - 1]
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val root = api(
-            request.data,
-            mapOf(
-                "page" to page.toString(),
-                "limit" to PAGE_SIZE
-            )
+        val params = mutableMapOf(
+            "page" to page.toString(),
+            "limit" to PAGE_SIZE
         )
-        val items = parseMovies(root)
+        val path = when (request.data) {
+            "schedule/today" -> {
+                params["day"] = todayDayName()
+                "3/2/schedule/data"
+            }
+            else -> request.data
+        }
+        val root = api(path, params)
+        val items = when (request.data) {
+            "data/home/fyp" -> parseFyp(root)
+            else -> parseMovies(root)
+        }
         return newHomePageResponse(
             listOf(HomePageList(request.name, items)),
             hasNext = items.size >= PAGE_SIZE.toInt()
@@ -291,6 +309,29 @@ class Animein : MainAPI() {
                         this.posterUrl = poster
                         this.posterHeaders = imageHeaders
                         this.year = year
+                    }
+                )
+            }
+        }
+    }
+
+    private fun parseFyp(root: JSONObject?): List<SearchResponse> {
+        if (root == null) return emptyList()
+        val arr = arrayUnder(root, "fyp", "list", "items")
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val movieId = jStr(obj, "id_movie", "id") ?: continue
+                val anime = jStr(obj, "anime", "movie_title", "title") ?: continue
+                val epLabel = jStr(obj, "episode", "title")
+                val title = if (!epLabel.isNullOrBlank() && epLabel != anime) "$anime — $epLabel" else anime
+                val poster = fixImageUrl(
+                    jStr(obj, "poster", "url_thumbnail", "episode_poster", "image", "image_poster")
+                )
+                add(
+                    newAnimeSearchResponse(title, "$API_BASE/3/2/movie/detail/$movieId", TvType.Anime) {
+                        this.posterUrl = poster
+                        this.posterHeaders = imageHeaders
                     }
                 )
             }
