@@ -2,7 +2,6 @@ package com.animein
 
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,30 +20,16 @@ class Animein : MainAPI() {
         private const val PAGE_SIZE = "100"
     }
 
-    private val cloudflareKiller by lazy { CloudflareKiller() }
-
-    private val posterHeaders: Map<String, String>
-        get() {
-            val base = mutableMapOf(
-                "Referer" to "$API_BASE/",
-                "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-            )
-            runCatching { cloudflareKiller.getCookieHeaders(API_BASE).toMap() }
-                .getOrNull()
-                ?.forEach { (k, v) -> base[k] = v }
-            return base
-        }
-
     private suspend fun api(path: String, params: Map<String, String> = emptyMap()): JSONObject? {
         val qs = if (params.isEmpty()) "" else "?" + params.entries.joinToString("&") {
             "${it.key}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
         }
         val primary = "$API_BASE/${path.trimStart('/')}$qs"
         val text = try {
-            app.get(primary, interceptor = cloudflareKiller).text
+            app.get(primary).text
         } catch (_: Exception) {
             try {
-                app.get("$GATE_URL/${path.trimStart('/')}$qs", interceptor = cloudflareKiller).text
+                app.get("$GATE_URL/${path.trimStart('/')}$qs").text
             } catch (_: Exception) {
                 return null
             }
@@ -138,7 +123,6 @@ class Animein : MainAPI() {
         return if (episodes.isNotEmpty()) {
             newAnimeLoadResponse(title, url, type) {
                 this.posterUrl = poster
-                this.posterHeaders = posterHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -149,7 +133,6 @@ class Animein : MainAPI() {
         } else {
             newMovieLoadResponse(title, url, type, "animein://episode/$id") {
                 this.posterUrl = poster
-                this.posterHeaders = posterHeaders
                 this.year = year
                 this.plot = plot
                 this.tags = tags
@@ -220,7 +203,6 @@ class Animein : MainAPI() {
                 add(
                     newAnimeSearchResponse(title, "$API_BASE/movie/$id", tvType) {
                         this.posterUrl = poster
-                        this.posterHeaders = posterHeaders
                     }
                 )
             }
@@ -273,7 +255,6 @@ class Animein : MainAPI() {
         return null
     }
 
-    /** Bersihkan double-slash: https://host//path → https://host/path */
     private fun normalizeUrl(raw: String): String {
         var url = raw.trim()
         if (url.startsWith("//")) url = "https:$url"
