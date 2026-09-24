@@ -369,13 +369,7 @@ class Animein : MainAPI() {
                         this.episode = epNum
                         this.score = Score.from10(metaEp?.rating)
                         this.posterUrl = metaEp?.image?.takeIf { it.isNotBlank() }
-                            ?: fixImageUrl(
-                                jStr(obj, "image", "thumbnail", "url_thumbnail", "episode_poster", "poster")
-                            )
                             ?: coverUrl
-                            ?: poster
-                            ?: backgroundPoster
-                            ?: trackerImage
                         this.description = metaEp?.overview?.takeIf { it.isNotBlank() }
                         this.addDate(metaEp?.airDateUtc)
                         this.runTime = metaEp?.runtime
