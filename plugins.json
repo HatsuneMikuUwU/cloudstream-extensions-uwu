@@ -75,7 +75,7 @@
             "Miku"
         ],
         "description": "Animein \u2014 Streaming Anime Subtitle Indonesia (API)",
-        "fileSize": 19291,
+        "fileSize": 20097,
         "repositoryUrl": "https://github.com/HatsuneMikuUwU/AnimeX",
         "language": "id",
         "tvTypes": [
@@ -85,7 +85,7 @@
         ],
         "iconUrl": "https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://animein.net&size=%size%",
         "apiVersion": 1,
-        "fileHash": "sha256-faf9c46ea66a4f8335b54d175f96d01d994af30ebf0f40a7e0cc9dd649d1d2d7"
+        "fileHash": "sha256-adae92c6d2d29b9c97f18fad0996a86631181aebab895157db074fbff5c0adbd"
     },
     {
         "url": "https://raw.githubusercontent.com/HatsuneMikuUwU/AnimeX/builds/AnimeSailProvider.cs3",
