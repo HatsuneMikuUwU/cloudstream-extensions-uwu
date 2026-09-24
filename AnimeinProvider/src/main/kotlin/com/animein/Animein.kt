@@ -45,8 +45,10 @@ class Animein : MainAPI() {
             return scheme + rest
         }
 
+        private val guestId: Int by lazy { (100000..9999999).random() }
+
         private fun authParams(): String =
-            "id_user=0&key_client=guest&apk_ver=$APK_VER"
+            "id_user=$guestId&key_client=guest&apk_ver=$APK_VER"
 
         fun mapStatus(s: String?): ShowStatus =
             when (s?.uppercase()) {
