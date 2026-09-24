@@ -203,12 +203,10 @@ class Animein : MainAPI() {
         val arr = arrayUnder(root, "movie", "movies", "list", "items", "results")
         return buildList {
             for (i in 0 until arr.length()) {
-                val raw = arr.optJSONObject(i) ?: continue
-                val nested = raw.optJSONObject("movie") ?: raw.optJSONObject("anime")
-                val obj = nested ?: raw
-                val id = jStr(obj, "id") ?: jStr(raw, "id_movie", "movie_id") ?: continue
-                val title = jStr(obj, "title") ?: jStr(raw, "movie_title") ?: continue
-                val poster = resolveImage(findAnyImageUrl(raw))
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = jStr(obj, "id") ?: continue
+                val title = jStr(obj, "title") ?: continue
+                val poster = resolveImage(findAnyImageUrl(obj))
                 val typeStr = jStr(obj, "type")
                 val tvType = when {
                     typeStr?.contains("movie", true) == true -> TvType.AnimeMovie
@@ -279,18 +277,17 @@ class Animein : MainAPI() {
         return url
     }
 
-    private fun findAnyImageUrl(obj: JSONObject?, depth: Int = 0): String? {
-        if (obj == null || depth > 2) return null
+    private fun findAnyImageUrl(obj: JSONObject?): String? {
+        if (obj == null) return null
 
         jStr(
             obj,
-            "image_poster", "image_cover", "poster", "image",
-            "poster_path", "cover_image", "image_landscape",
-            "image_horizontal", "image_vertical", "thumbnail",
-            "thumb", "cover", "banner", "img", "image_url", "photo"
+            "image_poster", "image_cover", "image", "poster",
+            "thumbnail", "url_thumbnail", "episode_poster",
+            "episode_cover_new", "episode_cover_old", "image_url"
         )?.let { return it }
 
-        val priority = listOf("poster", "image", "cover", "thumb", "banner", "img", "photo")
+        val priority = listOf("poster", "cover", "image", "thumb", "banner", "img")
         val candidates = mutableListOf<Pair<String, String>>()
         val keys = obj.keys()
         while (keys.hasNext()) {
@@ -305,20 +302,11 @@ class Animein : MainAPI() {
                 }
             }
         }
-        if (candidates.isNotEmpty()) {
-            for (p in priority) {
-                candidates.firstOrNull { it.first.lowercase().contains(p) }?.let { return it.second }
-            }
-            return candidates.first().second
+        if (candidates.isEmpty()) return null
+        for (p in priority) {
+            candidates.firstOrNull { it.first.lowercase().contains(p) }?.let { return it.second }
         }
-
-        for (nestedKey in listOf("movie", "anime", "series", "film", "detail")) {
-            val nested = obj.optJSONObject(nestedKey)
-            if (nested != null) {
-                findAnyImageUrl(nested, depth + 1)?.let { return it }
-            }
-        }
-        return null
+        return candidates.first().second
     }
 
     private fun resolveImage(raw: String?): String? {
