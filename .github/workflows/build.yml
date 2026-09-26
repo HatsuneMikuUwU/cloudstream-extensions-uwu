@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew make makePluginsJson --no-daemon --stacktrace
+          ./gradlew make makePluginsJson --no-daemon --stacktrace --refresh-dependencies
 
           shopt -s nullglob
           files=(**/build/*.cs3)
