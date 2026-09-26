@@ -297,6 +297,7 @@ class AnimeSailProvider : MainAPI() {
                         }
                         
                         if (innerLink.isNotBlank()) {
+                            innerLink = innerLink.replace("v1.animesail.xyz", mainUrl.substringAfter("://"))
                             innerLink = fixUrl(innerLink)
                             if (innerLink.contains(playerPath) || innerLink.contains("player-kodir")) {
                                 extractInternalPlayer(innerLink, data, serverName, quality, callback)
@@ -307,6 +308,10 @@ class AnimeSailProvider : MainAPI() {
                     }
 
                     iframe.contains("player-kodir") || iframe.contains("${playerPath}kodir2") || iframe.contains("${playerPath}mega") || iframe.contains("${playerPath}gideo") || iframe.contains(playerPath) -> {
+                        extractInternalPlayer(iframe, data, serverName, quality, callback)
+                    }
+
+                    iframe.contains("154999000.xyz") -> {
                         extractInternalPlayer(iframe, data, serverName, quality, callback)
                     }
 
@@ -345,7 +350,12 @@ class AnimeSailProvider : MainAPI() {
         }
         
         if (link.isNullOrBlank()) {
-            link = Regex("""(?:file|src):\s*["']([^"']+)["']""").find(res)?.groupValues?.getOrNull(1)
+            link = Regex("""(?:file|src|url)["']?\s*[:=]\s*["']([^"']+)["']""").find(res)?.groupValues?.getOrNull(1)
+        }
+
+        if (link.isNullOrBlank()) {
+            link = Regex("""https?:[^\s"'\\]+\.(?:m3u8|mp4)[^\s"'\\]*""", RegexOption.IGNORE_CASE)
+                .find(res)?.value
         }
 
         if (!link.isNullOrBlank()) {

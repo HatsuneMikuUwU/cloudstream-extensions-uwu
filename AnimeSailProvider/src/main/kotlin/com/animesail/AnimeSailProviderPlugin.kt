@@ -8,5 +8,13 @@ import android.content.Context
 class AnimeSailProviderPlugin: Plugin() {
     override fun load(context: Context) {
         registerMainAPI(AnimeSailProvider())
+        registerExtractorAPI(AnimeSailPixeldrainExtractor())
+        registerExtractorAPI(AnimeSailBuzzheavierExtractor())
+        registerExtractorAPI(AnimeSailAbyssExtractor())
+        registerExtractorAPI(AnimeSailFiledonExtractor())
+        registerExtractorAPI(AnimeSailDoplyExtractor())
+        registerExtractorAPI(AnimeSailVikingFileExtractor())
+        registerExtractorAPI(AnimeSailMixdropCloneExtractor())
+        registerExtractorAPI(AnimeSailAceFileExtractor())
     }
 }
