@@ -16,5 +16,6 @@ class AnimeSailProviderPlugin: Plugin() {
         registerExtractorAPI(AnimeSailVikingFileExtractor())
         registerExtractorAPI(AnimeSailMixdropCloneExtractor())
         registerExtractorAPI(AnimeSailAceFileExtractor())
+        registerExtractorAPI(AnimeSailMp4UploadExtractor())
     }
 }

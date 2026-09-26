@@ -13,6 +13,55 @@ import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONObject
 
+class AnimeSailMp4UploadExtractor : ExtractorApi() {
+    override val name = "Mp4Upload"
+    override val mainUrl = "https://mp4upload.com"
+    override val requiresReferer = false
+
+    override suspend fun getUrl(
+        url: String,
+        referer: String?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        val fixed = if (url.startsWith("//")) "https:$url" else url
+        val doc = try {
+            app.get(fixed, headers = mapOf("User-Agent" to USER_AGENT), referer = fixed).text
+        } catch (_: Exception) {
+            return
+        }
+
+        if (doc.contains("Video not found", ignoreCase = true)) return
+
+        val unpacked = try {
+            JsUnpacker(doc).takeIf { it.detect() }?.unpack()
+        } catch (_: Exception) {
+            null
+        } ?: doc
+
+        val streamUrl = Regex("""src\s*:\s*["'](https?://[^"']+?\.mp4upload\.com[^"']*)["']""")
+            .find(unpacked)?.groupValues?.getOrNull(1)
+            ?: Regex("""player\.src\(\s*\{?\s*["']?src["']?\s*:?\s*["'](https?://[^"']+)["']""")
+                .find(unpacked)?.groupValues?.getOrNull(1)
+            ?: Regex("""https?://[^\s"'\\]+\.mp4upload\.com(?::\d+)?/d/[^\s"'\\]+""", RegexOption.IGNORE_CASE)
+                .find(unpacked)?.value
+            ?: return
+
+        callback.invoke(
+            newExtractorLink(
+                name,
+                name,
+                streamUrl,
+                if (streamUrl.contains(".m3u8", ignoreCase = true)) ExtractorLinkType.M3U8 else INFER_TYPE
+            ) {
+                this.referer = "$mainUrl/"
+                this.quality = getQualityFromName(doc)
+                this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$mainUrl/")
+            }
+        )
+    }
+}
+
 class AnimeSailAceFileExtractor : ExtractorApi() {
     override val name = "AceFile"
     override val mainUrl = "https://acefile.co"
